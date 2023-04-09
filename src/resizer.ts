@@ -1,5 +1,6 @@
 export class Resizer {
     container: Window;
+    canvas: HTMLCanvasElement;
 
     // NB: These get set indirectly in the initializer, `0` is just compilershutup
     screenWidth: number = 0;
@@ -9,19 +10,27 @@ export class Resizer {
     _screenSize: number = 0;
     onResize: undefined | Function;
 
-    constructor(container: Window, screenSize: number) {
+    constructor(container: Window, canvas: HTMLCanvasElement, screenSize: number) {
         this.container = container;
-        this.screenSize = screenSize; // implicitly calls update()
+        this.canvas = canvas;
+        this.screenSize = screenSize;
         const self = this;
         container.addEventListener("resize", () => {
             self.update();
             if (self.onResize) self.onResize();
         });
+
+        // update() is implicitly called but let's call it explicitly just in case
+        this.update();
     }
 
     update(): void {
         this.screenWidth = this.container.innerWidth;
         this.screenHeight = this.container.innerHeight;
+
+        // Update the canvas width and height to match the screen dimensions
+        this.canvas.width = this.screenWidth;
+        this.canvas.height = this.screenHeight;
 
         if (this.isPortrait()) {
             this.graphWidth = this.screenSize;

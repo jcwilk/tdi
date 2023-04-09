@@ -6,8 +6,16 @@ const initialGraphX = 0;
 const initialGraphY = 0;
 const initialZoom = .4;
 
+
 document.addEventListener('DOMContentLoaded', function () {
+    const canvas = document.getElementById("regl-canvas");
+    if (!canvas) {
+        console.error("Canvas element not found");
+        return;
+    }
+
     const regl = REGL({
+        canvas: canvas,
         //extensions: ['OES_texture_float'],
         // optionalExtensions: ['oes_texture_float_linear'],
     });
@@ -17,7 +25,11 @@ document.addEventListener('DOMContentLoaded', function () {
     let graphY = initialGraphY;
     let graphZoom = initialZoom;
 
-    const resizer = new Resizer(window, 2 / graphZoom);
+    const resizer = new Resizer(window, canvas, 2 / graphZoom);
+    resizer.onResize = () => {
+        regl.poll();
+    }
+    regl.poll();
 
     const draw = regl({
         frag: `
