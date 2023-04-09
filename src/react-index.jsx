@@ -5,7 +5,7 @@ import TextFieldsForm from './components/text_fields_form';
 const App = () => {
   return (
     <div>
-      <h1>Dynamic Text Fields</h1>
+      <h1>TDI Prototype</h1>
       <TextFieldsForm />
     </div>
   );

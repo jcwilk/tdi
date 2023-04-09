@@ -3,6 +3,8 @@ uniform float graphWidth;
 uniform float graphHeight;
 uniform float graphX;
 uniform float graphY;
+uniform float cX;
+uniform float cY;
 uniform int maxIterations;
 varying vec2 uv;
 
@@ -39,7 +41,7 @@ void main() {
     // lower bounds of floats you'll get the edges wobbling back and forth as you zoom because the rounding errors are
     // happening during the plane interpolation step. Keeping the vertex ranging from -0.5 to 0.5 dodges that issue.
     vec2 start = vec2(graphX, graphY) + uv * vec2(graphWidth, graphHeight);
-    int iterations = julia(vec2(0.75,0.25), start);
+    int iterations = julia(vec2(cX,cY), start);
 
     // if still alive...
     if (iterations < 0) {

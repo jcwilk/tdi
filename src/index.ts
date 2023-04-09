@@ -1,10 +1,12 @@
 import './index.css';
 import { Resizer } from './resizer'
+import { WordCounter } from './word_counter'
 const REGL = require("regl");
 
 const initialGraphX = 0;
 const initialGraphY = 0;
 const initialZoom = .4;
+
 
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -61,6 +63,8 @@ document.addEventListener('DOMContentLoaded', function () {
             graphHeight: (context, props) => (props as any).graphHeight,
             graphX: (context, props) => (props as any).graphX,
             graphY: (context, props) => (props as any).graphY,
+            cX: (context, props) => (props as any).cX,
+            cY: (context, props) => (props as any).cY,
         },
 
         depth: { enable: false },
@@ -79,20 +83,25 @@ document.addEventListener('DOMContentLoaded', function () {
         const dTime = Math.min(1000, Math.max(1000 / 144, thisTime - lastTime));
 
         lastTime = thisTime;
+        let cX = 0.0;
+        let cY = 0.0;
 
-        // It burns a lot of juice running this thing so cool it while it's not in the very foreground
-        // if (document.hasFocus() && document.visibilityState == "visible") {
-        //     seenFocus = true;
-        // } else if (seenFocus) {
-        //     // only skip rendering if focus has been confirmed at least once
-        //     return;
-        // }
+        const element = document.getElementById('inputText');
+        if (element) {
+            const wordCounter = new WordCounter(element);
+            const coordinate = wordCounter.getCoordinate();
+            cX = coordinate.x;
+            cY = coordinate.y;
+            //debugger
+        }
 
         draw({
             graphWidth: resizer.graphWidth,
             graphHeight: resizer.graphHeight,
             graphX: graphX,
-            graphY: graphY
+            graphY: graphY,
+            cX: cX,
+            cY: cY
         })
     })
 }, false);

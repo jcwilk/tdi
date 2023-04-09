@@ -33,7 +33,7 @@ const TextFieldsForm: React.FC = () => {
       const completion = await openai.createCompletion({
         model: 'text-davinci-003',
         prompt: inputText,
-        max_tokens: 200,
+        max_tokens: 2000,
       });
 
       setOutputText(completion.data.choices[0].text);
