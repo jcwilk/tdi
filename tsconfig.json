@@ -1,0 +1,10 @@
+{
+    // followed some advice from https://developer.epages.com/blog/tech-stories/typescript-codesplitting-treeshaking/
+    // seems like I may need to integrate babel to get the full benefits :(
+    "compilerOptions": {
+        "moduleResolution": "node",
+        "module": "esnext",
+        "target": "esnext",
+        "sourceMap": true,
+    }
+}

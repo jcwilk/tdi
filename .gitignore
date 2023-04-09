@@ -1,0 +1,9 @@
+node_modules
+coverage
+.cache
+.env
+docs
+
+# versioning this so github pages can load it
+# had to edit webpack.production.ts to use this as the output
+# docs/*
