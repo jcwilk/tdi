@@ -14,9 +14,33 @@ export class WordCounter {
     this.currentCoordinate = { x: 0, y: 0 };
   }
 
-  private countWords(element: HTMLInputElement): number {
-    const value = (element.value || '').trim();
-    return value ? value.split(/\s+/).length : 0;
+  private isHeaderElement(element: HTMLElement): boolean {
+    const tagName = element.tagName.toLowerCase();
+    return /^h[1-9]$/.test(tagName);
+  }
+
+  private countWords(element: HTMLElement): number {
+    let totalWords = 0;
+
+    if (this.isHeaderElement(element)) {
+      return totalWords;
+    }
+
+    if (element instanceof HTMLInputElement && element.type === 'text') {
+      totalWords += (element.value || '').trim().split(/\s+/).length;
+    } else if (element.nodeType === Node.TEXT_NODE) {
+      totalWords += (element.textContent || '').trim().split(/\s+/).length;
+    }
+
+    for (const child of Array.from(element.childNodes)) {
+      if (child instanceof HTMLElement) {
+        totalWords += this.countWords(child);
+      } else if (child.nodeType === Node.TEXT_NODE) {
+        totalWords += (child.textContent || '').trim().split(/\s+/).length;
+      }
+    }
+
+    return totalWords;
   }
 
   private static easeSqrt(value: number): number {

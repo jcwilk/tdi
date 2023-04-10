@@ -1,12 +1,7 @@
-// openaiApi.ts
-import { Configuration, OpenAIApi, CreateCompletionResponse } from 'openai';
-import { AxiosError } from 'axios';
+import axios from 'axios';
+import { Configuration, OpenAIApi } from 'openai';
 
-export const getCompletion = async (
-  apiKey: string,
-  prompt: string,
-  max_tokens: number
-): Promise<string | null> => {
+export async function getCompletion(apiKey: string, prompt: string, maxTokens: number = 2000): Promise<string | null> {
   const configuration = new Configuration({
     apiKey: apiKey,
   });
@@ -16,19 +11,12 @@ export const getCompletion = async (
     const completion = await openai.createCompletion({
       model: 'text-davinci-003',
       prompt: prompt,
-      max_tokens: max_tokens,
+      max_tokens: maxTokens,
     });
 
-    const responseData = completion.data as CreateCompletionResponse;
-    return responseData.choices[0].text as string;
+    return completion.data.choices[0].text;
   } catch (error) {
-    const axiosError = error as AxiosError;
-    if (axiosError.response) {
-      console.log(axiosError.response.status);
-      console.log(axiosError.response.data);
-    } else {
-      console.log(axiosError.message);
-    }
+    console.error('Error getting completion:', error);
     return null;
   }
-};
+}

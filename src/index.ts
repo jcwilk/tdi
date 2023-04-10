@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let cX = 0.0;
     let cY = 0.0;
 
-    const element = document.getElementById('inputText');
+    const element = document.getElementById('text-input-form');
     if (element) {
       if (!wordCounter) wordCounter = new WordCounter(element);
       const coordinate = wordCounter.getCoordinate();
