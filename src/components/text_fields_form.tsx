@@ -1,5 +1,6 @@
+// TextFieldsForm.tsx
 import React, { useState } from 'react';
-import { Configuration, OpenAIApi } from 'openai';
+import { getCompletion } from '../openai_api';
 import ApiKeyEntry from './api_key_entry';
 
 const TextFieldsForm: React.FC = () => {
@@ -24,26 +25,9 @@ const TextFieldsForm: React.FC = () => {
       return;
     }
 
-    const configuration = new Configuration({
-      apiKey: apiKey,
-    });
-    const openai = new OpenAIApi(configuration);
-
-    try {
-      const completion = await openai.createCompletion({
-        model: 'text-davinci-003',
-        prompt: inputText,
-        max_tokens: 2000,
-      });
-
-      setOutputText(completion.data.choices[0].text);
-    } catch (error) {
-      if (error.response) {
-        console.log(error.response.status);
-        console.log(error.response.data);
-      } else {
-        console.log(error.message);
-      }
+    const completionText = await getCompletion(apiKey, inputText, 2000);
+    if (completionText) {
+      setOutputText(completionText);
     }
   };
 

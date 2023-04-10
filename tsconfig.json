@@ -1,10 +1,20 @@
 {
-    // followed some advice from https://developer.epages.com/blog/tech-stories/typescript-codesplitting-treeshaking/
-    // seems like I may need to integrate babel to get the full benefits :(
     "compilerOptions": {
-        "moduleResolution": "node",
-        "module": "esnext",
-        "target": "esnext",
-        "sourceMap": true,
-    }
-}
+      "moduleResolution": "node",
+      "module": "esnext",
+      "target": "esnext",
+      "sourceMap": true,
+      "lib": ["dom", "dom.iterable", "esnext"],
+      "allowJs": true,
+      "skipLibCheck": true,
+      "esModuleInterop": true,
+      "allowSyntheticDefaultImports": true,
+      "strict": true,
+      "forceConsistentCasingInFileNames": true,
+      "resolveJsonModule": true,
+      "isolatedModules": true,
+      "noEmit": true,
+      "jsx": "react-jsx"
+    },
+    "include": ["src"]
+  }
