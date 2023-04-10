@@ -16,47 +16,49 @@ varying vec2 uv;
 const float COLOR_CYCLES = 2.0;
 // used for scaling iterations into colors
 
+// Function to convert HSV color to RGB color
 vec3 hsv2rgb(vec3 c) {
-    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
-int julia(vec2 c, vec2 orbit) {
-    for(int i=0; i <= MAX_ITERATIONS; i++) {
-        orbit = vec2(
-            orbit.x*orbit.x - orbit.y*orbit.y + c.x,
-            2.*orbit.x*orbit.y + c.y
-        );
-        if (abs(orbit.x) > 2. || abs(orbit.y) > 2.) return i;
-    }
+// Julia set function
+int julia(vec2 c, inout vec2 orbit) {
+  for(int i=0; i <= MAX_ITERATIONS; i++) {
+    orbit = vec2(
+      orbit.x*orbit.x - orbit.y*orbit.y + c.x,
+      2.*orbit.x*orbit.y + c.y
+    );
+    if (abs(orbit.x) > 2. || abs(orbit.y) > 2.) return i;
+  }
 
-    return -1; // indicate unfinished
+  return -1; // indicate unfinished
 }
-
-
 
 void main() {
-    // These transformations can hypothetically happen in the vertex, but that means when you're running up against the
-    // lower bounds of floats you'll get the edges wobbling back and forth as you zoom because the rounding errors are
-    // happening during the plane interpolation step. Keeping the vertex ranging from -0.5 to 0.5 dodges that issue.
-    vec2 start = vec2(graphX, graphY) + uv * vec2(graphWidth, graphHeight);
-    int iterations = julia(vec2(cX,cY), start);
+  // Transformations to avoid rounding errors and wobbling at edges
+  vec2 start = vec2(graphX, graphY) + uv * vec2(graphWidth, graphHeight);
+  vec2 orbit = start;
+  int iterations = julia(vec2(cX,cY), orbit);
 
-    // if still alive...
-    if (iterations < 0) {
-        gl_FragColor = vec4(0., 1., 0., 1.);
-        return;
-    }
+  // if still alive...
+  if (iterations <= 0) {
+    gl_FragColor = vec4(0., 0., 0., 1.);
+    return;
+  }
 
-    float scaled=log(float(iterations))/log(float(MAX_ITERATIONS));
-    gl_FragColor = vec4(
-        hsv2rgb(
-            vec3(
-                mod(scaled, 1./COLOR_CYCLES) * COLOR_CYCLES,
-                .2+scaled*1.5, // tops out at 1
-                scaled*1.5
-            )
-        ), 1.0
-    );
+  // Calculate distance estimate
+  float dist = length(start) * log(length(start)) / length(orbit);
+  float scaled = iterations == 0 ? 0.0 : dist;
+
+  gl_FragColor = vec4(
+    hsv2rgb(
+      vec3(
+        scaled*20.,
+        .8+scaled*1.5, // tops out at 1
+        .2+scaled*1.5
+      )
+    ), 1.0
+  );
 }

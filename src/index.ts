@@ -76,6 +76,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     //let seenFocus = false;
     let lastTime = performance.now();
+    let wordCounter;
+    let lastCoord;
     regl.frame(() => {
         const thisTime = performance.now();
 
@@ -88,20 +90,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const element = document.getElementById('inputText');
         if (element) {
-            const wordCounter = new WordCounter(element);
+            if (!wordCounter) wordCounter = new WordCounter(element);
             const coordinate = wordCounter.getCoordinate();
             cX = coordinate.x;
             cY = coordinate.y;
             //debugger
-        }
 
-        draw({
-            graphWidth: resizer.graphWidth,
-            graphHeight: resizer.graphHeight,
-            graphX: graphX,
-            graphY: graphY,
-            cX: cX,
-            cY: cY
-        })
+            if (!lastCoord || coordinate.x != lastCoord.x || coordinate.y != lastCoord.y) {
+                draw({
+                    graphWidth: resizer.graphWidth,
+                    graphHeight: resizer.graphHeight,
+                    graphX: graphX,
+                    graphY: graphY,
+                    cX: cX,
+                    cY: cY
+                })
+            }
+            lastCoord = coordinate;
+        }
     })
 }, false);

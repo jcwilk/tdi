@@ -8,14 +8,15 @@ export class WordCounter {
   private currentCoordinate: Coordinate;
   private alpha: number;
 
-  constructor(root: HTMLElement, alpha: number = 1) {
+  constructor(root: HTMLElement, alpha: number = 0.02) {
     this.root = root;
     this.alpha = alpha;
     this.currentCoordinate = { x: 0, y: 0 };
   }
 
   private countWords(element: HTMLInputElement): number {
-    return (element.value || '').trim().split(/\s+/).length;
+    const value = (element.value || '').trim();
+    return value ? value.split(/\s+/).length : 0;
   }
 
   private static easeSqrt(value: number): number {
@@ -23,7 +24,7 @@ export class WordCounter {
   }
 
   private static generateSpiralCoordinates(count: number): Coordinate {
-    const t = count * (1 + Math.sqrt(5)) / 20;
+    const t = count * 0.01;
     const r = WordCounter.easeSqrt(t);
     const angle = 2 * Math.PI * r;
 
@@ -33,11 +34,20 @@ export class WordCounter {
     return { x, y };
   }
 
-  private applyEmaSmoothing(newCoordinate: Coordinate): Coordinate {
+  private applyEmaSmoothing(newCoordinate: Coordinate, snapThreshold = 0.001): Coordinate {
     const x = this.alpha * newCoordinate.x + (1 - this.alpha) * this.currentCoordinate.x;
     const y = this.alpha * newCoordinate.y + (1 - this.alpha) * this.currentCoordinate.y;
+
+    const deltaX = Math.abs(x - newCoordinate.x);
+    const deltaY = Math.abs(y - newCoordinate.y);
+
+    if (deltaX <= snapThreshold && deltaY <= snapThreshold) {
+      return newCoordinate;
+    }
+
     return { x, y };
   }
+
 
   public getCoordinate(): Coordinate {
     const wordCount = this.countWords(this.root);
