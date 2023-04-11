@@ -1,14 +1,9 @@
-# Template for making simple regl single page apps
+# Test Driven Interactions with CGPT prototype
 
-## Setup
+This is a prototype for a more comprehensive flow of building software function-by-function via code-guided interactions with CGPT.
 
-Just make a new repository using this project as a template - https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template
+It can be visited at jcwilk.github.io/tdi - It requires your GPT api key which it stores in LocalStorage. Use at your own risk.
 
-Then go to `Settings` -> `Pages` tab on the left -> Select `gh-pages` from the dropdown under `Branch` and leave the second dropdown as `/ (root)`
-
-If `gh-pages` isn't there yet then reload the page a few times and it should appear. It takes the github action a moment to build the site and put it into the branch. Alternatively, if you check the box for "Include all branches" when copying from the template then it'll probably already be there.
-
-After a short wait you should be able to access USERNAME.github.io/REPONAME and see a julia set which shows your new regl project is ready to hack on!
 ## How to run
 
 `npm run dev` - run dev server
