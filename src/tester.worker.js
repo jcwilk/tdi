@@ -1,4 +1,4 @@
-importScripts('/jasmine/jasmine.js');
+importScripts('/tdi/jasmine/jasmine.js');
 
 // Create a Jasmine environment using jasmineRequire
 const jasmineCore = self.jasmineRequire.core(self.jasmineRequire);
