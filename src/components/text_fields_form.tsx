@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { getCompletion } from '../openai_api';
 import ApiKeyEntry from './api_key_entry';
 import { StepManager, StepData } from '../step_manager';
+import { getMainStepPrompt } from '../prompt_factory';
 
 const TextFieldsForm: React.FC = () => {
   const [inputText, setInputText] = useState<string>('');
@@ -28,11 +29,11 @@ const TextFieldsForm: React.FC = () => {
     requestCounter.current += 1;
     const currentRequest = requestCounter.current;
 
-    const completionText = await getCompletion(apiKey, stepManager.getCompletionPrompt(inputText, stepData, nextStep));
+    const completionText = await getCompletion(apiKey, getMainStepPrompt(inputText, stepData, nextStep));
 
     // Only process the result if the current request is the most recent one
     if (completionText !== undefined && currentRequest === requestCounter.current) {
-      stepManager.addStepData(completionText, nextStep, setStepData);
+      stepManager.addStepData(completionText, nextStep, setStepData, stepData);
     }
   };
 
@@ -44,7 +45,6 @@ const TextFieldsForm: React.FC = () => {
 
   return (
     <div id="text-input-form">
-      <h1>Text Input Form</h1>
       <form onSubmit={(e) => e.preventDefault()}>
         <label htmlFor="inputText">Input Text:</label>
         <textarea

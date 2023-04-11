@@ -1,58 +1,48 @@
 import React from 'react';
+import TesterWorker from "./tester.worker";
 
 export interface StepData {
   outputText: string;
   step: number;
 }
 
+export type TestResultsCallback = (results: {
+  passedCount: number;
+  failedCount: number;
+  totalCount: number;
+}) => void;
+
 export class StepManager {
-  getCompletionPrompt(inputText: string, stepData: StepData[], nextStep: number): string {
-    let prompt;
-    if (nextStep === 1) {
-      prompt = `Given the following request:
-START problem definition
-${inputText}
-END problem definition
-Please produce or describe example instances of the problem being described.
+  addStepData(
+    completionText: string,
+    nextStep: number,
+    setStepData: (data: StepData[]) => void,
+    currentStepData
+  ): void {
+    if (nextStep === 3) {
+      this.runJasmineTestsInWorker(completionText, currentStepData[1].outputText, ({ passedCount, totalCount }) => {
+        completionText += `\n\nPassing tests: ${passedCount} / ${totalCount}`;
 
-Sure! Here's some examples:
-`
-    } else if (nextStep === 2) {
-      prompt = `Please produce or describe jasmine test cases which could be used to verify the problem was solved for the following problem:
-START problem definition
-${inputText}
-END problem definition
-which would be expected to be compatible with at least the following examples:
-START examples
-${stepData[0].outputText}
-END examples
-Please write test cases in Jasmine to confirm a hypothetical solution to this problem for the examples given.
-
-Sure! Here are the Jasmine test cases:
-`;
+        setStepData((prevStepData) => {
+          return [
+            ...prevStepData,
+            {
+              outputText: (completionText || "").trim(),
+              step: nextStep,
+              passedCount,
+              totalCount
+            },
+          ];
+        });
+      });
     } else {
-      prompt = `Given the following problem:
-START problem definition
-${inputText}
-END problem definition
-and the following Jasmine test cases which will be used to verify the problem being solved:
-START verification method
-${stepData[1].outputText}
-END verification method
-Please write a javascript function to solve this problem in the most generalized way possible, within constraints of the "problem definition".
-It should also pass all of the Jasmine test cases.
-
-Sure! Here's the javascript function:
-`
+      setStepData((prevStepData) => {
+        return [
+          ...prevStepData,
+          { outputText: (completionText || "").trim(), step: nextStep },
+        ];
+      });
     }
-
-    return prompt;
-  }
-
-  addStepData(completionText: string, nextStep: number, setStepData: (data: StepData[]) => void): void {
-    setStepData((prevStepData) => {
-      return [...prevStepData, { outputText: (completionText || '').trim(), step: nextStep }];
-    });
   }
 
   resetStepsAfter(stepIndex: number, setStepData: (data: StepData[]) => void): void {
@@ -94,4 +84,19 @@ Sure! Here's the javascript function:
 
     return outputElements;
   }
+
+  private runJasmineTestsInWorker(functionString: string, jasmineTestsString: string, callback: TestResultsCallback): void {
+    const worker = new TesterWorker();
+
+    worker.postMessage({
+      functionString,
+      jasmineTestsString,
+    });
+
+    worker.onmessage = function (event: MessageEvent) {
+      const { passedCount, failedCount, totalCount } = event.data;
+      callback({ passedCount, failedCount, totalCount });
+    };
+  }
+
 }
