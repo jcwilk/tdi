@@ -8,8 +8,6 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import CodeEditor from './code_editor'; // Import the new CodeEditor component
 
-
-
 export default function TextFieldsForm() {
   const [inputText, setInputText] = useState<string>('');
   const [stepManager] = useState<StepManager>(new StepManager());
@@ -54,30 +52,37 @@ export default function TextFieldsForm() {
   };
 
   const renderStepOutput = (): JSX.Element[] => {
+    const stepDescriptions = [
+      "Examples:",
+      "Jasmine Tests",
+      "Function Code:"
+    ];
+
+    const buttonLabels = [
+      "Generate Jasmine Tests",
+      "Generate Function Code",
+    ];
+
     const outputElements: JSX.Element[] = [];
 
     stepManager.getStepData().forEach(({ outputText, step }, index) => {
       outputElements.push(
         <div key={index}>
-          <h2>Output Text (Step {step}):</h2>
-          <div
-            style={{
-              maxWidth: '600px',
-              lineHeight: '1.5',
-              wordWrap: 'break-word',
-              backgroundColor: '#f0f0f0',
-              padding: '10px',
-              borderRadius: '5px',
-              fontFamily: 'monospace',
-              whiteSpace: 'pre-wrap',
-            }}
-          >
-            <p style={{ color: '#333' }}>{outputText}</p>
-          </div>
+          <h2>{stepDescriptions[index]}</h2>
+          <CodeEditor
+            value={outputText}
+            onChange={(value: string) => stepManager.updateStepOutput(index, value)}
+            height="150px"
+          />
           {step < 3 && (
-            <button onClick={() => handleStep(step + 1)}>
-              Proceed to Step {step + 1}
-            </button>
+            <Box sx={{ display: 'flex', justifyContent: 'center', marginTop: 1 }}>
+              <Button
+                variant="contained"
+                onClick={() => handleStep(step + 1)}
+              >
+                {buttonLabels[index]}
+              </Button>
+            </Box>
           )}
         </div>
       );
@@ -92,10 +97,12 @@ export default function TextFieldsForm() {
 
   return (
     <div id="text-input-form">
+      <h2>Described Problem:</h2> {/* Add the description above the first editor */}
       <form onSubmit={(e) => e.preventDefault()}>
         <CodeEditor
           value={inputText}
           onChange={handleChange}
+          height="150px"
         />
         <Box sx={{ display: 'flex', justifyContent: 'center', marginTop: 1 }}>
           <Button
@@ -104,7 +111,7 @@ export default function TextFieldsForm() {
               handleStep(1);
             }}
           >
-            Submit
+            Generate Examples
           </Button>
         </Box>
       </form>
@@ -114,7 +121,6 @@ export default function TextFieldsForm() {
           <CircularProgress />
         </Box>
       )}
-
     </div>
   );
 }

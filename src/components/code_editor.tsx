@@ -2,19 +2,19 @@ import React from 'react';
 import MonacoEditor from 'react-monaco-editor';
 
 interface CodeEditorProps {
-  code: string;
-  onChange: (newValue: string) => void;
+  value: string;
+  onChange: (value: string) => void;
+  height?: string | number; // Add height prop
 }
 
-const CodeEditor: React.FC<CodeEditorProps> = ({ code, onChange }) => {
+const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, height = '200px' }) => {
   return (
     <MonacoEditor
-      width="100%"
-      height="500px"
       language="javascript"
       theme="vs-dark"
-      value={code}
+      value={value}
       onChange={onChange}
+      height={height}
       options={{
         selectOnLineNumbers: true,
         roundedSelection: false,
@@ -23,6 +23,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ code, onChange }) => {
         automaticLayout: true,
         minimap: { enabled: false },
       }}
+
     />
   );
 };

@@ -42,6 +42,10 @@ export class StepManager {
     return this.stepData;
   }
 
+  public updateStepOutput(index: number, outputText: string): void {
+    this.stepData[index].outputText = outputText;
+  }
+
   private runJasmineTestsInWorker(functionString: string, jasmineTestsString: string, callback: TestResultsCallback): Promise<void> {
     return new Promise((resolve) => {
       const worker = new TesterWorker();
