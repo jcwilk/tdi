@@ -19,10 +19,12 @@ export class StepManager {
     this.stepData = [];
   }
 
-  public async addStep(completionText: string, nextStep: number): Promise<void> {
+  public async addStep(completionText: string, nextStep: number): Promise<boolean> {
     if (nextStep === 3) {
-      await this.runJasmineTestsInWorker(completionText, this.stepData[1].outputText, ({ passedCount, totalCount }) => {
+      return await this.runJasmineTestsInWorker(completionText, this.stepData[1].outputText, ({ passedCount, totalCount }) => {
+        completionText = completionText.replace(/✅/g, "");
         completionText += `\n\nPassing tests: ${passedCount} / ${totalCount}`;
+        if(passedCount == totalCount) completionText += "✅"
 
         this.stepData.push({
           outputText: (completionText || "").trim(),
@@ -31,6 +33,7 @@ export class StepManager {
       });
     } else {
       this.stepData.push({ outputText: (completionText || "").trim(), step: nextStep });
+      return true
     }
   }
 
@@ -46,7 +49,7 @@ export class StepManager {
     this.stepData[index].outputText = outputText;
   }
 
-  private runJasmineTestsInWorker(functionString: string, jasmineTestsString: string, callback: TestResultsCallback): Promise<void> {
+  private runJasmineTestsInWorker(functionString: string, jasmineTestsString: string, callback: TestResultsCallback): Promise<boolean> {
     return new Promise((resolve) => {
       const worker = new TesterWorker();
 
@@ -58,7 +61,7 @@ export class StepManager {
       worker.onmessage = function (event: MessageEvent) {
         const { passedCount, failedCount, totalCount } = event.data;
         callback({ passedCount, failedCount, totalCount });
-        resolve();
+        resolve(passedCount == totalCount);
       };
     });
   }
