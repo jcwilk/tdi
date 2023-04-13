@@ -45,6 +45,17 @@ export class StepManager {
     return this.stepData;
   }
 
+  public setStepData(stepData: StepData[]): void {
+    this.stepData = stepData;
+  }
+
+  getSaveData(): { inputText: string; stepData: StepData[] } {
+    return {
+      inputText: this.stepData[0]?.outputText || "",
+      stepData: this.stepData.slice(1),
+    };
+  }
+
   public updateStepOutput(index: number, outputText: string): void {
     this.stepData[index].outputText = outputText;
   }

@@ -9,6 +9,8 @@ import CircularProgress from '@mui/material/CircularProgress';
 import CodeEditor from './code_editor';
 import Slider from '@mui/material/Slider';
 import Typography from '@mui/material/Typography';
+import SavedFunctionsList from './saved_functions_list';
+import { IndexedDBManager } from '../indexeddb_manager';
 
 export default function TextFieldsForm() {
   const [inputText, setInputText] = useState<string>('');
@@ -21,6 +23,13 @@ export default function TextFieldsForm() {
   const [success, setSuccess] = useState<boolean>(false);
   const [autoRetry, setAutoRetry] = useState<boolean>(false);
   const autoRetryRef = useRef<boolean>(false);
+  const [openSavedFunctions, setOpenSavedFunctions] = useState<boolean>(false);
+  const [indexedDBManager] = useState<IndexedDBManager>(new IndexedDBManager('FunctionsDB', 'functions'));
+  const [savedFunctionsUpdate, setSavedFunctionsUpdate] = useState(0);
+
+  const triggerSavedFunctionsUpdate = () => {
+    setSavedFunctionsUpdate(savedFunctionsUpdate + 1);
+  };
 
   useEffect(() => {
     autoRetryRef.current = autoRetry
@@ -86,6 +95,25 @@ export default function TextFieldsForm() {
     setApiKey(key);
   };
 
+  const openSavedFunctionsDialog = () => {
+    setOpenSavedFunctions(true);
+  };
+
+  const closeSavedFunctionsDialog = () => {
+    setOpenSavedFunctions(false);
+  };
+
+  const saveCurrentFunction = async () => {
+    const savedFunctionData = {
+      inputText,
+      stepData: stepManager.getStepData(),
+    };
+
+    await indexedDBManager.saveFunctionData(savedFunctionData);
+    setSavedFunctionsUpdate((prev) => prev + 1);
+    alert('Function saved successfully');
+  };
+
   const renderStepOutput = (): JSX.Element[] => {
     const stepDescriptions = [
       "Examples:",
@@ -124,6 +152,11 @@ export default function TextFieldsForm() {
     });
 
     return outputElements;
+  };
+
+  const loadSavedFunctionData = (functionData: { inputText: string; stepData: StepData[] }) => {
+    setInputText(functionData.inputText);
+    stepManager.setStepData(functionData.stepData);
   };
 
   if (apiKey === null) {
@@ -174,6 +207,8 @@ export default function TextFieldsForm() {
         </Box>
       )}
       <Box sx={{ position: 'absolute', top: 0, right: 0, paddingRight: 2 }}>
+        <Button onClick={openSavedFunctionsDialog}>Load Saved Function</Button>
+
         <Typography id="temperature-slider" gutterBottom>
           Temperature
         </Typography>
@@ -187,6 +222,24 @@ export default function TextFieldsForm() {
           valueLabelDisplay="auto"
           onChange={handleTemperatureChange}
         />
+        <Button
+          variant="contained"
+          onClick={saveCurrentFunction}
+          sx={{ marginTop: 1 }}
+        >
+          Save Function
+        </Button>
+        {openSavedFunctions && (
+          <SavedFunctionsList
+            updateTrigger={savedFunctionsUpdate}
+            onClose={closeSavedFunctionsDialog}
+            onSelect={(functionData) => {
+              loadSavedFunctionData(functionData);
+              closeSavedFunctionsDialog();
+            }}
+          />
+        )}
+
       </Box>
     </div>
   );
