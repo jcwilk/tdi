@@ -66,7 +66,6 @@ self.onmessage = function (event) {
 
   jasmine.getEnv().addReporter(customReporter);
 
-  // Run Jasmine tests
   eval(jasmineTestsString);
 
   // Execute tests and wait for completion

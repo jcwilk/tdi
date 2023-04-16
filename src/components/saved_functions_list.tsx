@@ -5,15 +5,28 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import { Box } from '@mui/system';
+import { StepManager } from '../step_manager';
 import { IndexedDBManager } from '../indexeddb_manager';
 
-export default function SavedFunctionsList({ updateTrigger, onClose, onSelect }: { onClose: () => void; onSelect: (functionData: any) => void }) {
+interface SavedFunctionsListProps {
+  stepManager: StepManager;
+  updateTrigger: number;
+  onClose: () => void;
+  onSelect: (functionData: any) => void;
+}
+
+export default function SavedFunctionsList({ stepManager, updateTrigger, onClose, onSelect }: SavedFunctionsListProps) {
   const [savedFunctions, setSavedFunctions] = useState<any[]>([]);
   const indexedDBManager = new IndexedDBManager('FunctionsDB', 'functions');
 
   useEffect(() => {
     fetchSavedFunctions();
-  }, [updateTrigger]);
+  }, []);
+
+  // TODO: when it's needed
+  // useEffect(() => {
+  //   doSomething(stepManager.someState);
+  // }, [updateTrigger]);
 
   const fetchSavedFunctions = async () => {
     const functions = await indexedDBManager.getAllFunctionData();
@@ -31,9 +44,18 @@ export default function SavedFunctionsList({ updateTrigger, onClose, onSelect }:
     fetchSavedFunctions();
   };
 
+  const handleSave = async () => {
+    const functionData = stepManager.getSaveData();
+    await indexedDBManager.saveFunctionData(functionData);
+    fetchSavedFunctions();
+  }
+
   return (
     <>
       <Dialog open onClose={onClose}>
+      <Button size="small" onClick={() => handleSave()}>
+        +Save current
+      </Button>
         <DialogTitle>Saved Functions</DialogTitle>
         <DialogContent>
           {savedFunctions.map((func) => (

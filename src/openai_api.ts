@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Configuration, OpenAIApi } from 'openai';
 
-export async function getCompletion(apiKey: string, prompt: string, maxTokens: number = 2000): Promise<string | null> {
+export async function getCompletion(apiKey: string, prompt: string, maxTokens: number = 2000, temperature: number): Promise<string | null> {
   const configuration = new Configuration({
     apiKey: apiKey,
   });
@@ -12,6 +12,7 @@ export async function getCompletion(apiKey: string, prompt: string, maxTokens: n
       model: 'text-davinci-003',
       prompt: prompt,
       max_tokens: maxTokens,
+      temperature
     });
 
     return completion.data.choices[0].text;

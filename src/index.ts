@@ -21,12 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let graphX = initialGraphX;
   let graphY = initialGraphY;
   let graphZoom = initialZoom;
+  let needsResize = true;
 
   const resizer = new Resizer(window, canvas, 2 / graphZoom);
   resizer.onResize = () => {
-    regl.poll();
+    needsResize = true;
   }
-  regl.poll();
 
   const draw = regl({
     frag: `
@@ -66,7 +66,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     count: 4,
 
-    primitive: 'triangle strip'
+    primitive: 'triangle strip',
+
+    viewport: {
+      x: 0,
+      y: 0,
+      width: regl.context('drawingBufferWidth'),
+      height: regl.context('drawingBufferHeight'),
+    },
   })
 
   let lastTime = performance.now();
@@ -86,7 +93,9 @@ document.addEventListener('DOMContentLoaded', () => {
       cX = coordinate.x;
       cY = coordinate.y;
 
-      if (!lastCoord || coordinate.x != lastCoord.x || coordinate.y != lastCoord.y) {
+      if (needsResize || !lastCoord || coordinate.x != lastCoord.x || coordinate.y != lastCoord.y) {
+        needsResize = false;
+
         draw({
           graphWidth: resizer.graphWidth,
           graphHeight: resizer.graphHeight,
