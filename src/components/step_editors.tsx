@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import { StepManager } from '../step_manager';
+import { StepHandler } from '../step_handler';
 import CodeEditor from './code_editor';
 import Slider from '@mui/material/Slider';
 import Typography from '@mui/material/Typography';
@@ -17,6 +17,7 @@ interface StepEditorsProps {
 
 export default function StepEditors({ stepManager, apiKey, updateTrigger }: StepEditorsProps) {
   const [stepData, setStepData] = useState(stepManager.getStepData());
+  const [stepHandler] = useState(new StepHandler(stepManager));
   const [temperatureValues, setTemperatureValues] = useState<number[]>([1, 1, 1]);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
 
   const handleStep = (step: number, index: number) => {
     const temperature = temperatureValues[index];
-    stepManager.handleStep(step, apiKey, temperature);
+    stepHandler.handleStep(step, apiKey, temperature);
   };
 
   const renderButton = (step: number, index: number) => {
@@ -79,8 +80,11 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
         <Switch
           checked={stepManager.isAutoRetryEnabled()}
           onChange={(event) => {
-            const temperature = temperatureValues[2];
-            stepManager.setAutoRetryEnabled(event.target.checked, apiKey, temperature);
+            const enabled = event.target.checked;
+            stepManager.setAutoRetryEnabled(enabled);
+            if (enabled) {
+              handleStep(2, 2);
+            }
           }}
           name="autoRetryEnabled"
           color="primary"
