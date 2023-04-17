@@ -1,3 +1,11 @@
+import { StepData } from './step_manager';
+
+export interface FunctionData {
+  stepData: StepData[];
+  name: string;
+  id?: number;
+}
+
 export class IndexedDBManager {
   private dbName: string;
   private storeName: string;
@@ -26,14 +34,21 @@ export class IndexedDBManager {
     });
   }
 
-  public async saveFunctionData(data: any): Promise<void> {
+  public async saveFunctionData(data: FunctionData): Promise<void> {
     const db = await this.openDB();
     const transaction = db.transaction(this.storeName, 'readwrite');
     const objectStore = transaction.objectStore(this.storeName);
     objectStore.put(data);
   }
 
-  public async getAllFunctionData(): Promise<any[]> {
+  public async updateFunctionDataById(id: number, data: FunctionData): Promise<void> {
+    const db = await this.openDB();
+    const transaction = db.transaction(this.storeName, 'readwrite');
+    const objectStore = transaction.objectStore(this.storeName);
+    objectStore.put({ ...data, id });
+  }
+
+  public async getAllFunctionData(): Promise<FunctionData[]> {
     return new Promise(async (resolve, reject) => {
       const db = await this.openDB();
       const transaction = db.transaction(this.storeName, 'readonly');
@@ -50,7 +65,7 @@ export class IndexedDBManager {
     });
   }
 
-  public async getFunctionDataById(id: number): Promise<any> {
+  public async getFunctionDataById(id: number): Promise<FunctionData> {
     return new Promise(async (resolve, reject) => {
       const db = await this.openDB();
       const transaction = db.transaction(this.storeName, 'readonly');

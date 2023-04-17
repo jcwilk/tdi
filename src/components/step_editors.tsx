@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import { StepManager } from '../step_manager';
 import { StepHandler } from '../step_handler';
 import CodeEditor from './code_editor';
+import TextField from '@mui/material/TextField';
 import Slider from '@mui/material/Slider';
 import Typography from '@mui/material/Typography';
 import Switch from '@mui/material/Switch';
@@ -19,9 +20,14 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
   const [stepData, setStepData] = useState(stepManager.getStepData());
   const [stepHandler] = useState(new StepHandler(stepManager));
   const [temperatureValues, setTemperatureValues] = useState<number[]>([1, 1, 1]);
+  const [nameFieldValue, setNameFieldValue] = useState(stepManager.getName());
 
   useEffect(() => {
     setStepData(stepManager.getStepData());
+    const name = stepManager.getName();
+    if (name && name !== '') {
+      setNameFieldValue(name);
+    }
   }, [updateTrigger]);
 
   const stepDescriptions = [
@@ -47,6 +53,27 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
     const temperature = temperatureValues[index];
     stepHandler.handleStep(step, apiKey, temperature);
   };
+
+  const renderNameField = () => (
+    <TextField
+      id="name-field"
+      label="Name"
+      variant="outlined"
+      value={nameFieldValue}
+      onChange={(event) => setNameFieldValue(event.target.value)}
+      onBlur={() => stepManager.setName(nameFieldValue)}
+      sx={{
+        marginBottom: 2,
+        color: 'rgba(211, 211, 211, 1)', // light gray
+        '& .MuiInputLabel-root': {
+          color: 'rgba(211, 211, 211, 1)', // light gray
+        },
+        '& .MuiInputBase-root': {
+          color: 'rgba(211, 211, 211, 1)', // light gray
+        },
+      }}
+    />
+  );
 
   const renderButton = (step: number, index: number) => {
     return (
@@ -129,6 +156,7 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
     };
   return (
     <div>
+      {renderNameField()}
       {renderStepOutput()}
     </div>
   );

@@ -15,12 +15,22 @@ export class StepManager extends EventEmitter {
   private stepData: StepData[];
   private autoRetryEnabled: boolean;
   private success: boolean;
+  private name: string;
 
   constructor() {
     super();
     this.stepData = [{outputText: '', step: 0}];
     this.autoRetryEnabled = false;
     this.success = false;
+    this.name = '';
+  }
+
+  public setName(name: string): void {
+    this.name = name;
+  }
+
+  public getName(): string {
+    return this.name;
   }
 
   public setAutoRetryEnabled(enabled: boolean): void {
@@ -51,15 +61,17 @@ export class StepManager extends EventEmitter {
     this.emit('stepDataChanged');
   }
 
-  getSaveData(): { stepData: StepData[] } {
+  getSaveData(): { stepData: StepData[], name: string } {
     return {
       stepData: this.stepData,
+      name: this.name,
     };
   }
 
   loadFunctionData(functionData: any) {
     this.stepData.splice(0, this.stepData.length, ...functionData.stepData);
     this.success = true;
+    this.name = functionData.name;
     this.emit('stepDataChanged');
   }
 
@@ -74,6 +86,7 @@ export class StepManager extends EventEmitter {
 
   public setSuccess(success: boolean): void {
     this.success = success;
+    this.autoRetryEnabled = false;
     this.emit('stepDataChanged');
   }
 }

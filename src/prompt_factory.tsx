@@ -39,3 +39,17 @@ Sure! Here's the global javascript function:
 `
   }
 }
+
+export function getNamePrompt(stepData: StepData[]): string {
+  const description = stepData[0].outputText;
+  return `Given the following problem:
+START problem definition
+${description}
+END problem definition
+Please provide a title for the tool used to solve this solution. The title should be a short, descriptive name for the tool and useful
+for identifying it in a list of similar tools. The title should be at most a single sentence, and should not include any special
+characters or punctuation and should omit the ending punctuation.
+
+Sure! Here's the title:
+`
+}

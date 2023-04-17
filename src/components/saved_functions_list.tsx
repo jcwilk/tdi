@@ -6,27 +6,22 @@ import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import { Box } from '@mui/system';
 import { StepManager } from '../step_manager';
-import { IndexedDBManager } from '../indexeddb_manager';
+import { IndexedDBManager, FunctionData } from '../indexeddb_manager';
 
 interface SavedFunctionsListProps {
   stepManager: StepManager;
   updateTrigger: number;
   onClose: () => void;
-  onSelect: (functionData: any) => void;
+  onSelect: (functionData: FunctionData) => void;
 }
 
 export default function SavedFunctionsList({ stepManager, updateTrigger, onClose, onSelect }: SavedFunctionsListProps) {
-  const [savedFunctions, setSavedFunctions] = useState<any[]>([]);
+  const [savedFunctions, setSavedFunctions] = useState<FunctionData[]>([]);
   const indexedDBManager = new IndexedDBManager('FunctionsDB', 'functions');
 
   useEffect(() => {
     fetchSavedFunctions();
   }, []);
-
-  // TODO: when it's needed
-  // useEffect(() => {
-  //   doSomething(stepManager.someState);
-  // }, [updateTrigger]);
 
   const fetchSavedFunctions = async () => {
     const functions = await indexedDBManager.getAllFunctionData();
@@ -46,16 +41,29 @@ export default function SavedFunctionsList({ stepManager, updateTrigger, onClose
 
   const handleSave = async () => {
     const functionData = stepManager.getSaveData();
-    await indexedDBManager.saveFunctionData(functionData);
-    fetchSavedFunctions();
-  }
+    const existingFunction = savedFunctions.find((func) => func.name === functionData.name);
+
+    if (existingFunction) {
+      const confirmOverwrite = window.confirm(
+        `A function with the name "${functionData.name}" already exists. Do you want to overwrite it?`
+      );
+
+      if (confirmOverwrite) {
+        await indexedDBManager.updateFunctionDataById(existingFunction.id, functionData);
+        fetchSavedFunctions();
+      }
+    } else {
+      await indexedDBManager.saveFunctionData(functionData);
+      fetchSavedFunctions();
+    }
+  };
 
   return (
     <>
       <Dialog open onClose={onClose}>
-      <Button size="small" onClick={() => handleSave()}>
-        +Save current
-      </Button>
+        <Button size="small" onClick={() => handleSave()}>
+          +Save current
+        </Button>
         <DialogTitle>Saved Functions</DialogTitle>
         <DialogContent>
           {savedFunctions.map((func) => (

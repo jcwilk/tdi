@@ -1,5 +1,5 @@
 import { StepData, StepManager } from './step_manager';
-import { getMainStepPrompt } from './prompt_factory';
+import { getMainStepPrompt, getNamePrompt } from './prompt_factory';
 import { getCompletion } from './openai_api';
 import TesterWorker from "./tester.worker";
 
@@ -20,7 +20,7 @@ export class StepHandler {
 
   public async handleStep(
     step: number,
-    apiKey: string | null,
+    apiKey: string,
     temperature: number
   ): Promise<void> {
     if (!apiKey) {
@@ -38,8 +38,12 @@ export class StepHandler {
     this.currentRequestId += 1;
     const requestId = this.currentRequestId;
 
+    if (this.stepManager.getName() === '') {
+      this.initializeName(apiKey, temperature);
+    }
+
     try {
-      let completionText = await getCompletion(apiKey, getMainStepPrompt(this.stepManager.getStepData(), nextStep), undefined, temperature);
+      let completionText = await getCompletion(apiKey, getMainStepPrompt(this.stepManager.getStepData(), nextStep), temperature);
 
       if (completionText === undefined || completionText === null) completionText = '';
 
@@ -87,6 +91,16 @@ export class StepHandler {
 
     this.stepManager.addStep(completionText || "", nextStep);
     return result;
+  }
+
+  private async initializeName(apiKey: string, temperature: number) {
+    let name = await getCompletion(apiKey, getNamePrompt(this.stepManager.getStepData()), temperature);
+    if (!name || name === '') return;
+
+    const currentName = this.stepManager.getName();
+    if(currentName && currentName !== '') return;
+
+    this.stepManager.setName(name.replace(/^\s*[\W_]+|[\W_]+\s*$/g, ''));
   }
 
   private runJasmineTestsInWorker(functionString: string, jasmineTestsString: string, callback: TestResultsCallback): Promise<boolean> {
