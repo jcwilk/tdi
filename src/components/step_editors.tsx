@@ -1,14 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import { StepManager } from '../step_manager';
 import { StepHandler } from '../step_handler';
-import CodeEditor from './code_editor';
 import TextField from '@mui/material/TextField';
 import Slider from '@mui/material/Slider';
 import Typography from '@mui/material/Typography';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import DialogContent from '@mui/material/DialogContent';
+import Dialog from '@mui/material/Dialog';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import IconButton from '@mui/material/IconButton';
+import CodeFlask from 'codeflask';
+import Slide from '@mui/material/Slide';
 
 interface StepEditorsProps {
   stepManager: StepManager;
@@ -21,6 +27,8 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
   const [stepHandler] = useState(new StepHandler(stepManager));
   const [temperatureValues, setTemperatureValues] = useState<number[]>([1, 1, 1]);
   const [nameFieldValue, setNameFieldValue] = useState(stepManager.getName());
+  const [openEditor, setOpenEditor] = useState(-1);
+  const domElementRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setStepData(stepManager.getStepData());
@@ -53,6 +61,83 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
     const temperature = temperatureValues[index];
     stepHandler.handleStep(step, apiKey, temperature);
   };
+
+  const handleClickOpen = (index: number) => {
+    setOpenEditor(index);
+  };
+
+  const handleClose = () => {
+    setOpenEditor(-1);
+  };
+
+  const renderFullScreenEditor = (index: number) => {
+    const idValue = `code-editor-${index}`;
+
+    return (
+      <Dialog
+        fullScreen
+        open={index === openEditor}
+        onClose={handleClose}
+        TransitionComponent={Slide}
+        TransitionProps={{
+          onEntered: () => {
+            if (index === openEditor) {
+              domElementRef.current = document.getElementById(idValue) as HTMLDivElement;
+              const flask = new CodeFlask(domElementRef.current, {
+                language: "javascript",
+                lineNumbers: true,
+              });
+
+              flask.updateCode(stepData[openEditor].outputText);
+              flask.onUpdate((code) => {
+                stepManager.updateStepOutput(index, code);
+              });
+            }
+          },
+        }}
+      >
+        <AppBar sx={{ position: 'relative' }}>
+          <Toolbar>
+            <IconButton
+              edge="start"
+              color="inherit"
+              onClick={handleClose}
+              aria-label="close"
+            >
+              <Typography variant="h6">X</Typography>
+            </IconButton>
+            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+              Sound
+            </Typography>
+            <Button autoFocus color="inherit" onClick={handleClose}>
+              save
+            </Button>
+          </Toolbar>
+        </AppBar>
+        <DialogContent>
+          <div id={idValue} />
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const renderTextDisplay = (index: number) => (
+    <Box
+      onClick={() => handleClickOpen(index)}
+      sx={{
+        border: '1px solid rgba(211, 211, 211, 1)', // light gray
+        borderRadius: 1,
+        minHeight: '150px',
+        padding: '8px',
+        whiteSpace: 'pre-wrap',
+        overflow: 'auto',
+        wordWrap: 'break-word',
+        cursor: 'pointer',
+      }}
+    >
+      {stepData[index].outputText}
+    </Box>
+  );
 
   const renderNameField = () => (
     <TextField
@@ -122,19 +207,15 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
   );
 
   const renderStepOutput = (): JSX.Element[] => {
-
     const outputElements: JSX.Element[] = [];
 
     stepData.forEach(({ outputText, step }, index) => {
       outputElements.push(
         <div key={index}>
           <h2>{stepDescriptions[index]}</h2>
-          <CodeEditor
-            value={outputText}
-            onChange={(value: string) => stepManager.updateStepOutput(index, value)}
-            height="150px"
-            />
-            {step < 3 && (
+          {renderTextDisplay(index)}
+          {renderFullScreenEditor(index)}
+          {step < 3 && (
               <Box
                 sx={{
                   display: 'flex',
@@ -148,12 +229,13 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
               </Box>
             )}
             {step === 3 && !stepManager.getSuccess() && renderAutoRetryToggle()}
-          </div>
-        );
-      });
+        </div>
+      );
+    });
 
-      return outputElements;
-    };
+    return outputElements;
+  };
+
   return (
     <div>
       {renderNameField()}

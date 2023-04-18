@@ -86,7 +86,7 @@ export class StepManager extends EventEmitter {
 
   public setSuccess(success: boolean): void {
     this.success = success;
-    this.autoRetryEnabled = false;
+    if (success) this.autoRetryEnabled = false;
     this.emit('stepDataChanged');
   }
 }
