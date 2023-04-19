@@ -15,6 +15,7 @@ import Toolbar from '@mui/material/Toolbar';
 import IconButton from '@mui/material/IconButton';
 import CodeFlask from 'codeflask';
 import Slide from '@mui/material/Slide';
+import BoxPopup from './box_popup';
 
 interface StepEditorsProps {
   stepManager: StepManager;
@@ -28,7 +29,6 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
   const [temperatureValues, setTemperatureValues] = useState<number[]>([1, 1, 1]);
   const [nameFieldValue, setNameFieldValue] = useState(stepManager.getName());
   const [openEditor, setOpenEditor] = useState(-1);
-  const domElementRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setStepData(stepManager.getStepData());
@@ -41,7 +41,7 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
   const stepDescriptions = [
     'Described Problem:',
     'Examples:',
-    'Jasmine Tests',
+    'Jasmine Tests:',
     'Function Code:',
   ];
 
@@ -70,73 +70,31 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
     setOpenEditor(-1);
   };
 
-  const renderFullScreenEditor = (index: number) => {
-    const idValue = `code-editor-${index}`;
-
-    return (
-      <Dialog
-        fullScreen
-        open={index === openEditor}
-        onClose={handleClose}
-        TransitionComponent={Slide}
-        TransitionProps={{
-          onEntered: () => {
-            if (index === openEditor) {
-              domElementRef.current = document.getElementById(idValue) as HTMLDivElement;
-              const flask = new CodeFlask(domElementRef.current, {
-                language: "javascript",
-                lineNumbers: true,
-              });
-
-              flask.updateCode(stepData[openEditor].outputText);
-              flask.onUpdate((code) => {
-                stepManager.updateStepOutput(index, code);
-              });
-            }
-          },
+  const renderTextDisplay = (index: number) => (
+    <>
+      <Box
+        onClick={() => handleClickOpen(index)}
+        sx={{
+          border: '1px solid rgba(211, 211, 211, 1)', // light gray
+          borderRadius: 1,
+          minHeight: '150px',
+          padding: '8px',
+          whiteSpace: 'pre-wrap',
+          overflow: 'auto',
+          wordWrap: 'break-word',
+          cursor: 'pointer',
         }}
       >
-        <AppBar sx={{ position: 'relative' }}>
-          <Toolbar>
-            <IconButton
-              edge="start"
-              color="inherit"
-              onClick={handleClose}
-              aria-label="close"
-            >
-              <Typography variant="h6">X</Typography>
-            </IconButton>
-            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              Sound
-            </Typography>
-            <Button autoFocus color="inherit" onClick={handleClose}>
-              save
-            </Button>
-          </Toolbar>
-        </AppBar>
-        <DialogContent>
-          <div id={idValue} />
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
-  const renderTextDisplay = (index: number) => (
-    <Box
-      onClick={() => handleClickOpen(index)}
-      sx={{
-        border: '1px solid rgba(211, 211, 211, 1)', // light gray
-        borderRadius: 1,
-        minHeight: '150px',
-        padding: '8px',
-        whiteSpace: 'pre-wrap',
-        overflow: 'auto',
-        wordWrap: 'break-word',
-        cursor: 'pointer',
-      }}
-    >
-      {stepData[index].outputText}
-    </Box>
+        {stepData[index].outputText}
+      </Box>
+      <BoxPopup
+        index={index}
+        openEditor={openEditor}
+        onClose={handleClose}
+        stepData={stepData}
+        stepManager={stepManager}
+      />
+    </>
   );
 
   const renderNameField = () => (
@@ -214,7 +172,6 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
         <div key={index}>
           <h2>{stepDescriptions[index]}</h2>
           {renderTextDisplay(index)}
-          {renderFullScreenEditor(index)}
           {step < 3 && (
               <Box
                 sx={{
