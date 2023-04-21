@@ -22,7 +22,7 @@ export class StepHandler {
     step: number,
     apiKey: string,
     temperature: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!apiKey) {
       throw new Error('API Key is not set');
     }
@@ -49,31 +49,32 @@ export class StepHandler {
 
       if (requestId !== this.currentRequestId) {
         console.log('Ignoring response for outdated request');
-        return;
+        return false;
       }
 
       const result = await this.addStep(completionText, nextStep);
 
       if (nextStep === 3) {
         this.stepManager.setSuccess(result);
-        if (!this.stepManager.isAutoRetryEnabled() || result) return;
+        if (!this.stepManager.isAutoRetryEnabled() || result) return false;
 
         setTimeout(() => {
           if(!this.stepManager.isAutoRetryEnabled()) return;
 
           this.handleStep(step, apiKey, temperature);
         }, 1000);
+
+        return false;
       } else {
         this.stepManager.setSuccess(false);
+        return true;
       }
-
-      return;
     } catch (error) {
       // TODO - cleanup needed?
       console.error(error);
       alert('Error fetching step data');
+      return false;
     }
-    return;
   }
 
   private async addStep(

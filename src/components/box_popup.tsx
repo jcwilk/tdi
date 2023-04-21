@@ -16,9 +16,12 @@ interface BoxPopupProps {
   onClose: () => void;
   stepData: { outputText: string }[];
   stepManager: any;
+  onSubmit: () => void;
+  onSubmitText: string;
+  description: string;
 }
 
-export default function BoxPopup({ index, openEditor, onClose, stepData, stepManager }: BoxPopupProps) {
+export default function BoxPopup({ index, openEditor, onClose, onSubmit, onSubmitText, description, stepData, stepManager }: BoxPopupProps) {
   const domElementRef = useRef<HTMLDivElement | null>(null);
   const idValue = `code-editor-${index}`;
 
@@ -55,15 +58,15 @@ export default function BoxPopup({ index, openEditor, onClose, stepData, stepMan
             <Typography variant="h6">X</Typography>
           </IconButton>
           <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-            Sound
+            {description}
           </Typography>
-          <Button autoFocus color="inherit" onClick={onClose}>
-            save
+          <Button autoFocus color="inherit" onClick={() => {onSubmit(); onClose()}}>
+            {onSubmitText}
           </Button>
         </Toolbar>
       </AppBar>
       <DialogContent>
-        <div id={idValue} ref={domElementRef} />
+        <div id={idValue} ref={domElementRef} style={{ width: "100%", height: "100%" }} />
       </DialogContent>
     </Dialog>
   );

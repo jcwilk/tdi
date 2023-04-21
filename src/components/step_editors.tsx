@@ -8,13 +8,7 @@ import Slider from '@mui/material/Slider';
 import Typography from '@mui/material/Typography';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import DialogContent from '@mui/material/DialogContent';
-import Dialog from '@mui/material/Dialog';
-import AppBar from '@mui/material/AppBar';
-import Toolbar from '@mui/material/Toolbar';
-import IconButton from '@mui/material/IconButton';
-import CodeFlask from 'codeflask';
-import Slide from '@mui/material/Slide';
+import CircularProgress from '@mui/material/CircularProgress';
 import BoxPopup from './box_popup';
 
 interface StepEditorsProps {
@@ -29,6 +23,7 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
   const [temperatureValues, setTemperatureValues] = useState<number[]>([1, 1, 1]);
   const [nameFieldValue, setNameFieldValue] = useState(stepManager.getName());
   const [openEditor, setOpenEditor] = useState(-1);
+  const [isLoading, setIsLoading] = useState(-1);
 
   useEffect(() => {
     setStepData(stepManager.getStepData());
@@ -59,7 +54,13 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
 
   const handleStep = (step: number, index: number) => {
     const temperature = temperatureValues[index];
-    stepHandler.handleStep(step, apiKey, temperature);
+    setIsLoading(index);
+    stepHandler.handleStep(step, apiKey, temperature).then((success) => {
+      setIsLoading(-1);
+      if (success && index < buttonLabels.length - 1) {
+        setTimeout(() => handleStep(step + 1, index + 1), 500);
+      }
+    });
   };
 
   const handleClickOpen = (index: number) => {
@@ -91,6 +92,9 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
         index={index}
         openEditor={openEditor}
         onClose={handleClose}
+        onSubmit={() => handleStep(index, index)}
+        onSubmitText={buttonLabels[index] || "Save"}
+        description={stepDescriptions[index]}
         stepData={stepData}
         stepManager={stepManager}
       />
@@ -119,11 +123,14 @@ export default function StepEditors({ stepManager, apiKey, updateTrigger }: Step
   );
 
   const renderButton = (step: number, index: number) => {
-    return (
-      <Button variant="contained" onClick={() => handleStep(step, index)}>
-        {buttonLabels[index]}
-      </Button>
-    );
+    if (isLoading == index)
+      return <CircularProgress size={24} />
+    else
+      return (
+        <Button variant="contained" onClick={() => handleStep(step, index)}>
+          {buttonLabels[index]}
+        </Button>
+      );
   }
 
   const renderTemperatureSlider = (index: number) => (
