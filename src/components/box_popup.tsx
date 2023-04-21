@@ -8,7 +8,7 @@ import Typography from '@mui/material/Typography';
 import Slide from '@mui/material/Slide';
 import Button from '@mui/material/Button';
 import DialogContent from '@mui/material/DialogContent';
-import CodeFlask from 'codeflask';
+import { nanoEditor } from 'nano-editor';
 
 interface BoxPopupProps {
   index: number;
@@ -32,13 +32,12 @@ export default function BoxPopup({ index, openEditor, onClose, stepData, stepMan
         onEntered: () => {
           if (index === openEditor) {
             domElementRef.current = document.getElementById(idValue) as HTMLDivElement;
-            const flask = new CodeFlask(domElementRef.current, {
-              language: "javascript",
-              lineNumbers: true,
-            });
 
-            flask.updateCode(stepData[openEditor].outputText);
-            flask.onUpdate((code) => {
+            // Replace CodeFlask with NanoEditor
+            const editor = new nanoEditor(domElementRef.current, "javascript", true);
+
+            editor.setValue(stepData[openEditor].outputText);
+            editor.onChange((code: string) => {
               stepManager.updateStepOutput(index, code);
             });
           }
