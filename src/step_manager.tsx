@@ -1,9 +1,4 @@
-import { EventEmitter } from 'events';
-
-export interface StepData {
-  outputText: string;
-  step: number;
-}
+import { Step, StepSaveData } from './step';
 
 export type TestResultsCallback = (results: {
   passedCount: number;
@@ -11,18 +6,46 @@ export type TestResultsCallback = (results: {
   totalCount: number;
 }) => void;
 
-export class StepManager extends EventEmitter {
-  private stepData: StepData[];
+export class StepManager {
+  private steps: Step[];
   private autoRetryEnabled: boolean;
-  private success: boolean;
   private name: string;
 
-  constructor() {
-    super();
-    this.stepData = [{outputText: '', step: 0}];
+  constructor(apiKey: string, stepSpecs: any[]) {
+    this.steps = stepSpecs.map((spec) => new Step(spec, apiKey));
     this.autoRetryEnabled = false;
-    this.success = false;
     this.name = '';
+  }
+
+  public setOnStepCompleted(callback: () => void): void {
+    const wrappedCallback = () => {
+      // Aggregate output data from all steps
+      const aggregatedOutputData: { [key: string]: any } = {};
+      for (const step of this.steps) {
+        const outputData = step.getOutputData();
+        for (const key in outputData) {
+          aggregatedOutputData[key] = outputData[key];
+        }
+      }
+
+      if (!this.getName() && aggregatedOutputData.name) this.setName(aggregatedOutputData.name);
+
+      // Feed the aggregated data into each step as dependent data
+      for (const step of this.steps) {
+        step.setDependentData(aggregatedOutputData);
+      }
+
+      // Call the original callback
+      callback();
+    };
+
+    for (const step of this.steps) {
+      step.setOnStepCompleted(wrappedCallback);
+    }
+  }
+
+  public getSteps(): Step[] {
+    return this.steps;
   }
 
   public setName(name: string): void {
@@ -35,58 +58,28 @@ export class StepManager extends EventEmitter {
 
   public setAutoRetryEnabled(enabled: boolean): void {
     this.autoRetryEnabled = enabled;
-    this.emit('stepDataChanged');
   }
 
   public isAutoRetryEnabled(): boolean {
     return this.autoRetryEnabled;
   }
 
-  public addStep(outputText: string, step: number): void {
-    this.stepData.push({outputText, step});
-    this.emit('stepDataChanged');
-  }
-
-  public resetStepsAfter(stepIndex: number): void {
-    this.stepData = this.stepData.filter((_, index) => index <= stepIndex);
-    this.emit('stepDataChanged');
-  }
-
-  public getStepData(): StepData[] {
-    return this.stepData;
-  }
-
-  public setStepData(stepData: StepData[]): void {
-    this.stepData = stepData;
-    this.emit('stepDataChanged');
-  }
-
-  getSaveData(): { stepData: StepData[], name: string } {
+  public getSaveData(): { stepData: StepSaveData[], name: string } {
     return {
-      stepData: this.stepData,
+      stepData: this.steps.map((step) => step.getSaveData()),
       name: this.name,
     };
   }
 
-  loadFunctionData(functionData: any) {
-    this.stepData.splice(0, this.stepData.length, ...functionData.stepData);
-    this.success = true;
-    this.name = functionData.name;
-    this.emit('stepDataChanged');
-  }
+  public setSaveData(data: { stepData: StepSaveData[], name: string }): void {
+    for (let i = 0; i < data.stepData.length; i++) {
+      this.steps[i].setSaveData(data.stepData[i]);
+    }
 
-  public updateStepOutput(index: number, outputText: string): void {
-    this.stepData[index].outputText = outputText;
-    this.emit('stepDataChanged');
+    this.setName(data.name);
   }
 
   public getSuccess(): boolean {
-    return this.success;
-  }
-
-  public setSuccess(success: boolean): void {
-    this.success = success;
-    if (success) this.autoRetryEnabled = false;
-    this.emit('stepDataChanged');
+    return this.steps.every((step) => step.isStepCompleted());
   }
 }

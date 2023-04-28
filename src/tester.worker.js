@@ -35,6 +35,8 @@ const jasmineInterface = {
 self.onmessage = function (event) {
   const { functionString, jasmineTestsString } = event.data;
 
+  console.log(event.data);
+
   // Evaluate the function code
   eval(functionString);
 

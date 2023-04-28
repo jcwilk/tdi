@@ -1,0 +1,75 @@
+export const BasicTDISteps = [
+  {
+    description: "Generate Examples",
+    input: {
+      problem_description: ""
+    },
+    completion: {
+      examples: `Given the following request:
+START problem definition
+/problem_description
+END problem definition
+Please produce or describe example instances of the problem being described.
+
+Sure! Here's some examples:
+`,
+      name: `Given the following problem:
+START problem definition
+/problem_description
+END problem definition
+Please provide a title for the tool used to solve this solution. The title should be a short, descriptive name for the tool and useful
+for identifying it in a list of similar tools. The title should be at most a single sentence, and should not include any special
+characters or punctuation and should omit the ending punctuation.
+
+Sure! Here's the title:
+`
+    }
+  },
+  {
+    description: "Generate Jasmine Tests",
+    depends: ["problem_description", "examples"],
+    completion: {
+      jasmine: `Please produce or describe jasmine test cases which could be used to verify the problem was solved for the following problem:
+START problem definition
+/problem_description
+END problem definition
+which would be expected to be compatible with at least the following examples:
+START examples
+/examples
+END examples
+Please write test cases in Jasmine to confirm a hypothetical solution to this problem for the examples given.
+
+Sure! Here are the Jasmine test cases:
+`
+    }
+  },
+  {
+    description: "Generate Function",
+    depends: ["problem_description", "jasmine"],
+    completion: {
+      function: `Given the following problem:
+START problem definition
+/problem_description
+END problem definition
+and the following Jasmine test cases which will be used to verify the problem being solved:
+START verification method
+/jasmine
+END verification method
+Please write a global javascript function to solve this problem in the most generalized way possible, within constraints of the "problem definition".
+It should also pass all of the Jasmine test cases.
+
+Sure! Here's the global javascript function:
+`
+    }
+  },
+  {
+    description: "Test Function",
+    depends: ["jasmine", "function"],
+    test: {
+      success: {
+        test: "jasmine",
+        code: "function"
+      }
+    }
+  }
+]

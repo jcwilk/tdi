@@ -3,17 +3,26 @@ import { StepManager } from '../step_manager';
 import StepEditors from './step_editors';
 import SavedFunctionsList from './saved_functions_list';
 import Button from '@mui/material/Button';
+import ApiKeyEntry from './api_key_entry';
+import { BasicTDISteps } from '../scenarios';
 
 export default function TextFieldsForm() {
-  const [stepManager] = useState<StepManager>(new StepManager());
-  const [stepDataVersion, setStepDataVersion] = useState<number>(0);
-  const [apiKey] = useState<string | null>(localStorage.getItem('apiKey'));
+  const [stepManager, setStepManager] = useState<StepManager | null>(null);
+  const [apiKey, setApiKey] = useState<string | null>(localStorage.getItem('apiKey'));
   const [showSavedFunctionsDialog, setShowSavedFunctionsDialog] = useState<boolean>(false);
   const [savedFunctionsUpdateTrigger, setSavedFunctionsUpdateTrigger] = useState<number>(0);
 
+  const loadStepManager = () => {
+    if (apiKey === null) return;
+
+    const stepManager = new StepManager(apiKey, BasicTDISteps);
+    setStepManager(stepManager);
+  };
+
+  useEffect(loadStepManager, [apiKey]);
+
   const handleFunctionSelect = (functionData: any) => {
-    // Load the selected function's data into the step manager
-    stepManager.loadFunctionData(functionData);
+    if(stepManager) stepManager.setSaveData(functionData);
     setShowSavedFunctionsDialog(false);
   };
 
@@ -21,20 +30,18 @@ export default function TextFieldsForm() {
     setShowSavedFunctionsDialog(false);
   };
 
+  const handleApiKeySubmit = (key: string) => {
+    localStorage.setItem('apiKey', key);
+    setApiKey(key);
+  };
+
   const handleOpenSavedFunctionsDialog = () => {
     setShowSavedFunctionsDialog(true);
   };
 
-  useEffect(() => {
-    const handleStepDataChanged = () => {
-      setStepDataVersion(prevVersion => prevVersion + 1);
-    };
-
-    stepManager.on('stepDataChanged', handleStepDataChanged);
-    return () => {
-      stepManager.off('stepDataChanged', handleStepDataChanged);
-    };
-  }, [stepManager]);
+  if (stepManager === null || apiKey === null) {
+    return <ApiKeyEntry onSubmit={handleApiKeySubmit} />;
+  }
 
   return (
     <div id="text-input-form">
@@ -49,7 +56,7 @@ export default function TextFieldsForm() {
       >
         Saved Functions
       </Button>
-      <StepEditors stepManager={stepManager} apiKey={apiKey} updateTrigger={stepDataVersion} />
+      <StepEditors stepManager={stepManager} />
       {showSavedFunctionsDialog && (
         <SavedFunctionsList
           stepManager={stepManager}
