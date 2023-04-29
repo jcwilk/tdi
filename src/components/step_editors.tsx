@@ -11,8 +11,6 @@ import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
-import { useTheme } from '@mui/material/styles';
-import useMediaQuery from '@mui/material/useMediaQuery';
 import BoxPopup from './box_popup';
 import styles from './css/step_editors.module.css';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -34,10 +32,6 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
   useEffect(() => {
     stepManager.setOnStepCompleted(bumpCounter);
   }, []);
-
-  // Responsive grid layout
-  const theme = useTheme();
-  const matches = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleTemperatureChange = (index: number) => (event: Event, newValue: number | number[]) => {
     steps[index].setTemperature(newValue as number);
@@ -152,7 +146,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
 
     steps.forEach((step: Step, index: number) => {
       outputElements.push(
-        <Grid item xs={12} md={6} key={index}>
+        <Grid item xs={12} lg={6} xl={3} key={index}>
           <Box className={styles.stepBox}>
             <AppBar position="static" color="secondary">
               <Toolbar>
