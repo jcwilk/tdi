@@ -1,7 +1,7 @@
 body {
     margin: 0 auto;
     background-color: black;
-    color: gray;
+    color: white;
 }
 
 canvas#regl-canvas {

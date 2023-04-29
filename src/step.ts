@@ -131,6 +131,16 @@ export class Step {
     return result;
   }
 
+  public getKeyType(key: string): string {
+    let keys = ["input", "completion", "test"]
+    for(let k of keys) {
+      if((this.spec[k] || {}).hasOwnProperty(key)) {
+        return k
+      }
+    }
+    return "unknown"
+  }
+
   public async runCompletion(): Promise<boolean> {
     this.completionResults = {}
     this.testResults = {}
@@ -177,6 +187,7 @@ export class Step {
     }
     return true;
   }
+
   public getTestData() {
     return this.spec.test ? {...this.spec.test} : {};
   }

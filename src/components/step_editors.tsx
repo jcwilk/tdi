@@ -7,7 +7,15 @@ import TextField from '@mui/material/TextField';
 import Slider from '@mui/material/Slider';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import Chip from '@mui/material/Chip';
+import Grid from '@mui/material/Grid';
+import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import BoxPopup from './box_popup';
+import styles from './css/step_editors.module.css';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 interface StepEditorsProps {
   stepManager: StepManager;
@@ -15,27 +23,25 @@ interface StepEditorsProps {
 
 export default function StepEditors({ stepManager }: StepEditorsProps) {
   const steps = stepManager.getSteps();
+  const nameFieldValue = stepManager.getName();
 
-  const [nameFieldValue, setNameFieldValue] = useState(stepManager.getName());
   const [openEditor, setOpenEditor] = useState("");
   const [isLoading, setIsLoading] = useState(-1);
   const [updateCounter, setUpdateCounter] = useState(0);
 
-  useEffect(() => {
-    stepManager.setOnStepCompleted(() => {
-      setUpdateCounter((prevCounter) => prevCounter + 1);
-    });
-  }, []);
+  const bumpCounter = () => setUpdateCounter((prevCounter) => prevCounter + 1)
 
   useEffect(() => {
-    const name = stepManager.getName();
-    if (name && name !== '') {
-      setNameFieldValue(name);
-    }
-  }, [updateCounter]);
+    stepManager.setOnStepCompleted(bumpCounter);
+  }, []);
+
+  // Responsive grid layout
+  const theme = useTheme();
+  const matches = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleTemperatureChange = (index: number) => (event: Event, newValue: number | number[]) => {
     steps[index].setTemperature(newValue as number);
+    bumpCounter();
   };
 
   const handleStep = async (step: Step, index: number) => {
@@ -58,6 +64,26 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
     handleStep(step, index);
   }
 
+  const renderChips = (step: Step, key: string, text: string) => {
+    const keyType = step.getKeyType(key);
+    return <Box style={{ float: "right" }}>
+      <Chip
+        className={styles.fieldStatusChip}
+        variant="outlined"
+        color="secondary"
+        size="small"
+        label={keyType}
+      />
+      <Chip
+        className={styles.fieldStatusChip}
+        variant="outlined"
+        color={text ? "primary" : "warning"}
+        size="small"
+        label={key}
+      />
+    </Box>
+  }
+
   const renderTextDisplay = (step: Step, index: number) => {
     const outputElements: JSX.Element[] = [];
 
@@ -65,19 +91,8 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
       const fieldId = `${index}-${key}`;
       outputElements.push(
         <React.Fragment key={fieldId}>
-          <Box
-            onClick={() => handleClickOpen(fieldId)}
-            sx={{
-              border: '1px solid rgba(211, 211, 211, 1)', // light gray
-              borderRadius: 1,
-              minHeight: '150px',
-              padding: '8px',
-              whiteSpace: 'pre-wrap',
-              overflow: 'auto',
-              wordWrap: 'break-word',
-              cursor: 'pointer',
-            }}
-          >
+          <Box onClick={() => handleClickOpen(fieldId)} className={styles.textDisplayBox}>
+            {renderChips(step, key, text)}
             {text}
           </Box>
           <BoxPopup
@@ -102,18 +117,8 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
       label="Name"
       variant="outlined"
       value={nameFieldValue}
-      onChange={(event) => setNameFieldValue(event.target.value)}
-      onBlur={() => stepManager.setName(nameFieldValue)}
-      sx={{
-        marginBottom: 2,
-        color: 'rgba(211, 211, 211, 1)', // light gray
-        '& .MuiInputLabel-root': {
-          color: 'rgba(211, 211, 211, 1)', // light gray
-        },
-        '& .MuiInputBase-root': {
-          color: 'rgba(211, 211, 211, 1)', // light gray
-        },
-      }}
+      onChange={(event) => {stepManager.setName(event.target.value); bumpCounter()}}
+      className={styles.nameField}
     />
   );
 
@@ -122,17 +127,14 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
       return <CircularProgress size={24} />
     else
       return (
-        <Button variant="contained" onClick={() => handleStep(step, index)}>
-          Generate Next
+        <Button color="inherit" onClick={() => handleStep(step, index)}>
+          Run
         </Button>
       );
   }
 
   const renderTemperatureSlider = (index: number) => (
     <>
-      <Typography id={`temperature-slider-${index}`} gutterBottom>
-        Temperature
-      </Typography>
       <Slider
         aria-labelledby={`temperature-slider-${index}`}
         value={steps[index].getTemperature()}
@@ -140,7 +142,6 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
         marks
         min={0.1}
         max={2}
-        valueLabelDisplay="auto"
         onChange={handleTemperatureChange(index)}
       />
     </>
@@ -151,33 +152,56 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
 
     steps.forEach((step: Step, index: number) => {
       outputElements.push(
-        <div key={index}>
-          <h2>{step.getDescription()}</h2>
-          {renderTextDisplay(step, index)}
-          {index < steps.length && (
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                marginTop: 1,
-              }}
-            >
-              {step.areDependentsSatisfied() && renderButton(step, index)}
-              {step.areDependentsSatisfied() && renderTemperatureSlider(index)}
+        <Grid item xs={12} md={6} key={index}>
+          <Box className={styles.stepBox}>
+            <AppBar position="static" color="secondary">
+              <Toolbar>
+                <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                  {step.getDescription()}
+                </Typography>
+                {renderButton(step, index)}
+              </Toolbar>
+            </AppBar>
+            <Box component="main" className={styles.stepOutputContentsBox}>
+              <>
+                {renderTextDisplay(step, index)}
+              </>
+
+              <Box className={styles.stepControls}>
+                {step.areDependentsSatisfied() && (
+                  <>
+                    {renderTemperatureSlider(index)}
+                  </>
+                )}
+              </Box>
             </Box>
-          )}
-        </div>
+          </Box>
+        </Grid>
       );
     });
 
     return outputElements;
   };
 
+  const darkTheme = createTheme({
+    palette: {
+      mode: 'dark',
+      primary: {
+        main: '#1976d2',
+      },
+    },
+  });
+
   return (
     <div>
-      {renderNameField()}
-      {renderStepOutput()}
+      <ThemeProvider theme={darkTheme}>
+        <Grid className={styles.outerGrid} container spacing={2}>
+          <Grid item md={12}>
+            {renderNameField()}
+          </Grid>
+          {renderStepOutput()}
+        </Grid>
+      </ThemeProvider>
     </div>
   );
 }

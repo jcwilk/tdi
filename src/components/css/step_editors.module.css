@@ -1,0 +1,56 @@
+.textDisplayBox {
+  border: 1px solid rgb(163, 163, 163);
+  border-radius: 4px;
+  min-height: 150px;
+  padding: 8px;
+  white-space: pre-wrap;
+  overflow: auto;
+  word-wrap: break-word;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.7);
+  margin-top: 8px;
+}
+
+.textDisplayBox:not(:last-child) {
+  margin-bottom: 16px;
+}
+
+.nameField {
+  margin-bottom: 16px;
+  color: rgba(211, 211, 211, 1);
+}
+
+.nameField .MuiInputLabel-root {
+  color: rgba(211, 211, 211, 1);
+}
+
+.nameField .MuiInputBase-root {
+  color: rgba(211, 211, 211, 1);
+}
+
+.stepBox {
+  border-radius: 0 0 4px 4px;
+  border: 1px solid rgba(211, 211, 211, 0.5);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.stepOutputContentsBox {
+  padding-left: 10px;
+  padding-right: 10px;
+  padding-bottom: 10px;
+}
+
+.fieldStatusChip {
+  margin-left: 5px;
+}
+
+.stepControls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.outerGrid {
+  padding: 16px;
+}

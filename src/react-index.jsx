@@ -5,7 +5,6 @@ import TextFieldsForm from './components/text_fields_form';
 const App = () => {
   return (
     <div>
-      <h1>TDI Prototype</h1>
       <TextFieldsForm />
     </div>
   );
