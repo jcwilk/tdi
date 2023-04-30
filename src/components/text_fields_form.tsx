@@ -5,6 +5,7 @@ import SavedFunctionsList from './saved_functions_list';
 import Button from '@mui/material/Button';
 import ApiKeyEntry from './api_key_entry';
 import { BasicTDISteps } from '../scenarios';
+import FolderIcon from '@mui/icons-material/Folder';
 
 export default function TextFieldsForm() {
   const [stepManager, setStepManager] = useState<StepManager | null>(null);
@@ -54,7 +55,7 @@ export default function TextFieldsForm() {
           right: '16px',
         }}
       >
-        Saved Functions
+        <FolderIcon />
       </Button>
       <StepEditors stepManager={stepManager} />
       {showSavedFunctionsDialog && (

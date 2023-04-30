@@ -1,33 +1,35 @@
-import React, { useState } from "react";
-import Modal from '@mui/material/Modal';
-import TextField from '@mui/material/TextField';
-import Button from '@mui/material/Button';
+import React, { useState, forwardRef } from "react";
+import Dialog from '@mui/material/Dialog';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CloseIcon from '@mui/icons-material/Close';
+import Slide from '@mui/material/Slide';
+import { TransitionProps } from '@mui/material/transitions';
 
 interface BoxPopupProps {
   openEditor: string;
   onClose: (text: string) => void;
   onSubmit: (text: string) => void;
-  onSubmitText: string;
+  onSubmitText: string | null;
   description: string;
   text: string;
   fieldId: string;
+  fieldName: string;
 }
 
-const style = {
-  position: 'absolute' as 'absolute',
-  top: '50%',
-  left: '50%',
-  transform: 'translate(-50%, -50%)',
-  width: 400,
-  bgcolor: 'background.paper',
-  border: '2px solid #000',
-  boxShadow: 24,
-  pt: 2,
-  px: 4,
-  pb: 3,
-};
+const Transition = forwardRef(function Transition(
+  props: TransitionProps & {
+    children: React.ReactElement;
+  },
+  ref: React.Ref<unknown>,
+) {
+  return <Slide direction="up" ref={ref} {...props} />;
+});
 
 export default function BoxPopup({
   fieldId,
@@ -36,7 +38,8 @@ export default function BoxPopup({
   onClose,
   onSubmit,
   onSubmitText,
-  description
+  description,
+  fieldName
 }: BoxPopupProps) {
   const [textValue, setTextValue] = useState(text);
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,31 +47,48 @@ export default function BoxPopup({
   };
 
   return (
-    <Modal
-      open={fieldId === openEditor}
-      onClose={() => onClose(textValue)}
-      aria-labelledby="modal-modal-title"
-    >
-      <Box sx={style}>
-        <Typography id="modal-modal-title" variant="h6" component="h2">
-          { description }
-        </Typography>
-        <TextField
-          multiline
-          rows={10}
-          value={textValue}
-          variant="outlined"
-          fullWidth
-          onChange={handleChange}
-        />
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() => onSubmit(textValue)}
-        >
-          {onSubmitText}
-        </Button>
-      </Box>
-    </Modal>
+    <div>
+      <Dialog
+        fullScreen
+        open={fieldId === openEditor}
+        onClose={() => onClose(textValue)}
+        TransitionComponent={Transition}
+      >
+        <AppBar sx={{ position: 'relative' }}>
+          <Toolbar>
+            <IconButton
+              edge="start"
+              color="inherit"
+              onClick={() => onClose(textValue)}
+              aria-label="close"
+            >
+              <CloseIcon />
+            </IconButton>
+            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+              { description }
+            </Typography>
+            { onSubmitText &&
+              <Button autoFocus color="inherit" onClick={() => onSubmit(textValue)}>
+                {onSubmitText}
+              </Button>
+            }
+          </Toolbar>
+        </AppBar>
+        <Box sx={{ p: 2 }}>
+          <TextField
+            multiline
+            fullWidth
+            rows={10}
+            value={textValue}
+            variant="outlined"
+            onChange={handleChange}
+            label={fieldName}
+            InputLabelProps={{
+              shrink: true,
+            }}
+          />
+        </Box>
+      </Dialog>
+    </div>
   );
 }

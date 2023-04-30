@@ -14,6 +14,9 @@ import Grid from '@mui/material/Grid';
 import BoxPopup from './box_popup';
 import styles from './css/step_editors.module.css';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import ReplayCircleFilledIcon from '@mui/icons-material/ReplayCircleFilled';
+import PlayDisabledIcon from '@mui/icons-material/PlayDisabled';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 interface StepEditorsProps {
   stepManager: StepManager;
@@ -83,6 +86,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
 
     for (let [key, text] of Object.entries(step.getOutputData())) {
       const fieldId = `${index}-${key}`;
+      const isReady = step.getKeyType(key) === "input"
       outputElements.push(
         <React.Fragment key={fieldId}>
           <Box onClick={() => handleClickOpen(fieldId)} className={styles.textDisplayBox}>
@@ -93,10 +97,11 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
             fieldId={fieldId}
             openEditor={openEditor}
             onClose={(text: string) => handleClose(step, key, text)}
-            onSubmit={(text: string) => handleSubmit(step, index, key, text)}
-            onSubmitText={"Run Completions"}
+            onSubmit={(text: string) => isReady ? handleSubmit(step, index, key, text) : true}
+            onSubmitText={isReady ? "Run Completions" : null}
             description={step.getDescription()}
             text={text}
+            fieldName={key}
           />
         </React.Fragment>
       )
@@ -118,11 +123,27 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
 
   const renderButton = (step: Step, index: number) => {
     if (isLoading == index)
-      return <CircularProgress size={24} />
+      return (
+        <Button color="inherit">
+          <CircularProgress />
+        </Button>
+      )
+    else if (!step.areDependentsSatisfied())
+      return (
+        <Button color="inherit" disabled>
+          <PlayDisabledIcon />
+        </Button>
+      )
+    else if (step.isStepCompleted())
+      return (
+        <Button color="inherit" onClick={() => handleStep(step, index)}>
+          <ReplayCircleFilledIcon />
+        </Button>
+      );
     else
       return (
         <Button color="inherit" onClick={() => handleStep(step, index)}>
-          Run
+          <PlayArrowIcon />
         </Button>
       );
   }

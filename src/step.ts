@@ -27,7 +27,6 @@ export class Step {
   private dependentData: { [key: string]: any };
   private completionResults: { [key: string]: any };
   private testResults: { [key: string]: any };
-  private isCompleted: boolean;
   private temperature: number;
   private apiKey: string;
   private onStepCompleted: (() => void) | null = null;
@@ -39,7 +38,6 @@ export class Step {
     this.dependentData = {};
     this.completionResults = {};
     this.testResults = {};
-    this.isCompleted = false;
     this.temperature = 1;
   }
 
@@ -144,7 +142,6 @@ export class Step {
   public async runCompletion(): Promise<boolean> {
     this.completionResults = {}
     this.testResults = {}
-    this.isCompleted = false;
 
     if (this.onStepCompleted) {
       this.onStepCompleted();
@@ -181,7 +178,6 @@ export class Step {
       this.testResults[key] = output;
     }
 
-    this.isCompleted = true;
     if (this.onStepCompleted) {
       this.onStepCompleted();
     }
@@ -193,7 +189,25 @@ export class Step {
   }
 
   public isStepCompleted(): boolean {
-    return this.isCompleted;
+    for (let property in this.spec.completion) {
+      if (!this.completionResults[property]) {
+        return false
+      }
+    }
+
+    for (let property in this.spec.test) {
+      if (!this.testResults[property]) {
+        return false
+      }
+    }
+
+    for (let property in this.spec.input) {
+      if (!this.inputData[property]) {
+        return false
+      }
+    }
+
+    return true
   }
 
   public areDependentsSatisfied(): boolean {
