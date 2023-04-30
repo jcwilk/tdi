@@ -1,4 +1,4 @@
-import React, { useState, forwardRef } from "react";
+import React, { useState, forwardRef, useEffect } from "react";
 import Dialog from '@mui/material/Dialog';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
@@ -45,6 +45,10 @@ export default function BoxPopup({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTextValue(e.target.value);
   };
+
+  useEffect(() => {
+    setTextValue(text);
+  }, [text]);
 
   return (
     <div>
