@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import { APIKeyStorer } from '../api_key_storage';
 
 interface ApiKeyEntryProps {
-  onSubmit: (key: string) => void;
+  onSubmit: () => void;
 }
 
 const ApiKeyEntry: React.FC<ApiKeyEntryProps> = ({ onSubmit }) => {
@@ -13,7 +14,8 @@ const ApiKeyEntry: React.FC<ApiKeyEntryProps> = ({ onSubmit }) => {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    onSubmit(apiKey);
+    APIKeyStorer(apiKey);
+    onSubmit();
   };
 
   return (

@@ -11,8 +11,8 @@ export class StepManager {
   private autoRetryEnabled: boolean;
   private name: string;
 
-  constructor(apiKey: string, stepSpecs: any[]) {
-    this.steps = stepSpecs.map((spec) => new Step(spec, apiKey));
+  constructor(stepSpecs: any[]) {
+    this.steps = stepSpecs.map((spec) => new Step(spec));
     this.autoRetryEnabled = false;
     this.name = '';
   }

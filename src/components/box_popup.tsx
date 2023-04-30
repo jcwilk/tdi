@@ -7,9 +7,15 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
 import CloseIcon from '@mui/icons-material/Close';
 import Slide from '@mui/material/Slide';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import EditNoteIcon from '@mui/icons-material/EditNote';
+import MicIcon from '@mui/icons-material/Mic';
 import { TransitionProps } from '@mui/material/transitions';
+import { getTranscription, getEdit } from "../openai_api";
 
 interface BoxPopupProps {
   openEditor: string;
@@ -42,6 +48,8 @@ export default function BoxPopup({
   fieldName
 }: BoxPopupProps) {
   const [textValue, setTextValue] = useState(text);
+  const [onStopRecordingEdit, setOnStopRecordingEdit] = useState<Function | null>(null);
+  const [onStopRecordingRedo, setOnStopRecordingRedo] = useState<Function | null>(null);
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTextValue(e.target.value);
   };
@@ -49,6 +57,32 @@ export default function BoxPopup({
   useEffect(() => {
     setTextValue(text);
   }, [text]);
+
+  // Call this function when the user starts recording
+  async function startRecordingRedo() {
+    const { getTranscript } = await getTranscription();
+
+    setOnStopRecordingRedo(() => {
+      return async () => {
+        const transcript = await getTranscript();
+        setTextValue(transcript || "");
+        setOnStopRecordingRedo(null);
+      }
+    });
+  }
+
+  // Call this function when the user starts recording
+  async function startRecordingEdit() {
+    const { finishEdit } = await getEdit(textValue);
+
+    setOnStopRecordingEdit(() => {
+      return async () => {
+        const transcript = await finishEdit();
+        setTextValue(transcript || "");
+        setOnStopRecordingEdit(null);
+      }
+    });
+  }
 
   return (
     <div>
@@ -79,18 +113,46 @@ export default function BoxPopup({
           </Toolbar>
         </AppBar>
         <Box sx={{ p: 2 }}>
-          <TextField
-            multiline
-            fullWidth
-            rows={10}
-            value={textValue}
-            variant="outlined"
-            onChange={handleChange}
-            label={fieldName}
-            InputLabelProps={{
-              shrink: true,
-            }}
-          />
+          <Stack spacing={1}>
+            <Stack direction="row" spacing={1}>
+              <Chip
+                icon={
+                  <MicIcon color={onStopRecordingEdit ? "success" : "disabled"}/>
+                }
+                label={
+                  <IconButton onClick={()=>{
+                    onStopRecordingEdit ? onStopRecordingEdit() : startRecordingEdit();
+                  }}>
+                    <EditNoteIcon />
+                  </IconButton>
+                }
+              />
+              <Chip
+                icon={
+                  <MicIcon color={onStopRecordingRedo ? "success" : "disabled"}/>
+                }
+                label={
+                  <IconButton onClick={()=>{
+                    onStopRecordingRedo ? onStopRecordingRedo() : startRecordingRedo();
+                  }}>
+                    <RestartAltIcon />
+                  </IconButton>
+                }
+              />
+            </Stack>
+            <TextField
+              multiline
+              fullWidth
+              rows={10}
+              value={textValue}
+              variant="outlined"
+              onChange={handleChange}
+              label={fieldName}
+              InputLabelProps={{
+                shrink: true,
+              }}
+            />
+          </Stack>
         </Box>
       </Dialog>
     </div>

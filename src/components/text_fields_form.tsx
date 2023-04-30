@@ -6,17 +6,18 @@ import Button from '@mui/material/Button';
 import ApiKeyEntry from './api_key_entry';
 import { BasicTDISteps } from '../scenarios';
 import FolderIcon from '@mui/icons-material/Folder';
+import { APIKeyFetcher } from '../api_key_storage';
 
 export default function TextFieldsForm() {
   const [stepManager, setStepManager] = useState<StepManager | null>(null);
-  const [apiKey, setApiKey] = useState<string | null>(localStorage.getItem('apiKey'));
+  const [apiKey, setApiKey] = useState<boolean>(!!APIKeyFetcher());
   const [showSavedFunctionsDialog, setShowSavedFunctionsDialog] = useState<boolean>(false);
   const [savedFunctionsUpdateTrigger, setSavedFunctionsUpdateTrigger] = useState<number>(0);
 
   const loadStepManager = () => {
     if (apiKey === null) return;
 
-    const stepManager = new StepManager(apiKey, BasicTDISteps);
+    const stepManager = new StepManager(BasicTDISteps);
     setStepManager(stepManager);
   };
 
@@ -31,16 +32,15 @@ export default function TextFieldsForm() {
     setShowSavedFunctionsDialog(false);
   };
 
-  const handleApiKeySubmit = (key: string) => {
-    localStorage.setItem('apiKey', key);
-    setApiKey(key);
+  const handleApiKeySubmit = () => {
+    setApiKey(true);
   };
 
   const handleOpenSavedFunctionsDialog = () => {
     setShowSavedFunctionsDialog(true);
   };
 
-  if (stepManager === null || apiKey === null) {
+  if (stepManager === null || !apiKey) {
     return <ApiKeyEntry onSubmit={handleApiKeySubmit} />;
   }
 

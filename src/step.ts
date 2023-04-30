@@ -28,12 +28,10 @@ export class Step {
   private completionResults: { [key: string]: any };
   private testResults: { [key: string]: any };
   private temperature: number;
-  private apiKey: string;
   private onStepCompleted: (() => void) | null = null;
 
-  constructor(spec: any, apiKey: string) {
+  constructor(spec: any) {
     this.spec = spec;
-    this.apiKey = apiKey;
     this.inputData = emptyStringValues(spec.input);
     this.dependentData = {};
     this.completionResults = {};
@@ -157,7 +155,7 @@ export class Step {
     for (const key in prompts) {
       const prompt = this.interpolatePrompt(prompts[key], mergedData);
 
-      const output = await getCompletion(this.apiKey, prompt, this.temperature);
+      const output = await getCompletion(prompt, this.temperature);
       this.completionResults[key] = output;
     }
 
