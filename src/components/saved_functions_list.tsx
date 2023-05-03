@@ -53,10 +53,12 @@ export default function SavedFunctionsList({ stepManager, updateTrigger, onClose
     onClose();
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (event: React.MouseEvent, id: number) => {
+    event.stopPropagation();
     await indexedDBManager.deleteFunctionDataById(id);
     fetchSavedFunctions();
   };
+
 
   const handleSave = async () => {
     const functionData = stepManager.getSaveData();
@@ -111,7 +113,7 @@ export default function SavedFunctionsList({ stepManager, updateTrigger, onClose
                   primary={`${func.name} (${func.stepData.length} steps)`}
                 />
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button size="small" onClick={() => handleDelete(func.id)}>
+                  <Button size="small" onClick={(event) => handleDelete(event, func.id)}>
                     <DeleteForeverIcon />
                   </Button>
                 </Box>

@@ -1,22 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
-import Button from '@mui/material/Button';
-import Box from '@mui/material/Box';
+import React, { useState, useEffect } from 'react';
+import {
+  AppBar,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Grid,
+  Slider,
+  TextField,
+  Toolbar,
+  Typography,
+  IconButton,
+} from '@mui/material';
 import { StepManager } from '../step_manager';
 import { Step } from '../step';
-import TextField from '@mui/material/TextField';
-import Slider from '@mui/material/Slider';
-import Typography from '@mui/material/Typography';
-import CircularProgress from '@mui/material/CircularProgress';
-import AppBar from '@mui/material/AppBar';
-import Toolbar from '@mui/material/Toolbar';
-import Chip from '@mui/material/Chip';
-import Grid from '@mui/material/Grid';
 import BoxPopup from './box_popup';
 import styles from './css/step_editors.module.css';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import ReplayCircleFilledIcon from '@mui/icons-material/ReplayCircleFilled';
 import PlayDisabledIcon from '@mui/icons-material/PlayDisabled';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import EditIcon from '@mui/icons-material/Edit';
+import StepSpecEditor from './step_spec_editor'
 
 interface StepEditorsProps {
   stepManager: StepManager;
@@ -43,7 +48,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
 
   const handleStep = async (step: Step, index: number) => {
     setIsLoading(index);
-    const success = await step.runCompletion();
+    await step.runCompletion();
     setIsLoading(-1);
   };
 
@@ -125,7 +130,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
     if (isLoading == index)
       return (
         <Button color="inherit">
-          <CircularProgress />
+          <CircularProgress size={25} />
         </Button>
       )
     else if (!step.areDependentsSatisfied())
@@ -162,6 +167,10 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
     </>
   );
 
+  const handleEditStep = (index: number): void => {
+    setOpenEditor(`step-editor-${index}`)
+  }
+
   const renderStepOutput = (): JSX.Element[] => {
     const outputElements: JSX.Element[] = [];
 
@@ -173,8 +182,16 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
               <Toolbar>
                 <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                   {step.getDescription()}
+
                 </Typography>
-                {renderButton(step, index)}
+                <StepSpecEditor
+                  step={step}
+                  open={`step-editor-${index}` === openEditor}
+                  onClose={() => setOpenEditor('')}
+                />
+                <IconButton onClick={() => handleEditStep(index)}>
+                  <EditIcon />
+                </IconButton>
               </Toolbar>
             </AppBar>
             <Box component="main" className={styles.stepOutputContentsBox}>
@@ -186,6 +203,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
                 {step.areDependentsSatisfied() && (
                   <>
                     {renderTemperatureSlider(index)}
+                    {renderButton(step, index)}
                   </>
                 )}
               </Box>

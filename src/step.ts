@@ -1,5 +1,7 @@
 import { getCompletion } from './openai_api';
 import TesterWorker from "./tester.worker";
+import { TDIStep } from "./scenarios"
+import EventEmitter from 'events';
 
 type TestResultsCallback = (results: {
   passedCount: number;
@@ -10,7 +12,8 @@ type TestResultsCallback = (results: {
 export type StepSaveData = {
   dependentData: {[key: string]: string},
   outputData: {[key: string]: string},
-  temperature: number
+  temperature: number,
+  spec: TDIStep[]
 }
 
 const emptyStringValues = (obj: { [key: string]: string }) => {
@@ -21,16 +24,16 @@ const emptyStringValues = (obj: { [key: string]: string }) => {
   return result;
 };
 
-export class Step {
+export class Step extends EventEmitter {
   private spec: any;
   private inputData: { [key: string]: any };
   private dependentData: { [key: string]: any };
   private completionResults: { [key: string]: any };
   private testResults: { [key: string]: any };
   private temperature: number;
-  private onStepCompleted: (() => void) | null = null;
 
   constructor(spec: any) {
+    super();
     this.spec = spec;
     this.inputData = emptyStringValues(spec.input);
     this.dependentData = {};
@@ -39,8 +42,27 @@ export class Step {
     this.temperature = 1;
   }
 
-  public setOnStepCompleted(callback: () => void): void {
-    this.onStepCompleted = callback;
+  public subscribe(callback: () => void): void {
+    this.on('update', callback);
+  }
+
+  public unsubscribe(callback: () => void): void {
+    this.removeListener('update', callback);
+  }
+
+  public destroy(): void {
+    this.removeAllListeners();
+
+    // Perform any other necessary cleanup actions
+  }
+
+  public getSpec(): TDIStep {
+    return this.spec;
+  }
+
+  public setSpec(spec: TDIStep): void {
+    this.spec = spec;
+    this.emit('update');
   }
 
   public getDescription(): string {
@@ -56,16 +78,19 @@ export class Step {
       dependentData: { ...this.dependentData },
       outputData: this.getOutputData(),
       temperature: this.temperature,
+      spec: this.spec
     };
   }
 
   public setSaveData(data: StepSaveData): void {
+    this.spec = data.spec
     this.dependentData = { ...data.dependentData };
     for (const key in data.outputData) {
       const value = data.outputData[key];
       this.setOutputData(key, value);
     }
     this.temperature = data.temperature;
+    this.emit('update');
   }
 
   public getInputFields(): { [key: string]: string } {
@@ -91,6 +116,7 @@ export class Step {
     else if (this.spec.completion && this.spec.completion.hasOwnProperty(key)) {
       this.completionResults[key] = value;
     }
+    //this.emit('update');
   }
 
   public setDependentData(dependentData: { [key: string]: any }): void {
@@ -100,6 +126,7 @@ export class Step {
         this.dependentData[key] = dependentData[key];
       }
     }
+    //this.emit('update');
   }
 
   private mergeInputAndCompletionResults(): { [key: string]: any } {
@@ -112,6 +139,7 @@ export class Step {
 
   public setTemperature(temperature: number): void {
     this.temperature = temperature
+    this.emit('update');
   }
 
   public getOutputData(): { [key: string]: any } {
@@ -140,10 +168,7 @@ export class Step {
   public async runCompletion(): Promise<boolean> {
     this.completionResults = {}
     this.testResults = {}
-
-    if (this.onStepCompleted) {
-      this.onStepCompleted();
-    }
+    this.emit('update');
 
     if (!this.areDependentsSatisfied()) {
       return false;
@@ -157,6 +182,7 @@ export class Step {
 
       const output = await getCompletion(prompt, this.temperature);
       this.completionResults[key] = output;
+      this.emit('update');
     }
 
     const finalData = { ...mergedData, ...this.completionResults };
@@ -174,11 +200,9 @@ export class Step {
       if(testResult) output += "✅"
 
       this.testResults[key] = output;
+      this.emit('update');
     }
 
-    if (this.onStepCompleted) {
-      this.onStepCompleted();
-    }
     return true;
   }
 

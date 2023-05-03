@@ -40,7 +40,7 @@ export class StepManager {
     };
 
     for (const step of this.steps) {
-      step.setOnStepCompleted(wrappedCallback);
+      step.subscribe(wrappedCallback);
     }
   }
 
@@ -72,8 +72,13 @@ export class StepManager {
   }
 
   public setSaveData(data: { stepData: StepSaveData[], name: string }): void {
+    this.steps.forEach(step => step.destroy());
+    this.steps = [];
+
     for (let i = 0; i < data.stepData.length; i++) {
-      this.steps[i].setSaveData(data.stepData[i]);
+      const step = new Step([]);
+      step.setSaveData(data.stepData[i]);
+      this.steps.push(step);
     }
 
     this.setName(data.name);

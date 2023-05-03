@@ -1,4 +1,21 @@
-export const BasicTDISteps = [
+export type TDIStep = {
+  description: string;
+  depends?: string[];
+  input?: {
+    [key: string]: string;
+  };
+  completion?: {
+    [key: string]: string;
+  };
+  test?: {
+    [key: string]: {
+      test: string;
+      code: string;
+    };
+  };
+};
+
+export const BasicTDISteps: TDIStep[] = [
   {
     description: "Generate Examples",
     input: {
@@ -72,4 +89,4 @@ Sure! Here's the global javascript function:
       }
     }
   }
-]
+];

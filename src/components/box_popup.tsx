@@ -1,41 +1,27 @@
-import React, { useState, forwardRef, useEffect } from "react";
-import Dialog from '@mui/material/Dialog';
-import AppBar from '@mui/material/AppBar';
-import Toolbar from '@mui/material/Toolbar';
-import IconButton from '@mui/material/IconButton';
-import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Stack from '@mui/material/Stack';
-import CloseIcon from '@mui/icons-material/Close';
-import Slide from '@mui/material/Slide';
+import React, { useState, useEffect } from "react";
+import {
+  IconButton,
+  TextField,
+  Box,
+  Chip,
+  Stack,
+} from '@mui/material';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import MicIcon from '@mui/icons-material/Mic';
-import { TransitionProps } from '@mui/material/transitions';
 import { getTranscription, getEdit } from "../openai_api";
+import FullScreenPopup from './full_screen_popup';
 
 interface BoxPopupProps {
   openEditor: string;
   onClose: (text: string) => void;
-  onSubmit: (text: string) => void;
-  onSubmitText: string | null;
+  onSubmitText?: string;
+  onSubmit?: () => void;
   description: string;
   text: string;
   fieldId: string;
   fieldName: string;
 }
-
-const Transition = forwardRef(function Transition(
-  props: TransitionProps & {
-    children: React.ReactElement;
-  },
-  ref: React.Ref<unknown>,
-) {
-  return <Slide direction="up" ref={ref} {...props} />;
-});
 
 export default function BoxPopup({
   fieldId,
@@ -85,76 +71,55 @@ export default function BoxPopup({
   }
 
   return (
-    <div>
-      <Dialog
-        fullScreen
-        open={fieldId === openEditor}
-        onClose={() => onClose(textValue)}
-        TransitionComponent={Transition}
-      >
-        <AppBar sx={{ position: 'relative' }}>
-          <Toolbar>
-            <IconButton
-              edge="start"
-              color="inherit"
-              onClick={() => onClose(textValue)}
-              aria-label="close"
-            >
-              <CloseIcon />
-            </IconButton>
-            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              { description }
-            </Typography>
-            { onSubmitText &&
-              <Button autoFocus color="inherit" onClick={() => onSubmit(textValue)}>
-                {onSubmitText}
-              </Button>
-            }
-          </Toolbar>
-        </AppBar>
-        <Box sx={{ p: 2 }}>
-          <Stack spacing={1}>
-            <Stack direction="row" spacing={1}>
-              <Chip
-                icon={
-                  <MicIcon color={onStopRecordingEdit ? "success" : "disabled"}/>
-                }
-                label={
-                  <IconButton onClick={()=>{
-                    onStopRecordingEdit ? onStopRecordingEdit() : startRecordingEdit();
-                  }}>
-                    <EditNoteIcon />
-                  </IconButton>
-                }
-              />
-              <Chip
-                icon={
-                  <MicIcon color={onStopRecordingRedo ? "success" : "disabled"}/>
-                }
-                label={
-                  <IconButton onClick={()=>{
-                    onStopRecordingRedo ? onStopRecordingRedo() : startRecordingRedo();
-                  }}>
-                    <RestartAltIcon />
-                  </IconButton>
-                }
-              />
-            </Stack>
-            <TextField
-              multiline
-              fullWidth
-              rows={10}
-              value={textValue}
-              variant="outlined"
-              onChange={handleChange}
-              label={fieldName}
-              InputLabelProps={{
-                shrink: true,
-              }}
+    <FullScreenPopup
+      open={fieldId === openEditor}
+      onClose={() => onClose(textValue)}
+      title={description}
+      submitText={onSubmitText}
+      onSubmit={() => onSubmit(textValue)}
+    >
+      <Box sx={{ p: 2 }}>
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={1}>
+            <Chip
+              icon={
+                <MicIcon color={onStopRecordingEdit ? "success" : "disabled"}/>
+              }
+              label={
+                <IconButton onClick={()=>{
+                  onStopRecordingEdit ? onStopRecordingEdit() : startRecordingEdit();
+                }}>
+                  <EditNoteIcon />
+                </IconButton>
+              }
+            />
+            <Chip
+              icon={
+                <MicIcon color={onStopRecordingRedo ? "success" : "disabled"}/>
+              }
+              label={
+                <IconButton onClick={()=>{
+                  onStopRecordingRedo ? onStopRecordingRedo() : startRecordingRedo();
+                }}>
+                  <RestartAltIcon />
+                </IconButton>
+              }
             />
           </Stack>
-        </Box>
-      </Dialog>
-    </div>
+          <TextField
+            multiline
+            fullWidth
+            rows={10}
+            value={textValue}
+            variant="outlined"
+            onChange={handleChange}
+            label={fieldName}
+            InputLabelProps={{
+              shrink: true,
+            }}
+          />
+        </Stack>
+      </Box>
+    </FullScreenPopup>
   );
 }
