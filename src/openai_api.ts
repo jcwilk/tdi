@@ -78,7 +78,6 @@ export async function getTranscription(): Promise<{ getTranscript: () => Promise
   openai.configuration.formDataCtor = CustomFormData;
 
   async function getTranscript(): Promise<string | null> {
-    console.log("test")
     try {
       stopRecording();
       const audioBlob = await audioBlobPromise;

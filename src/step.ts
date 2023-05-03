@@ -2,6 +2,7 @@ import { getCompletion } from './openai_api';
 import TesterWorker from "./tester.worker";
 import { TDIStep } from "./scenarios"
 import EventEmitter from 'events';
+import { v4 as uuidv4 } from 'uuid';
 
 type TestResultsCallback = (results: {
   passedCount: number;
@@ -31,9 +32,12 @@ export class Step extends EventEmitter {
   private completionResults: { [key: string]: any };
   private testResults: { [key: string]: any };
   private temperature: number;
+  public uuid: string;
 
   constructor(spec: any) {
     super();
+
+    this.uuid = uuidv4();
     this.spec = spec;
     this.inputData = emptyStringValues(spec.input);
     this.dependentData = {};
