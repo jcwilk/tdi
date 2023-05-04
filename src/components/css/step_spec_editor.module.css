@@ -1,0 +1,14 @@
+.textDisplayBox {
+  font-family: 'Roboto Mono', monospace, sans-serif;
+  border: 1px solid rgb(163, 163, 163);
+  border-radius: 4px;
+  min-height: 50px;
+  min-width: 200px;
+  padding: 8px;
+  white-space: pre-wrap;
+  overflow: auto;
+  word-wrap: break-word;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.7);
+  margin-top: 8px;
+}

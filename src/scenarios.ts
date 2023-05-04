@@ -1,23 +1,36 @@
-export type TDIStep = {
-  description: string;
-  depends?: string[];
-  input?: {
-    [key: string]: string;
-  };
-  completion?: {
-    [key: string]: string;
-  };
-  test?: {
-    [key: string]: {
-      test: string;
-      code: string;
-    };
+export type TDITestStep = {
+  [key: string]: {
+    test: string;
+    code: string;
   };
 };
+
+export type TDIStep = {
+  description: string;
+  depends: string[];
+  input: {
+    [key: string]: string;
+  };
+  completion: {
+    [key: string]: string;
+  };
+  test: TDITestStep;
+};
+
+export const generateEmptyStepSpec = () => {
+  return {
+    description: "",
+    depends: [],
+    input: {},
+    completion: {},
+    test: {},
+  };
+}
 
 export const BasicTDISteps: TDIStep[] = [
   {
     description: "Generate Examples",
+    depends: [],
     input: {
       problem_description: ""
     },
@@ -40,11 +53,13 @@ characters or punctuation and should omit the ending punctuation.
 
 Sure! Here's the title:
 `
-    }
+    },
+    test: {}
   },
   {
     description: "Generate Jasmine Tests",
     depends: ["problem_description", "examples"],
+    input: {},
     completion: {
       jasmine: `Please produce or describe jasmine test cases which could be used to verify the problem was solved for the following problem:
 START problem definition
@@ -58,11 +73,13 @@ Please write test cases in Jasmine to confirm a hypothetical solution to this pr
 
 Sure! Here are the Jasmine test cases:
 `
-    }
+    },
+    test: {}
   },
   {
     description: "Generate Function",
     depends: ["problem_description", "jasmine"],
+    input: {},
     completion: {
       function: `Given the following problem:
 START problem definition
@@ -77,11 +94,14 @@ It should also pass all of the Jasmine test cases.
 
 Sure! Here's the global javascript function:
 `
-    }
+    },
+    test: {}
   },
   {
     description: "Test Function",
     depends: ["jasmine", "function"],
+    input: {},
+    completion: {},
     test: {
       success: {
         test: "jasmine",

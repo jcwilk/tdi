@@ -1,15 +1,16 @@
-import { TDIStep } from "../scenarios"
-import { Step } from "../step"
-import React, { useState, useEffect } from 'react';
+import { TDIStep } from "../scenarios";
+import { Step } from "../step";
+import React, { useState, useEffect } from "react";
 import {
   Box,
-  Dialog,
-  DialogTitle,
-  DialogContent,
   Typography,
-} from '@mui/material';
-import BoxPopup from './box_popup'
-import FullScreenPopup from './full_screen_popup';
+  TextField,
+  Stack,
+} from "@mui/material";
+import FullScreenPopup from "./full_screen_popup";
+import KeyValueEditor from "./key_value_editor";
+import TestsEditor from "./tests_editor";
+import DependsEditor from "./depends_editor";
 
 type TDIStepEditorProps = {
   step: Step;
@@ -17,8 +18,11 @@ type TDIStepEditorProps = {
   onClose: () => void;
 };
 
-const TDIStepEditor: React.FC<TDIStepEditorProps> = ({ step, open, onClose }) => {
-  const [openEditor, setOpenEditor] = useState('');
+const TDIStepEditor: React.FC<TDIStepEditorProps> = ({
+  step,
+  open,
+  onClose,
+}) => {
   const [spec, setSpec] = useState<TDIStep>(step.getSpec());
 
   useEffect(() => {
@@ -33,42 +37,54 @@ const TDIStepEditor: React.FC<TDIStepEditorProps> = ({ step, open, onClose }) =>
     };
   }, [step]);
 
-  const handleClickOpen = (fieldId: string) => {
-    setOpenEditor(fieldId);
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newSpec = { ...spec, description: e.target.value };
+    setSpec(newSpec);
+    step.setSpec(newSpec);
   };
-
-  const handleClose = (key: string, text: string) => {
-    spec.description = text;
-    step.setSpec(spec);
-    setOpenEditor('');
-  };
-
-  const properties = [
-    { title: 'Input', content: spec.input },
-    { title: 'Completion', content: spec.completion },
-    { title: 'Test', content: spec.test },
-  ];
 
   return (
-    <FullScreenPopup
-      open={open}
-      onClose={() => onClose()}
-      title={`Edit Step: ${spec.description}`}
-    >
+    <FullScreenPopup title="TDI Step Editor" open={open} onClose={onClose}>
       <Box sx={{ p: 2 }}>
-        <Typography>Description:</Typography>
-        <Box onClick={() => handleClickOpen('description')}>
-          {spec.description}
-        </Box>
-        <BoxPopup
-          fieldId="description"
-          openEditor={openEditor}
-          onClose={(text: string) => handleClose('description', text)}
-          description={spec.description}
-          text={spec.description}
-          fieldName="description"
-        />
-
+        <Stack spacing={1}>
+          <TextField
+            fullWidth
+            multiline
+            label="Description"
+            value={spec.description}
+            onChange={handleDescriptionChange}
+          />
+          <DependsEditor
+            depends={spec.depends}
+            onDependsChange={(newDepends) => {
+              const newSpec = { ...spec, depends: newDepends };
+              step.setSpec(newSpec);
+            }}
+          />
+          <KeyValueEditor
+            title="Input"
+            keyValuePairs={spec.input}
+            onKeyValuePairsChange={(newInput) => {
+              const newSpec = { ...spec, input: newInput };
+              step.setSpec(newSpec);
+            }}
+          />
+          <KeyValueEditor
+            title="Completion"
+            keyValuePairs={spec.completion}
+            onKeyValuePairsChange={(newCompletion) => {
+              const newSpec = { ...spec, completion: newCompletion };
+              step.setSpec(newSpec);
+            }}
+          />
+          <TestsEditor
+            tests={spec.test}
+            onTestsChange={(newTests) => {
+              const newSpec = { ...spec, test: newTests };
+              step.setSpec(newSpec);
+            }}
+          />
+        </Stack>
       </Box>
     </FullScreenPopup>
   );
@@ -76,21 +92,4 @@ const TDIStepEditor: React.FC<TDIStepEditorProps> = ({ step, open, onClose }) =>
 
 export default TDIStepEditor;
 
-// {properties.map(({ title, content }) => (
-//   Object.entries(content || {}).map(([key, value]) => (
-//     <div key={`${title}-${key}`}>
-//       <Typography>{`${title} - ${key}`}</Typography>
-//       <Box onClick={() => handleClickOpen(`${title}-${key}`)}>
-//         {value}
-//       </Box>
-//       <BoxPopup
-//         fieldId={`${title}-${key}`}
-//         openEditor={openEditor}
-//         onClose={(text: string) => handleClose(step, key, text)}
-//         description={step.description}
-//         text={value}
-//         fieldName={key}
-//       />
-//     </div>
-//   ))
-// ))}
+

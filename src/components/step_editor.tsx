@@ -19,16 +19,30 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import StepSpecEditor from './step_spec_editor'
+import { ConnectableElement, useDrag, useDrop } from 'react-dnd';
 
 interface StepEditorProps {
   step: Step;
-  index: number;
   onDelete: any;
+  moveItem: (dragId: string, dropId: string) => void;
 }
 
-export default function StepEditor({ step, onDelete }: StepEditorProps) {
+export default function StepEditor({ step, onDelete, moveItem }: StepEditorProps) {
   const [openEditor, setOpenEditor] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const [, drag] = useDrag(() => ({
+    type: 'STEP_EDITOR',
+    item: { id: step.uuid },
+    collect: (monitor) => ({
+      isDragging: !!monitor.isDragging(),
+    }),
+  }));
+
+  const [, drop] = useDrop(() => ({
+    accept: 'STEP_EDITOR',
+    drop: (item) => moveItem(item.id, step.uuid),
+  }));
 
   const handleTemperatureChange = (event: Event, newValue: number | number[]) => {
     step.setTemperature(newValue as number);
@@ -169,7 +183,7 @@ export default function StepEditor({ step, onDelete }: StepEditorProps) {
   )
 
   return (
-    <Box className={styles.stepBox}>
+    <Box className={styles.stepBox} ref={(node: ConnectableElement) => drag(drop(node))}>
       <AppBar position="static" color="secondary">
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>

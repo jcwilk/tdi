@@ -14,17 +14,35 @@ export class StepManager extends EventEmitter {
 
   constructor(stepSpecs: any[]) {
     super();
-    this.steps = stepSpecs.map((spec) => new Step(spec));
+    this.steps = [];
+    for (let i = 0; i < stepSpecs.length; i++) {
+      const step = this.addStep();
+      step.setSpec(stepSpecs[i]);
+    }
     this.autoRetryEnabled = false;
     this.name = '';
   }
 
   public subscribe(callback: () => void): void {
-    this.on('updateStepsSet', callback);
+    this.on('update', callback);
   }
 
   public unsubscribe(callback: () => void): void {
-    this.removeListener('updateStepsSet', callback);
+    this.removeListener('update', callback);
+  }
+
+  public moveStep(dragId: string, dropId: string): void {
+    const dragIndex = this.steps.findIndex((item) => item.uuid === dragId);
+    const dropIndex = this.steps.findIndex((item) => item.uuid === dropId);
+
+    if (dragIndex < 0 || dropIndex < 0) {
+      console.error(`Invalid indices: dragIndex=${dragIndex}, dropIndex=${dropIndex}. Cannot move step.`);
+      return;
+    }
+
+    const [draggedStep] = this.steps.splice(dragIndex, 1);
+    this.steps.splice(dropIndex, 0, draggedStep);
+    this.emit('update');
   }
 
   public getSteps(): Step[] {
@@ -33,6 +51,7 @@ export class StepManager extends EventEmitter {
 
   public setName(name: string): void {
     this.name = name;
+    this.emit('update');
   }
 
   public getName(): string {
@@ -55,7 +74,7 @@ export class StepManager extends EventEmitter {
   }
 
   public addStep(): Step {
-    const step = new Step([]);
+    const step = new Step();
     this.steps.push(step);
 
     step.subscribe(() => {
@@ -76,7 +95,7 @@ export class StepManager extends EventEmitter {
       }
     });
 
-    this.emit('updateStepsSet');
+    this.emit('update');
     return step;
   }
 
@@ -96,7 +115,7 @@ export class StepManager extends EventEmitter {
     if (index >= 0 && index < this.steps.length) {
       this.steps[index].destroy();
       this.steps.splice(index, 1);
-      this.emit('updateStepsSet');
+      this.emit('update');
     } else {
       console.error(`Invalid index: ${index}. Cannot delete step.`);
     }

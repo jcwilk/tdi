@@ -1,6 +1,6 @@
 import { getCompletion } from './openai_api';
 import TesterWorker from "./tester.worker";
-import { TDIStep } from "./scenarios"
+import { TDIStep, generateEmptyStepSpec } from "./scenarios"
 import EventEmitter from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -34,12 +34,12 @@ export class Step extends EventEmitter {
   private temperature: number;
   public uuid: string;
 
-  constructor(spec: any) {
+  constructor() {
     super();
 
     this.uuid = uuidv4();
-    this.spec = spec;
-    this.inputData = emptyStringValues(spec.input);
+    this.spec = generateEmptyStepSpec();
+    this.inputData = emptyStringValues(this.spec.input);
     this.dependentData = {};
     this.completionResults = {};
     this.testResults = {};
@@ -66,6 +66,19 @@ export class Step extends EventEmitter {
 
   public setSpec(spec: TDIStep): void {
     this.spec = spec;
+    this.clearOutputData();
+
+    for (let property in this.spec.input) {
+      this.inputData[property] = this.spec.input[property];
+    }
+
+    this.emit('update');
+  }
+
+  public clearOutputData(): void {
+    this.inputData = {};
+    this.testResults = {};
+    this.completionResults = {};
     this.emit('update');
   }
 
