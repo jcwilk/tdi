@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AppBar,
   Box,
@@ -30,6 +30,25 @@ interface StepEditorProps {
 export default function StepEditor({ step, onDelete, moveItem }: StepEditorProps) {
   const [openEditor, setOpenEditor] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [temperature, setTemperature] = useState(step.getTemperature())
+  const [isComplete, setIsComplete] = useState(step.isStepCompleted())
+  const [dependentsSatisfied, setDependentsSatisfied] = useState(step.areDependentsSatisfied())
+  const [description, setDescription] = useState(step.getDescription())
+
+  useEffect(() => {
+    const callback = () => {
+      setTemperature(step.getTemperature())
+      setIsComplete(step.isStepCompleted())
+      setDependentsSatisfied(step.areDependentsSatisfied())
+      setDescription(step.getDescription())
+    };
+
+    step.subscribe(callback);
+
+    return () => {
+      step.unsubscribe(callback);
+    }
+  }, [step]);
 
   const [, drag] = useDrag(() => ({
     type: 'STEP_EDITOR',
@@ -124,13 +143,13 @@ export default function StepEditor({ step, onDelete, moveItem }: StepEditorProps
           <CircularProgress size={24} />
         </Button>
       )
-    else if (!step.areDependentsSatisfied())
+    else if (!dependentsSatisfied)
       return (
         <Button color="inherit" disabled>
           <PlayDisabledIcon />
         </Button>
       )
-    else if (step.isStepCompleted())
+    else if (isComplete)
       return (
         <Button color="inherit" onClick={handleStep}>
           <ReplayCircleFilledIcon />
@@ -147,7 +166,7 @@ export default function StepEditor({ step, onDelete, moveItem }: StepEditorProps
   const renderTemperatureSlider = () => (
     <>
       <Slider
-        value={step.getTemperature()}
+        value={temperature}
         step={0.1}
         marks
         min={0.1}
@@ -187,7 +206,7 @@ export default function StepEditor({ step, onDelete, moveItem }: StepEditorProps
       <AppBar position="static" color="secondary">
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            {step.getDescription()}
+            {description}
           </Typography>
           {renderEdit()}
           {renderDelete()}
@@ -199,7 +218,7 @@ export default function StepEditor({ step, onDelete, moveItem }: StepEditorProps
         </>
 
         <Box className={styles.stepControls}>
-          {step.areDependentsSatisfied() && (
+          {dependentsSatisfied && (
             <>
               {renderTemperatureSlider()}
               {renderButton()}
