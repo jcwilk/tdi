@@ -25,7 +25,7 @@ module.exports = {
         },
       },
       {
-        test: /\.worker\.(js|ts)$/,
+        test: /\.worker\.(js)$/,
         use: { loader: "worker-loader" },
       },
       {

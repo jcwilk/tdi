@@ -1,5 +1,5 @@
 import { Step, StepSaveData } from './step';
-import EventEmitter from 'events';
+import { EventEmitter } from 'events';
 
 export type TestResultsCallback = (results: {
   passedCount: number;
@@ -11,10 +11,12 @@ export class StepManager extends EventEmitter {
   private steps: Step[];
   private autoRetryEnabled: boolean;
   private name: string;
+  private dependentData: { [key: string]: string };
 
   constructor(stepSpecs: any[]) {
     super();
     this.steps = [];
+    this.dependentData = {};
     for (let i = 0; i < stepSpecs.length; i++) {
       const step = this.addStep();
       step.setSpec(stepSpecs[i]);
@@ -79,7 +81,7 @@ export class StepManager extends EventEmitter {
 
     step.subscribe(() => {
       // Aggregate output data from all steps
-      const aggregatedOutputData: { [key: string]: any } = {};
+      const aggregatedOutputData: { [key: string]: string } = {};
       for (const step of this.steps) {
         const outputData = step.getOutputData();
         for (const key in outputData) {
@@ -89,14 +91,18 @@ export class StepManager extends EventEmitter {
 
       if (!this.getName() && aggregatedOutputData.name) this.setName(aggregatedOutputData.name);
 
-      // Feed the aggregated data into each step as dependent data
-      for (const step of this.steps) {
-        step.setDependentData(aggregatedOutputData);
-      }
+      // Store the aggregated data so we can feed it into each step later
+      this.dependentData = aggregatedOutputData;
+
+      this.emit('update');
     });
 
     this.emit('update');
     return step;
+  }
+
+  public getDependentData(): { [key: string]: string } {
+    return this.dependentData;
   }
 
   public setSaveData(data: { stepData: StepSaveData[], name: string }): void {

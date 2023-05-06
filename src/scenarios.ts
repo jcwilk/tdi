@@ -17,7 +17,7 @@ export type TDIStep = {
   test: TDITestStep;
 };
 
-export const generateEmptyStepSpec = () => {
+export const generateEmptyStepSpec = (): TDIStep => {
   return {
     description: "",
     depends: [],

@@ -5,7 +5,7 @@ const getClient = function(): OpenAIApi | null {
   const apiKey = APIKeyFetcher();
   if(!apiKey) return null;
 
-  const configuration = new Configuration({ apiKey });
+  const configuration = new Configuration({ apiKey, organization: "org-6d0xAcuSuOUHzq8s4TejB1TQ" });
   return new OpenAIApi(configuration);
 }
 
@@ -21,7 +21,7 @@ export async function getCompletion(prompt: string, temperature: number): Promis
       temperature
     });
 
-    return completion.data.choices[0].text;
+    return completion.data.choices[0].text || "";
   } catch (error) {
     console.error('Error getting completion:', error);
     return null;
@@ -67,21 +67,24 @@ class CustomFormData extends FormData {
   }
 }
 
-export async function getTranscription(): Promise<{ getTranscript: () => Promise<string | null> }> {
+export async function getTranscription(): Promise<{ getTranscript: () => Promise<string> }> {
   const openai = getClient();
-  if (!openai) return null;
+  if (!openai) return { getTranscript: async () => ""};
 
   const { audioBlobPromise, stopRecording } = await saveAudioInput();
 
   // Override the FormData class used by the createTranscription function
+  // @ts-ignore
   const originalFormDataCtor = openai.configuration.formDataCtor;
+  // @ts-ignore
   openai.configuration.formDataCtor = CustomFormData;
 
-  async function getTranscript(): Promise<string | null> {
+  async function getTranscript(): Promise<string> {
     try {
       stopRecording();
       const audioBlob = await audioBlobPromise;
       const audioFile = new File([audioBlob], "audio.wav", { type: "audio/wav" });
+      // @ts-ignore
       const transcription = await openai.createTranscription(audioFile, "whisper-1");
       const transcript = transcription.data.text;
       console.log("Transcript:", transcript);
@@ -91,6 +94,7 @@ export async function getTranscription(): Promise<{ getTranscript: () => Promise
       throw error;
     } finally {
       // Restore the original FormData class after the transcription is complete
+      // @ts-ignore
       openai.configuration.formDataCtor = originalFormDataCtor;
     }
   }
@@ -98,9 +102,9 @@ export async function getTranscription(): Promise<{ getTranscript: () => Promise
   return { getTranscript };
 }
 
-export async function getEdit(sourceText): Promise<{ finishEdit: () => Promise<string | null> }> {
+export async function getEdit(sourceText: string): Promise<{ finishEdit: () => Promise<string | null> }> {
   const openai = getClient();
-  if (!openai) return null;
+  if (!openai) return { finishEdit: async () => ""};
 
   const { getTranscript } = await getTranscription();
 

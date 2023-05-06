@@ -20,11 +20,13 @@ interface StepEditorsProps {
 export default function StepEditors({ stepManager }: StepEditorsProps) {
   const [steps, setSteps] = useState(stepManager.getSteps())
   const [nameFieldValue, setNameFieldValue] = useState(stepManager.getName())
+  const [dependentData, setDependentData] = useState(stepManager.getDependentData())
 
   useEffect(() => {
     const callback = () => {
       setSteps(stepManager.getSteps())
       setNameFieldValue(stepManager.getName())
+      setDependentData(stepManager.getDependentData())
     };
 
     stepManager.subscribe(callback);
@@ -81,6 +83,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
             step={step}
             onDelete={() => handleDelete(index)}
             moveItem={moveItem}
+            dependentData={dependentData}
           />
         </Grid>
       );

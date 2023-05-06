@@ -15,10 +15,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
       - name: Build
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
 
       - name: Deploy to branch
         uses: JamesIves/github-pages-deploy-action@v4.2.5

@@ -1,8 +1,13 @@
 import { getCompletion } from './openai_api';
-import TesterWorker from "./tester.worker";
 import { TDIStep, generateEmptyStepSpec } from "./scenarios"
-import EventEmitter from 'events';
+import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
+
+// can't for the life of me figure out how to get TS to STFU about
+// the following import. works great and I've lost too much time to
+// it, so something to figure out later (or never)
+// @ts-ignore
+import TesterWorker from "./tester.worker";
 
 type TestResultsCallback = (results: {
   passedCount: number;
@@ -10,15 +15,16 @@ type TestResultsCallback = (results: {
   totalCount: number;
 }) => void;
 
+type KeyValuePairs = {[key: string]: string}
+
 export type StepSaveData = {
-  dependentData: {[key: string]: string},
   outputData: {[key: string]: string},
   temperature: number,
   spec: TDIStep[]
 }
 
-const emptyStringValues = (obj: { [key: string]: string }) => {
-  const result = {};
+const emptyStringValues = (obj: KeyValuePairs) => {
+  const result: KeyValuePairs = {};
   for (let key in obj) {
     result[key] = '';
   }
@@ -28,7 +34,7 @@ const emptyStringValues = (obj: { [key: string]: string }) => {
 export class Step extends EventEmitter {
   private spec: any;
   private inputData: { [key: string]: any };
-  private dependentData: { [key: string]: any };
+  private dependentData: { [key: string]: string };
   private completionResults: { [key: string]: any };
   private testResults: { [key: string]: any };
   private temperature: number;
@@ -92,7 +98,6 @@ export class Step extends EventEmitter {
 
   public getSaveData(): StepSaveData {
     return {
-      dependentData: { ...this.dependentData },
       outputData: this.getOutputData(),
       temperature: this.temperature,
       spec: this.spec
@@ -101,7 +106,6 @@ export class Step extends EventEmitter {
 
   public setSaveData(data: StepSaveData): void {
     this.spec = data.spec
-    this.dependentData = { ...data.dependentData };
     for (const key in data.outputData) {
       const value = data.outputData[key];
       this.setOutputData(key, value);
@@ -133,7 +137,7 @@ export class Step extends EventEmitter {
     else if (this.spec.completion && this.spec.completion.hasOwnProperty(key)) {
       this.completionResults[key] = value;
     }
-    //this.emit('update');
+    this.emit('update');
   }
 
   public setDependentData(dependentData: { [key: string]: any }): void {
@@ -143,7 +147,7 @@ export class Step extends EventEmitter {
         this.dependentData[key] = dependentData[key];
       }
     }
-    //this.emit('update');
+    this.emit('update');
   }
 
   private mergeInputAndCompletionResults(): { [key: string]: any } {
@@ -182,16 +186,16 @@ export class Step extends EventEmitter {
     return "unknown"
   }
 
-  public async runCompletion(): Promise<boolean> {
+  public async runCompletion(dependentData: { [key: string]: string }): Promise<boolean> {
     this.completionResults = {}
     this.testResults = {}
     this.emit('update');
 
-    if (!this.areDependentsSatisfied()) {
+    if (!this.areDependentsSatisfied(dependentData)) {
       return false;
     }
 
-    const mergedData = { ...this.inputData, ...this.dependentData };
+    const mergedData = { ...this.inputData, ...dependentData };
     const prompts = this.getCompletionPrompts();
 
     for (const key in prompts) {
@@ -249,12 +253,12 @@ export class Step extends EventEmitter {
     return true
   }
 
-  public areDependentsSatisfied(): boolean {
+  public areDependentsSatisfied(dependentData: { [key: string]: string }): boolean {
     const depends = this.getDepends();
 
     for (let i = 0; i < depends.length; i++) {
       const depend = depends[i];
-      if (!this.dependentData.hasOwnProperty(depend) || this.dependentData[depend] === "") {
+      if (!dependentData.hasOwnProperty(depend) || dependentData[depend] === "") {
         return false;
       }
     }

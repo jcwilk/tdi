@@ -25,21 +25,25 @@ interface StepEditorProps {
   step: Step;
   onDelete: any;
   moveItem: (dragId: string, dropId: string) => void;
+  dependentData: { [key: string]: string };
 }
 
-export default function StepEditor({ step, onDelete, moveItem }: StepEditorProps) {
+export default function StepEditor({ step, onDelete, moveItem, dependentData }: StepEditorProps) {
   const [openEditor, setOpenEditor] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [temperature, setTemperature] = useState(step.getTemperature())
   const [isComplete, setIsComplete] = useState(step.isStepCompleted())
-  const [dependentsSatisfied, setDependentsSatisfied] = useState(step.areDependentsSatisfied())
+  const [dependentsSatisfied, setDependentsSatisfied] = useState(step.areDependentsSatisfied(dependentData))
   const [description, setDescription] = useState(step.getDescription())
+
+  useEffect(() => {
+    setDependentsSatisfied(step.areDependentsSatisfied(dependentData))
+  }, [dependentData])
 
   useEffect(() => {
     const callback = () => {
       setTemperature(step.getTemperature())
       setIsComplete(step.isStepCompleted())
-      setDependentsSatisfied(step.areDependentsSatisfied())
       setDescription(step.getDescription())
     };
 
@@ -69,7 +73,7 @@ export default function StepEditor({ step, onDelete, moveItem }: StepEditorProps
 
   const handleStep = async () => {
     setIsLoading(true);
-    await step.runCompletion();
+    await step.runCompletion(dependentData);
     setIsLoading(false);
   };
 
