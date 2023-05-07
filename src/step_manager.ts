@@ -19,7 +19,7 @@ export class StepManager extends EventEmitter {
     this.dependentData = {};
     for (let i = 0; i < stepSpecs.length; i++) {
       const step = this.addStep();
-      step.setSpec(stepSpecs[i]);
+      step.setSpec(stepSpecs[i], {});
     }
     this.autoRetryEnabled = false;
     this.name = '';

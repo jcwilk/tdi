@@ -22,10 +22,15 @@ export type StepSaveData = {
   spec: TDIStep
 }
 
-const emptyStringValues = (obj: KeyValuePairs) => {
+const emptyStringValues = (obj: KeyValuePairs, defaults?: KeyValuePairs) => {
   const result: KeyValuePairs = {};
   for (let key in obj) {
-    result[key] = '';
+    if (defaults && defaults.hasOwnProperty(key) && defaults[key].length > 0) {
+      result[key] = defaults[key];
+    }
+    else {
+      result[key] = obj[key];
+    }
   }
   return result;
 };
@@ -60,9 +65,9 @@ export class Step extends EventEmitter {
     return this.spec;
   }
 
-  public setSpec(spec: TDIStep): void {
+  public setSpec(spec: TDIStep, dependentData: KeyValuePairs): void {
     this.spec = spec;
-    this.emit('update', emptyStringValues(spec.input));
+    this.emit('update', emptyStringValues(spec.input, dependentData));
   }
 
   public getDescription(): string {
@@ -81,7 +86,7 @@ export class Step extends EventEmitter {
   }
 
   public setSaveData(data: StepSaveData): void {
-    this.setSpec(data.spec)
+    this.setSpec(data.spec, {})
     this.temperature = data.temperature;
   }
 

@@ -1,9 +1,8 @@
 import { TDIStep } from "../scenarios";
-import { Step } from "../step";
+import { KeyValuePairs, Step } from "../step";
 import React, { useState, useEffect } from "react";
 import {
   Box,
-  Typography,
   TextField,
   Stack,
 } from "@mui/material";
@@ -14,16 +13,22 @@ import DependsEditor from "./depends_editor";
 
 type TDIStepEditorProps = {
   step: Step;
+  dependentData: KeyValuePairs;
   open: boolean;
   onClose: () => void;
 };
 
 const TDIStepEditor: React.FC<TDIStepEditorProps> = ({
   step,
+  dependentData,
   open,
   onClose,
 }) => {
   const [spec, setSpec] = useState<TDIStep>(step.getSpec());
+
+  const setStepSpec = (newSpec: TDIStep) => {
+    step.setSpec(newSpec, dependentData)
+  }
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -39,8 +44,7 @@ const TDIStepEditor: React.FC<TDIStepEditorProps> = ({
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newSpec = { ...spec, description: e.target.value };
-    setSpec(newSpec);
-    step.setSpec(newSpec);
+    setStepSpec(newSpec);
   };
 
   return (
@@ -58,7 +62,7 @@ const TDIStepEditor: React.FC<TDIStepEditorProps> = ({
             depends={spec.depends}
             onDependsChange={(newDepends) => {
               const newSpec = { ...spec, depends: newDepends };
-              step.setSpec(newSpec);
+              setStepSpec(newSpec);
             }}
           />
           <KeyValueEditor
@@ -66,7 +70,7 @@ const TDIStepEditor: React.FC<TDIStepEditorProps> = ({
             keyValuePairs={spec.input}
             onKeyValuePairsChange={(newInput) => {
               const newSpec = { ...spec, input: newInput };
-              step.setSpec(newSpec);
+              setStepSpec(newSpec);
             }}
           />
           <KeyValueEditor
@@ -74,14 +78,14 @@ const TDIStepEditor: React.FC<TDIStepEditorProps> = ({
             keyValuePairs={spec.completion}
             onKeyValuePairsChange={(newCompletion) => {
               const newSpec = { ...spec, completion: newCompletion };
-              step.setSpec(newSpec);
+              setStepSpec(newSpec);
             }}
           />
           <TestsEditor
             tests={spec.test}
             onTestsChange={(newTests) => {
               const newSpec = { ...spec, test: newTests };
-              step.setSpec(newSpec);
+              setStepSpec(newSpec);
             }}
           />
         </Stack>

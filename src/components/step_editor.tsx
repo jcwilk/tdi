@@ -129,6 +129,7 @@ export default function StepEditor({ step, onDelete, moveItem, dependentData }: 
       </IconButton>
       <StepSpecEditor
         step={step}
+        dependentData={dependentData}
         open={`step-editor-${step.uuid}` === openEditor}
         onClose={() => setOpenEditor('')}
       />

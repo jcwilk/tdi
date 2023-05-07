@@ -51,7 +51,7 @@ describe('StepManager', () => {
     const step = stepManager.addStep();
     const stepSpec = generateEmptyStepSpec();
     stepSpec.input = { name: 'Name' };
-    step.setSpec(stepSpec);
+    step.setSpec(stepSpec, {});
 
     // Simulate the output data update by emitting the 'update' event
     step.emit('update', { name: 'Test Name' });
