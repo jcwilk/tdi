@@ -34,7 +34,6 @@ const emptyStringValues = (obj: KeyValuePairs) => {
 export class Step extends EventEmitter {
   private spec: any;
   private inputData: { [key: string]: any };
-  private dependentData: { [key: string]: string };
   private completionResults: { [key: string]: any };
   private testResults: { [key: string]: any };
   private temperature: number;
@@ -46,7 +45,6 @@ export class Step extends EventEmitter {
     this.uuid = uuidv4();
     this.spec = generateEmptyStepSpec();
     this.inputData = emptyStringValues(this.spec.input);
-    this.dependentData = {};
     this.completionResults = {};
     this.testResults = {};
     this.temperature = 1;
@@ -136,16 +134,6 @@ export class Step extends EventEmitter {
     }
     else if (this.spec.completion && this.spec.completion.hasOwnProperty(key)) {
       this.completionResults[key] = value;
-    }
-    this.emit('update');
-  }
-
-  public setDependentData(dependentData: { [key: string]: any }): void {
-    this.dependentData = {};
-    for (const key in dependentData) {
-      if ((this.spec.depends || []).includes(key)) {
-        this.dependentData[key] = dependentData[key];
-      }
     }
     this.emit('update');
   }
