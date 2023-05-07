@@ -74,7 +74,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
     </Grid>
   );
 
-  const renderStepOutput = (): JSX.Element[] => {
+  const renderSteps = (): JSX.Element[] => {
     const outputElements: JSX.Element[] = [];
 
     steps.forEach((step, index) => {
@@ -89,6 +89,12 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
         </Grid>
       );
     });
+
+    return outputElements;
+  };
+
+  const renderStepOutput = (): JSX.Element[] => {
+    const outputElements: JSX.Element[] = [];
 
     for (const key of Object.keys(dependentData).sort()) {
       const value = dependentData[key];
@@ -125,8 +131,9 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
                 {renderNameField()}
               </Box>
             </Grid>
-            {renderStepOutput()}
+            {renderSteps()}
             {renderAddStepButton()}
+            {renderStepOutput()}
           </Grid>
         </DndProvider>
       </ThemeProvider>
