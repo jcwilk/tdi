@@ -36,12 +36,15 @@ export default function StepEditor({ step, onDelete, moveItem, dependentData }: 
 
   useEffect(() => {
     setDependentsSatisfied(step.areDependentsSatisfied(dependentData))
+    setIsComplete(step.isStepCompleted(dependentData))
   }, [dependentData])
 
   useEffect(() => {
     const callback = () => {
-      setTemperature(step.getTemperature())
+      setDependentsSatisfied(step.areDependentsSatisfied(dependentData))
       setIsComplete(step.isStepCompleted(dependentData))
+
+      setTemperature(step.getTemperature())
       setDescription(step.getDescription())
     };
 
