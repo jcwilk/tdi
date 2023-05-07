@@ -16,23 +16,19 @@ jest.mock('../src/openai_api', () => ({
 
 describe('Step', () => {
   let step: Step;
+  let receivedOutputData: { [key: string]: string };
 
   afterEach(() => {
+    step.destroy();
     jest.clearAllMocks();
   });
 
   beforeEach(() => {
     step = new Step();
-  });
-
-  it('updates spec and clears output data', () => {
-    const stepSpec = generateEmptyStepSpec();
-    stepSpec.input = { name: 'Name' };
-    step.setSpec(stepSpec);
-    step.setOutputData('name', 'Test Name');
-    const newSpec = generateEmptyStepSpec();
-    step.setSpec(newSpec);
-    expect(step.getOutputData()).toEqual({});
+    receivedOutputData = {};
+    step.subscribe((updates: { [key: string]: string }) => {
+      receivedOutputData = { ...receivedOutputData, ...updates };
+    });
   });
 
   it('sets and gets temperature', () => {
@@ -41,7 +37,6 @@ describe('Step', () => {
   });
 
   it('runs completion without calling the API if dependents are not satisfied', async () => {
-    const step = new Step();
     step.setSpec({
       description: 'Test step',
       depends: ['dependency1'],
@@ -57,10 +52,10 @@ describe('Step', () => {
 
     expect(result).toBe(false);
     expect(mockGetCompletion).not.toHaveBeenCalled();
+    expect(receivedOutputData.output).toEqual(undefined);
   });
 
   it('runs completion and calls the API if dependents are satisfied', async () => {
-    const step = new Step();
     step.setSpec({
       description: 'Test step',
       depends: ['dependency1'],
@@ -79,5 +74,6 @@ describe('Step', () => {
     expect(result).toBe(true);
     expect(mockGetCompletion).toHaveBeenCalledTimes(1);
     expect(mockGetCompletion).toHaveBeenCalledWith('Test prompt Test value', 1);
+    expect(receivedOutputData.output).toBe('Test output');
   });
 });

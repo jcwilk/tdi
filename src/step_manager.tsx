@@ -1,4 +1,4 @@
-import { Step, StepSaveData } from './step';
+import { Step, StepSaveData, KeyValuePairs } from './step';
 import { EventEmitter } from 'events';
 
 export type TestResultsCallback = (results: {
@@ -47,6 +47,11 @@ export class StepManager extends EventEmitter {
     this.emit('update');
   }
 
+  public setOutputData(key: string, value: string): void {
+    this.dependentData[key] = value
+    this.emit('update')
+  }
+
   public getSteps(): Step[] {
     return [...this.steps];
   }
@@ -68,10 +73,11 @@ export class StepManager extends EventEmitter {
     return this.autoRetryEnabled;
   }
 
-  public getSaveData(): { stepData: StepSaveData[], name: string } {
+  public getSaveData(): { stepData: StepSaveData[], name: string, outputData: KeyValuePairs } {
     return {
       stepData: this.steps.map((step) => step.getSaveData()),
       name: this.name,
+      outputData: this.dependentData,
     };
   }
 
@@ -79,20 +85,11 @@ export class StepManager extends EventEmitter {
     const step = new Step();
     this.steps.push(step);
 
-    step.subscribe(() => {
-      // Aggregate output data from all steps
-      const aggregatedOutputData: { [key: string]: string } = {};
-      for (const step of this.steps) {
-        const outputData = step.getOutputData();
-        for (const key in outputData) {
-          aggregatedOutputData[key] = outputData[key];
-        }
-      }
+    step.subscribe(data => {
+      // Merge data from the step's update event into dependentData
+      this.dependentData = { ...this.dependentData, ...data };
 
-      if (!this.getName() && aggregatedOutputData.name) this.setName(aggregatedOutputData.name);
-
-      // Store the aggregated data so we can feed it into each step later
-      this.dependentData = aggregatedOutputData;
+      if (!this.getName() && this.dependentData.name) this.setName(this.dependentData.name);
 
       this.emit('update');
     });
@@ -105,7 +102,7 @@ export class StepManager extends EventEmitter {
     return this.dependentData;
   }
 
-  public setSaveData(data: { stepData: StepSaveData[], name: string }): void {
+  public setSaveData(data: { stepData: StepSaveData[], name: string, outputData: KeyValuePairs }): void {
     this.steps.forEach(step => step.destroy());
     this.steps = [];
 
@@ -113,6 +110,8 @@ export class StepManager extends EventEmitter {
       const step = this.addStep();
       step.setSaveData(data.stepData[i]);
     }
+
+    this.dependentData = {...data.outputData}
 
     this.setName(data.name);
   }
@@ -128,6 +127,6 @@ export class StepManager extends EventEmitter {
   }
 
   public getSuccess(): boolean {
-    return this.steps.every((step) => step.isStepCompleted());
+    return this.steps.every((step) => step.isStepCompleted(this.dependentData));
   }
 }

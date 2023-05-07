@@ -52,7 +52,10 @@ describe('StepManager', () => {
     const stepSpec = generateEmptyStepSpec();
     stepSpec.input = { name: 'Name' };
     step.setSpec(stepSpec);
-    step.setOutputData('name', 'Test Name');
+
+    // Simulate the output data update by emitting the 'update' event
+    step.emit('update', { name: 'Test Name' });
+
     expect(stepManager.getDependentData().name).toBe('Test Name');
   });
 });

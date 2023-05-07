@@ -10,6 +10,7 @@ import { StepManager } from '../step_manager';
 import styles from './css/step_editors.module.css';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import StepEditor from './step_editor';
+import OutputEditor from './output_editor';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 
@@ -88,6 +89,19 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
         </Grid>
       );
     });
+
+    for (const key of Object.keys(dependentData).sort()) {
+      const value = dependentData[key];
+      outputElements.push(
+        <Grid item xs={12} lg={6} xl={3} key={`field-${key}`}>
+          <OutputEditor
+            keyName={key}
+            text={value}
+            setOutputData={(key: string, value: string) => stepManager.setOutputData(key, value)}
+          />
+        </Grid>
+      );
+    }
 
     return outputElements;
   };

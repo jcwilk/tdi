@@ -1,4 +1,4 @@
-export type TDITestStep = {
+export type TDITestSteps = {
   [key: string]: {
     test: string;
     code: string;
@@ -14,7 +14,7 @@ export type TDIStep = {
   completion: {
     [key: string]: string;
   };
-  test: TDITestStep;
+  test: TDITestSteps;
 };
 
 export const generateEmptyStepSpec = (): TDIStep => {

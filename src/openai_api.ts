@@ -9,9 +9,9 @@ const getClient = function(): OpenAIApi | null {
   return new OpenAIApi(configuration);
 }
 
-export async function getCompletion(prompt: string, temperature: number): Promise<string | null> {
+export async function getCompletion(prompt: string, temperature: number): Promise<string> {
   const openai = getClient();
-  if(!openai) return null;
+  if(!openai) return "";
 
   try {
     const completion = await openai.createCompletion({
@@ -24,7 +24,7 @@ export async function getCompletion(prompt: string, temperature: number): Promis
     return completion.data.choices[0].text || "";
   } catch (error) {
     console.error('Error getting completion:', error);
-    return null;
+    return "";
   }
 }
 
