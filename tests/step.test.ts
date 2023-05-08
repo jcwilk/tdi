@@ -65,7 +65,10 @@ describe('Step', () => {
     }, {});
 
     const mockGetCompletion = getCompletion as jest.Mock;
-    mockGetCompletion.mockResolvedValue('Test output');
+    mockGetCompletion.mockImplementation((_prompt, _probability, callback) => {
+      callback('Test output');
+      return Promise.resolve();
+    });
 
     const dependentData = { dependency1: 'Test value' };
 
@@ -73,7 +76,7 @@ describe('Step', () => {
 
     expect(result).toBe(true);
     expect(mockGetCompletion).toHaveBeenCalledTimes(1);
-    expect(mockGetCompletion).toHaveBeenCalledWith('Test prompt Test value', 1);
+    expect(mockGetCompletion).toHaveBeenCalledWith('Test prompt Test value', expect.any(Number), expect.any(Function));
     expect(receivedOutputData.output).toBe('Test output');
   });
 });

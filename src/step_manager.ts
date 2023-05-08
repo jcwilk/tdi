@@ -1,3 +1,4 @@
+import KeyValueEditor from './components/key_value_editor';
 import { Step, StepSaveData, KeyValuePairs } from './step';
 import { EventEmitter } from 'events';
 
@@ -47,7 +48,14 @@ export class StepManager extends EventEmitter {
     this.emit('update');
   }
 
+  private getOutputKeys(): string[] {
+    return [...new Set(this.steps.reduce((acc: string[], step) => acc.concat(step.getOutputKeys()), []))].sort()
+  }
+
+
   public setOutputData(key: string, value: string): void {
+    if (!this.getOutputKeys().includes(key)) return;
+
     this.dependentData[key] = value
     this.emit('update')
   }
@@ -81,21 +89,34 @@ export class StepManager extends EventEmitter {
     };
   }
 
-  public addStep(): Step {
-    const step = new Step();
-    this.steps.push(step);
+  private pruneDependentData(): void {
+    const supportedKeys = this.getOutputKeys()
 
-    step.subscribe(data => {
-      // Merge data from the step's update event into dependentData
-      this.dependentData = { ...this.dependentData, ...data };
-
-      if (!this.getName() && this.dependentData.name) this.setName(this.dependentData.name);
-
-      this.emit('update');
+    Object.keys(this.dependentData).forEach(key => {
+      if (!supportedKeys.includes(key)) {
+        delete this.dependentData[key];
+      }
     });
+  }
 
-    this.emit('update');
-    return step;
+  public addStep(): Step {
+    const step = new Step()
+    this.steps.push(step)
+
+    const callback = (data: KeyValuePairs) => {
+      // Merge data from the step's update event into dependentData
+      this.dependentData = { ...this.dependentData, ...data }
+      this.pruneDependentData()
+
+      if (!this.getName() && this.dependentData.name) this.setName(this.dependentData.name)
+
+      this.emit('update')
+    }
+
+    step.subscribe(callback)
+    callback({})
+
+    return step
   }
 
   public getDependentData(): { [key: string]: string } {
@@ -120,6 +141,7 @@ export class StepManager extends EventEmitter {
     if (index >= 0 && index < this.steps.length) {
       this.steps[index].destroy();
       this.steps.splice(index, 1);
+      this.pruneDependentData()
       this.emit('update');
     } else {
       console.error(`Invalid index: ${index}. Cannot delete step.`);

@@ -22,6 +22,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
   const [steps, setSteps] = useState(stepManager.getSteps())
   const [nameFieldValue, setNameFieldValue] = useState(stepManager.getName())
   const [dependentData, setDependentData] = useState(stepManager.getDependentData())
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     const callback = () => {
@@ -85,6 +86,8 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
             onDelete={() => handleDelete(index)}
             moveItem={moveItem}
             dependentData={dependentData}
+            setIsLoading={setIsLoading}
+            isLoading={isLoading}
           />
         </Grid>
       );

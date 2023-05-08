@@ -45,7 +45,7 @@ export class Step extends EventEmitter {
 
     this.uuid = uuidv4();
     this.spec = generateEmptyStepSpec();
-    this.temperature = 1;
+    this.temperature = 0.5;
   }
 
   public subscribe(callback: (updates: KeyValuePairs) => void): void {
@@ -54,6 +54,10 @@ export class Step extends EventEmitter {
 
   public unsubscribe(callback: () => void): void {
     this.removeListener('update', callback);
+  }
+
+  public hasCompletions(): boolean {
+    return Object.values(this.spec.completion || {}).some(value => !!value && value.length > 0)
   }
 
   public destroy(): void {
@@ -133,22 +137,22 @@ export class Step extends EventEmitter {
 
     const mergedData = { ...emptyStringValues(this.spec.input), ...dependentData };
 
-    // only take the key-values which correspond to keys in the input spec
-    const inputResults = Object.keys(this.spec.input).reduce((acc: KeyValuePairs, key) => {
-      // interpolate merged data into the value so we can use it to pipe and transform between values
-      if (mergedData.hasOwnProperty(key)) acc[key] = this.interpolatePrompt(mergedData[key], mergedData)
-      return acc
-    }, {})
+    const inputResults = Object.keys(this.spec.input).forEach((key) => {
+      if (this.spec.input[key].length > 0 || !mergedData[key]) {
+        this.emit('update', { [key]: this.interpolatePrompt(this.spec.input[key], mergedData) })
+      }
+    })
 
     const prompts = this.getCompletionPrompts();
-    const completionResults: KeyValuePairs = {}
 
+    const promises = [];
     for (const key in prompts) {
-      const prompt = this.interpolatePrompt(prompts[key], mergedData);
-
-      const output = await getCompletion(prompt, this.temperature);
-      completionResults[key] = output;
+        const prompt = this.interpolatePrompt(prompts[key], mergedData);
+        promises.push(getCompletion(prompt, this.temperature, text => {
+            this.emit('update', {[key]: text})
+        }));
     }
+    await Promise.all(promises);
 
     const tests = this.getTestData();
     const testResults: KeyValuePairs = {}
@@ -166,9 +170,8 @@ export class Step extends EventEmitter {
       if (testResult) output += "✅";
 
       testResults[key] = output;
+      this.emit('update', { [key]: output })
     }
-
-    this.emit('update', { ...inputResults, ...completionResults, ...testResults })
 
     return true;
   }
@@ -190,11 +193,7 @@ export class Step extends EventEmitter {
   }
 
   public isStepCompleted(data: KeyValuePairs): boolean {
-    const keys = [...new Set([
-      ...Object.keys(this.spec.input),
-      ...Object.keys(this.spec.completion),
-      ...Object.keys(this.spec.test)
-    ])];
+    const keys = this.getOutputKeys();
 
     for(let i = 0; i < keys.length; i++) {
       const key = keys[i];
@@ -202,6 +201,14 @@ export class Step extends EventEmitter {
     }
 
     return true
+  }
+
+  public getOutputKeys(): string[] {
+    return [...new Set([
+      ...Object.keys(this.spec.input),
+      ...Object.keys(this.spec.completion),
+      ...Object.keys(this.spec.test)
+    ])]
   }
 
   private runJasmineTestsInWorker(functionString: string, jasmineTestsString: string, callback: TestResultsCallback): Promise<boolean> {

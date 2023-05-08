@@ -9,23 +9,83 @@ const getClient = function(): OpenAIApi | null {
   return new OpenAIApi(configuration);
 }
 
-export async function getCompletion(prompt: string, temperature: number): Promise<string> {
-  const openai = getClient();
-  if(!openai) return "";
+export async function getCompletion(
+  prompt: string,
+  temperature: number,
+  onChunk: (chunk: string) => void,
+): Promise<void> {
+  const OPENAI_KEY = APIKeyFetcher();
+  if (!OPENAI_KEY) return;
 
   try {
-    const completion = await openai.createCompletion({
-      model: 'text-davinci-003',
-      prompt,
-      max_tokens: 2000,
-      temperature
+    const response = await fetch('https://api.openai.com/v1/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${APIKeyFetcher()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        model: "text-davinci-003",
+        max_tokens: 1900,
+        temperature,
+        stream: true
+      })
     });
+    if(!response.body) return
 
-    return completion.data.choices[0].text || "";
+    const decoder = new TextDecoder('utf8');
+    const reader = response.body.getReader();
+
+    let fullText = ''
+
+    async function read() {
+      const { value, done } = await reader.read();
+
+      if (done) return onChunk(fullText.trim())
+
+      const delta = extractValue(decoder.decode(value))
+
+      if (delta.length > 0) {
+        fullText += delta
+        onChunk(fullText.trim())
+      }
+
+      await read()
+
+    }
+
+    await read()
+
+    return // fullText
   } catch (error) {
-    console.error('Error getting completion:', error);
-    return "";
+    return //error;
   }
+}
+
+function extractValue(text: string): string {
+  const jsonEntries = text.split('\n').filter(entry => entry.startsWith('data: '));
+  let extractedValues = '';
+
+  jsonEntries.forEach(entry => {
+    const jsonStringStartIndex = entry.indexOf('{');
+    if (jsonStringStartIndex === -1) {
+      return;
+    }
+
+    const jsonString = entry.slice(jsonStringStartIndex);
+    try {
+      const parsedJson = JSON.parse(jsonString);
+      const choices = parsedJson?.choices;
+      if (choices && Array.isArray(choices) && choices.length > 0) {
+        extractedValues += choices[0]?.text;
+      }
+    } catch (error) {
+      console.error("Error parsing JSON:", error);
+    }
+  });
+
+  return extractedValues;
 }
 
 const PAUSE_TIME_GRACE_PERIOD = 2; // in seconds

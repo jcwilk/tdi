@@ -24,11 +24,12 @@ interface StepEditorProps {
   onDelete: any;
   moveItem: (dragId: string, dropId: string) => void;
   dependentData: { [key: string]: string };
+  setIsLoading: (loading: boolean) => void
+  isLoading: boolean
 }
 
-export default function StepEditor({ step, onDelete, moveItem, dependentData }: StepEditorProps) {
+export default function StepEditor({ step, onDelete, moveItem, dependentData, setIsLoading, isLoading }: StepEditorProps) {
   const [openEditor, setOpenEditor] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [temperature, setTemperature] = useState(step.getTemperature())
   const [isComplete, setIsComplete] = useState(step.isStepCompleted(dependentData))
   const [dependentsSatisfied, setDependentsSatisfied] = useState(step.areDependentsSatisfied(dependentData))
@@ -81,7 +82,7 @@ export default function StepEditor({ step, onDelete, moveItem, dependentData }: 
   const renderButton = () => {
     if (isLoading)
       return (
-        <Button color="inherit">
+        <Button color="inherit" disabled>
           <CircularProgress size={24} />
         </Button>
       )
@@ -159,8 +160,8 @@ export default function StepEditor({ step, onDelete, moveItem, dependentData }: 
         <Box className={styles.stepControls}>
           {dependentsSatisfied && (
             <>
-              {renderTemperatureSlider()}
               {renderButton()}
+              {step.hasCompletions() && renderTemperatureSlider()}
             </>
           )}
         </Box>
