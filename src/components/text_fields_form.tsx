@@ -2,16 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { StepManager } from '../step_manager';
 import StepEditors from './step_editors';
 import SavedFunctionsList from './saved_functions_list';
+import EditSpecificationsCode from './edit_specifications_code'; // Import the new component
 import Button from '@mui/material/Button';
+import Box from '@mui/material/Box';
 import ApiKeyEntry from './api_key_entry';
 import { BasicTDISteps } from '../scenarios';
 import FolderIcon from '@mui/icons-material/Folder';
+import CodeIcon from '@mui/icons-material/Code'; // Import the CodeIcon for the new button
 import { APIKeyFetcher } from '../api_key_storage';
 
 export default function TextFieldsForm() {
   const [stepManager, setStepManager] = useState<StepManager | null>(null);
   const [apiKey, setApiKey] = useState<boolean>(!!APIKeyFetcher());
   const [showSavedFunctionsDialog, setShowSavedFunctionsDialog] = useState<boolean>(false);
+  const [showEditSpecificationsCodeDialog, setShowEditSpecificationsCodeDialog] = useState<boolean>(false); // New state for the new dialog
   const [savedFunctionsUpdateTrigger, setSavedFunctionsUpdateTrigger] = useState<number>(0);
 
   const loadStepManager = () => {
@@ -40,24 +44,44 @@ export default function TextFieldsForm() {
     setShowSavedFunctionsDialog(true);
   };
 
+  const handleOpenEditSpecificationsCodeDialog = () => {
+    setShowEditSpecificationsCodeDialog(true);
+  };
+
+  const handleCloseEditSpecificationsCodeDialog = () => {
+    setShowEditSpecificationsCodeDialog(false);
+  };
+
   if (stepManager === null || !apiKey) {
     return <ApiKeyEntry onSubmit={handleApiKeySubmit} />;
   }
 
   return (
     <div id="text-input-form">
-      <Button
-        variant="contained"
-        onClick={handleOpenSavedFunctionsDialog}
+      <Box
         sx={{
           position: 'absolute',
           top: '16px',
           right: '16px',
+          display: 'flex',
+          flexDirection: 'row',
+          gap: '8px',
         }}
       >
-        <FolderIcon />
-      </Button>
+        <Button variant="contained" onClick={handleOpenEditSpecificationsCodeDialog}>
+          <CodeIcon />
+        </Button>
+        <Button variant="contained" onClick={handleOpenSavedFunctionsDialog}>
+          <FolderIcon />
+        </Button>
+      </Box>
       <StepEditors stepManager={stepManager} />
+      {showEditSpecificationsCodeDialog && (
+        <EditSpecificationsCode
+          stepManager={stepManager}
+          onClose={handleCloseEditSpecificationsCodeDialog}
+        />
+      )}
       {showSavedFunctionsDialog && (
         <SavedFunctionsList
           stepManager={stepManager}
