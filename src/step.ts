@@ -112,12 +112,10 @@ export class Step extends EventEmitter {
   }
 
   private interpolatePrompt(prompt: string, mergedData: KeyValuePairs): string {
-    let result = prompt;
-    for (const key in mergedData) {
-      const value = mergedData[key];
-      result = result.replace(new RegExp(`\\/${key}`, "g"), value);
-    }
-    return result;
+    // do all replacements in one pass so we aren't interpolating into interpolated values
+    return prompt.replace(/\/(\w+)/g, (matched, key) => {
+      return mergedData.hasOwnProperty(key) ? mergedData[key] : matched;
+    })
   }
 
   public getKeyType(key: string): string {
