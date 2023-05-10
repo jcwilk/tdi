@@ -1,19 +1,10 @@
 import { getCompletion } from './openai_api';
-import { TDIStep, generateEmptyStepSpec, TDITestSteps as TDITestSteps } from "./scenarios"
+import { TDIStep, generateEmptyStepSpec, TDITestStep } from "./scenarios"
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
+import { StrategyFactory, StrategyType, isStrategyType } from './processing/strategy_factory';
 
-// can't for the life of me figure out how to get TS to STFU about
-// the following import. works great and I've lost too much time to
-// it, so something to figure out later (or never)
-// @ts-ignore
-import TesterWorker from "./tester.worker";
 
-type TestResultsCallback = (results: {
-  passedCount: number;
-  failedCount: number;
-  totalCount: number;
-}) => void;
 
 export type KeyValuePairs = {[key: string]: string}
 
@@ -135,46 +126,38 @@ export class Step extends EventEmitter {
 
     const mergedData = { ...emptyStringValues(this.spec.input), ...dependentData };
 
-    const inputResults = Object.keys(this.spec.input).forEach((key) => {
-      if (this.spec.input[key].length > 0 || !mergedData[key]) {
-        this.emit('update', { [key]: this.interpolatePrompt(this.spec.input[key], mergedData) })
+    const processStrategyType = async (strategyType: StrategyType) => {
+      const strategy = StrategyFactory.createStrategy(strategyType);
+      const keyValuePairs = this.spec[strategyType];
+
+      const promises = [];
+      for (const outputKey in keyValuePairs) {
+        const promise = strategy.process(
+          outputKey,
+          keyValuePairs[outputKey],
+          mergedData,
+          this.temperature,
+          (output: string) => {
+            this.emit('update', { [outputKey]: output });
+          }
+        );
+        promises.push(promise);
       }
-    })
 
-    const prompts = this.getCompletionPrompts();
+      await Promise.all(promises);
+    };
 
-    const promises = [];
-    for (const key in prompts) {
-        const prompt = this.interpolatePrompt(prompts[key], mergedData);
-        promises.push(getCompletion(prompt, this.temperature, text => {
-            this.emit('update', {[key]: text})
-        }));
-    }
-    await Promise.all(promises);
-
-    const tests = this.getTestData();
-    const testResults: KeyValuePairs = {}
-
-    for (const key in tests) {
-      const { test, code } = tests[key];
-      // TODO: draw from completionResults as well..?
-      const testData = mergedData[test];
-      const codeData = mergedData[code];
-      let output = "";
-      const testResult = await this.runJasmineTestsInWorker(codeData, testData, ({ passedCount, totalCount }) => {
-        output = `Passing tests: ${passedCount} / ${totalCount}`;
-      });
-
-      if (testResult) output += "✅";
-
-      testResults[key] = output;
-      this.emit('update', { [key]: output })
+    const strategyTypes: StrategyType[] = ['input', 'completion', 'test', 'chat'];
+    for (const strategyType of strategyTypes) {
+      if (this.spec.hasOwnProperty(strategyType)) {
+        await processStrategyType(strategyType);
+      }
     }
 
     return true;
   }
 
-  public getTestData(): TDITestSteps {
+  public getTestData(): { [key: string]: TDITestStep } {
     return this.spec.test ? { ...this.spec.test } : {};
   }
 
@@ -205,24 +188,8 @@ export class Step extends EventEmitter {
     return [...new Set([
       ...Object.keys(this.spec.input),
       ...Object.keys(this.spec.completion),
-      ...Object.keys(this.spec.test)
+      ...Object.keys(this.spec.test),
+      ...Object.keys(this.spec.chat)
     ])]
-  }
-
-  private runJasmineTestsInWorker(functionString: string, jasmineTestsString: string, callback: TestResultsCallback): Promise<boolean> {
-    return new Promise((resolve) => {
-      const worker = new TesterWorker();
-
-      worker.postMessage({
-        functionString,
-        jasmineTestsString,
-      });
-
-      worker.onmessage = function (event: MessageEvent) {
-        const { passedCount, failedCount, totalCount } = event.data;
-        callback({ passedCount, failedCount, totalCount });
-        resolve(passedCount == totalCount);
-      };
-    });
   }
 }

@@ -10,6 +10,7 @@ import FullScreenPopup from "./full_screen_popup";
 import KeyValueEditor from "./key_value_editor";
 import TestsEditor from "./tests_editor";
 import DependsEditor from "./depends_editor";
+import ChatsEditor from "./chats_editor";
 
 type TDIStepEditorProps = {
   step: Step;
@@ -78,6 +79,13 @@ const TDIStepEditor: React.FC<TDIStepEditorProps> = ({
             keyValuePairs={spec.completion}
             onKeyValuePairsChange={(newCompletion) => {
               const newSpec = { ...spec, completion: newCompletion };
+              setStepSpec(newSpec);
+            }}
+          />
+          <ChatsEditor
+            chats={spec.chat}
+            onChatsChange={(newChats) => {
+              const newSpec = { ...spec, chat: newChats };
               setStepSpec(newSpec);
             }}
           />

@@ -9,11 +9,11 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { v4 as uuidv4 } from "uuid";
-import { TDITestSteps } from "../scenarios";
+import { TDITestStep } from "../scenarios";
 
 type TestsEditorProps = {
-  tests: TDITestSteps;
-  onTestsChange: (tests: TDITestSteps) => void;
+  tests: { [key: string]: TDITestStep };
+  onTestsChange: (tests: { [key: string]: TDITestStep }) => void;
 };
 
 const TestsEditor: React.FC<TestsEditorProps> = ({

@@ -1,5 +1,6 @@
 import { Configuration, OpenAIApi } from 'openai';
 import { APIKeyFetcher } from './api_key_storage';
+import { ChatMessage } from './scenarios';
 
 const getClient = function(): OpenAIApi | null {
   const apiKey = APIKeyFetcher();
@@ -44,7 +45,7 @@ export async function getCompletion(
 
       if (done) return onChunk(fullText.trim())
 
-      const delta = extractValue(decoder.decode(value))
+      const delta = extractCompletionValue(decoder.decode(value))
 
       if (delta.length > 0) {
         fullText += delta
@@ -63,7 +64,7 @@ export async function getCompletion(
   }
 }
 
-function extractValue(text: string): string {
+function extractCompletionValue(text: string): string {
   const jsonEntries = text.split('\n').filter(entry => entry.startsWith('data: '));
   let extractedValues = '';
 
@@ -79,6 +80,86 @@ function extractValue(text: string): string {
       const choices = parsedJson?.choices;
       if (choices && Array.isArray(choices) && choices.length > 0) {
         extractedValues += choices[0]?.text;
+      }
+    } catch (error) {
+      console.error("Error parsing JSON:", error);
+    }
+  });
+
+  return extractedValues;
+}
+
+// TODO: this isn't calling the callback somehow
+export async function getChatCompletion(
+  messages: ChatMessage[],
+  temperature: number,
+  onChunk: (chunk: string) => void,
+): Promise<void> {
+  const OPENAI_KEY = APIKeyFetcher();
+  if (!OPENAI_KEY) return;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${APIKeyFetcher()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages,
+        model: "gpt-4",
+        max_tokens: 1900,
+        temperature,
+        stream: true
+      })
+    });
+    if(!response.body) return
+
+    const decoder = new TextDecoder('utf8');
+    const reader = response.body.getReader();
+
+    let fullText = ''
+
+    async function read() {
+      const { value, done } = await reader.read();
+
+      if (done) return onChunk(fullText.trim())
+
+      const delta = extractChatValue(decoder.decode(value))
+
+      if (delta.length > 0) {
+        fullText += delta
+        onChunk(fullText.trim())
+      }
+
+      await read()
+
+    }
+
+    await read()
+
+    return // fullText
+  } catch (error) {
+    return //error;
+  }
+}
+
+function extractChatValue(text: string): string {
+  const jsonEntries = text.split('\n').filter(entry => entry.startsWith('data: '));
+  let extractedValues = '';
+
+  jsonEntries.forEach(entry => {
+    const jsonStringStartIndex = entry.indexOf('{');
+    if (jsonStringStartIndex === -1) {
+      return;
+    }
+
+    const jsonString = entry.slice(jsonStringStartIndex);
+    try {
+      const parsedJson = JSON.parse(jsonString);
+      const choices = parsedJson?.choices;
+      if (choices && Array.isArray(choices) && choices.length > 0) {
+        extractedValues += choices[0]?.delta?.content || "";
       }
     } catch (error) {
       console.error("Error parsing JSON:", error);

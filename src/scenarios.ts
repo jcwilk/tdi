@@ -1,9 +1,11 @@
-export type TDITestSteps = {
-  [key: string]: {
-    test: string;
-    code: string;
-  };
+export type ChatMessage = {
+  role: string,
+  content: string
 };
+
+export type ChatStep = ChatMessage[]
+
+export type TDITestStep = { test: string; code: string };
 
 export type TDIStep = {
   description: string;
@@ -14,8 +16,15 @@ export type TDIStep = {
   completion: {
     [key: string]: string;
   };
-  test: TDITestSteps;
+  chat: {
+    [key: string]: ChatStep;
+  };
+  test: {
+    [key: string]: TDITestStep
+  }
 };
+
+export type StrategySpec = string | TDITestStep | ChatStep
 
 export const generateEmptyStepSpec = (): TDIStep => {
   return {
@@ -24,6 +33,7 @@ export const generateEmptyStepSpec = (): TDIStep => {
     input: {},
     completion: {},
     test: {},
+    chat: {}
   };
 }
 
@@ -54,7 +64,8 @@ characters or punctuation and should omit the ending punctuation.
 Sure! Here's the title:
 `
     },
-    test: {}
+    test: {},
+    chat: {},
   },
   {
     description: "Generate Jasmine Tests",
@@ -74,7 +85,8 @@ Please write test cases in Jasmine to confirm a hypothetical solution to this pr
 Sure! Here are the Jasmine test cases:
 `
     },
-    test: {}
+    test: {},
+    chat: {},
   },
   {
     description: "Generate Function",
@@ -95,7 +107,8 @@ It should also pass all of the Jasmine test cases.
 Sure! Here's the global javascript function:
 `
     },
-    test: {}
+    test: {},
+    chat: {},
   },
   {
     description: "Test Function",
@@ -107,6 +120,7 @@ Sure! Here's the global javascript function:
         test: "jasmine",
         code: "function"
       }
-    }
+    },
+    chat: {},
   }
 ];
