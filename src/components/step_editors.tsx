@@ -7,7 +7,6 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import { StepManager } from '../step_manager';
 import styles from './css/step_editors.module.css';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import StepEditor from './step_editor';
 import OutputEditor from './output_editor';
 import { DndProvider } from 'react-dnd';
@@ -114,33 +113,22 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
   };
 
 
-  const darkTheme = createTheme({
-    palette: {
-      mode: 'dark',
-      primary: {
-        main: '#1976d2',
-      },
-    },
-  });
-
   return (
     <div>
-      <ThemeProvider theme={darkTheme}>
-        <DndProvider backend={HTML5Backend}>
+      <DndProvider backend={HTML5Backend}>
+        <Box>
           <Box>
-            <Box>
-              <Box display="flex" justifyContent="space-between" alignItems="center">
-                {renderNameField()}
-              </Box>
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              {renderNameField()}
             </Box>
-            <Masonry columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} spacing={2}>
-              {renderSteps()}
-              {renderAddStepButton()}
-              {renderStepOutput()}
-            </Masonry>
           </Box>
-        </DndProvider>
-      </ThemeProvider>
+          <Masonry columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} spacing={2}>
+            {renderSteps()}
+            {renderAddStepButton()}
+            {renderStepOutput()}
+          </Masonry>
+        </Box>
+      </DndProvider>
     </div>
   );
 }

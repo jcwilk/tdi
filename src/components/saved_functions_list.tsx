@@ -113,7 +113,7 @@ export default function SavedFunctionsList({ stepManager, updateTrigger, onClose
                   primary={`${func.name} (${func.stepData.length} steps)`}
                 />
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button size="small" onClick={(event) => handleDelete(event, func.id)}>
+                  <Button color="inherit" size="small" onClick={(event) => handleDelete(event, func.id)}>
                     <DeleteForeverIcon />
                   </Button>
                 </Box>

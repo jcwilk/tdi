@@ -10,6 +10,7 @@ import { BasicTDISteps } from '../scenarios';
 import FolderIcon from '@mui/icons-material/Folder';
 import CodeIcon from '@mui/icons-material/Code'; // Import the CodeIcon for the new button
 import { APIKeyFetcher } from '../api_key_storage';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 export default function TextFieldsForm() {
   const [stepManager, setStepManager] = useState<StepManager | null>(null);
@@ -56,40 +57,51 @@ export default function TextFieldsForm() {
     return <ApiKeyEntry onSubmit={handleApiKeySubmit} />;
   }
 
+  const darkTheme = createTheme({
+    palette: {
+      mode: 'dark',
+      primary: {
+        main: '#1976d2',
+      },
+    },
+  });
+
   return (
     <div id="text-input-form">
-      <Box
-        sx={{
-          position: 'absolute',
-          top: '16px',
-          right: '16px',
-          display: 'flex',
-          flexDirection: 'row',
-          gap: '8px',
-        }}
-      >
-        <Button variant="contained" onClick={handleOpenEditSpecificationsCodeDialog}>
-          <CodeIcon />
-        </Button>
-        <Button variant="contained" onClick={handleOpenSavedFunctionsDialog}>
-          <FolderIcon />
-        </Button>
-      </Box>
-      <StepEditors stepManager={stepManager} />
-      {showEditSpecificationsCodeDialog && (
-        <EditSpecificationsCode
-          stepManager={stepManager}
-          onClose={handleCloseEditSpecificationsCodeDialog}
-        />
-      )}
-      {showSavedFunctionsDialog && (
-        <SavedFunctionsList
-          stepManager={stepManager}
-          updateTrigger={savedFunctionsUpdateTrigger}
-          onClose={handleClose}
-          onSelect={handleFunctionSelect}
-        />
-      )}
+      <ThemeProvider theme={darkTheme}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            display: 'flex',
+            flexDirection: 'row',
+            gap: '8px',
+          }}
+        >
+          <Button variant="contained" onClick={handleOpenEditSpecificationsCodeDialog}>
+            <CodeIcon />
+          </Button>
+          <Button variant="contained" onClick={handleOpenSavedFunctionsDialog}>
+            <FolderIcon />
+          </Button>
+        </Box>
+        <StepEditors stepManager={stepManager} />
+        {showEditSpecificationsCodeDialog && (
+          <EditSpecificationsCode
+            stepManager={stepManager}
+            onClose={handleCloseEditSpecificationsCodeDialog}
+          />
+        )}
+        {showSavedFunctionsDialog && (
+          <SavedFunctionsList
+            stepManager={stepManager}
+            updateTrigger={savedFunctionsUpdateTrigger}
+            onClose={handleClose}
+            onSelect={handleFunctionSelect}
+          />
+        )}
+      </ThemeProvider>
     </div>
   );
 }
