@@ -22,6 +22,8 @@ export class StrategyFactory {
 
 export type StrategyType = 'input' | 'completion' | 'test' | 'chat';
 
+export const strategyTypes: StrategyType[] = ['input', 'completion', 'test', 'chat'];
+
 export function isStrategyType(value: string): value is StrategyType {
   return value === 'input' || value === 'completion' || value === 'test';
 }

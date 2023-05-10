@@ -2,7 +2,7 @@ import { getCompletion } from './openai_api';
 import { TDIStep, generateEmptyStepSpec, TDITestStep } from "./scenarios"
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import { StrategyFactory, StrategyType, isStrategyType } from './processing/strategy_factory';
+import { StrategyFactory, StrategyType, strategyTypes } from './processing/strategy_factory';
 
 
 
@@ -61,7 +61,14 @@ export class Step extends EventEmitter {
   }
 
   public setSpec(spec: TDIStep, dependentData: KeyValuePairs): void {
-    this.spec = spec;
+    this.spec = JSON.parse(JSON.stringify(spec));
+
+    for (const strategyType of strategyTypes) {
+      if (!this.spec.hasOwnProperty(strategyType) || !this.spec[strategyType]) {
+        this.spec[strategyType] = {}
+      }
+    }
+
     this.emit('update', emptyStringValues(spec.input, dependentData));
   }
 
@@ -102,13 +109,6 @@ export class Step extends EventEmitter {
     this.emit('update');
   }
 
-  private interpolatePrompt(prompt: string, mergedData: KeyValuePairs): string {
-    // do all replacements in one pass so we aren't interpolating into interpolated values
-    return prompt.replace(/\/(\w+)/g, (matched, key) => {
-      return mergedData.hasOwnProperty(key) ? mergedData[key] : matched;
-    })
-  }
-
   public getKeyType(key: string): string {
     let keys = ["input", "completion", "test"]
     for(let k of keys) {
@@ -147,7 +147,6 @@ export class Step extends EventEmitter {
       await Promise.all(promises);
     };
 
-    const strategyTypes: StrategyType[] = ['input', 'completion', 'test', 'chat'];
     for (const strategyType of strategyTypes) {
       if (this.spec.hasOwnProperty(strategyType)) {
         await processStrategyType(strategyType);

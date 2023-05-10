@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Grid,
   TextField,
   Button,
   Box,
@@ -13,6 +12,7 @@ import StepEditor from './step_editor';
 import OutputEditor from './output_editor';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import Masonry from '@mui/lab/Masonry';
 
 interface StepEditorsProps {
   stepManager: StepManager;
@@ -39,14 +39,16 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
   }, [stepManager]);
 
   const renderNameField = () => (
-    <TextField
-      id="name-field"
-      label="Name"
-      variant="outlined"
-      value={nameFieldValue}
-      onChange={(event) => {stepManager.setName(event.target.value)}}
-      className={styles.nameField}
-    />
+    <Box sx={{ padding: 2 }}>
+      <TextField
+        id="name-field"
+        label="Name"
+        variant="outlined"
+        value={nameFieldValue}
+        onChange={(event) => {stepManager.setName(event.target.value)}}
+        className={styles.nameField}
+      />
+    </Box>
   );
 
   const handleDelete = (index: number) => {
@@ -63,7 +65,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
   };
 
   const renderAddStepButton = () => (
-    <Grid item xs={12} lg={6} xl={3} key={"new step"}>
+    <Box key={"new step"} sx={{ width: '100%', marginBottom: 2 }}>
       <Button
         variant="contained"
         color="primary"
@@ -72,7 +74,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
       >
         Add Step
       </Button>
-    </Grid>
+    </Box>
   );
 
   const renderSteps = (): JSX.Element[] => {
@@ -80,7 +82,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
 
     steps.forEach((step, index) => {
       outputElements.push(
-        <Grid item xs={12} lg={6} xl={3} key={step.uuid}>
+        <Box key={step.uuid} sx={{ width: '100%', marginBottom: 2 }}>
           <StepEditor
             step={step}
             onDelete={() => handleDelete(index)}
@@ -89,7 +91,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
             setIsLoading={setIsLoading}
             isLoading={isLoading}
           />
-        </Grid>
+        </Box>
       );
     });
 
@@ -102,18 +104,19 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
     for (const key of Object.keys(dependentData).sort()) {
       const value = dependentData[key];
       outputElements.push(
-        <Grid item xs={12} lg={6} xl={3} key={`field-${key}`}>
+        <Box key={`field-${key}`} sx={{ width: '100%', marginBottom: 2 }}>
           <OutputEditor
             keyName={key}
             text={value}
             setOutputData={(key: string, value: string) => stepManager.setOutputData(key, value)}
           />
-        </Grid>
+        </Box>
       );
     }
 
     return outputElements;
   };
+
 
   const darkTheme = createTheme({
     palette: {
@@ -128,16 +131,18 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
     <div>
       <ThemeProvider theme={darkTheme}>
         <DndProvider backend={HTML5Backend}>
-          <Grid className={styles.outerGrid} container spacing={2}>
-            <Grid item md={12}>
+          <Box>
+            <Box>
               <Box display="flex" justifyContent="space-between" alignItems="center">
                 {renderNameField()}
               </Box>
-            </Grid>
-            {renderSteps()}
-            {renderAddStepButton()}
-            {renderStepOutput()}
-          </Grid>
+            </Box>
+            <Masonry columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} spacing={2}>
+              {renderSteps()}
+              {renderAddStepButton()}
+              {renderStepOutput()}
+            </Masonry>
+          </Box>
         </DndProvider>
       </ThemeProvider>
     </div>
