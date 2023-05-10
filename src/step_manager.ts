@@ -148,6 +148,19 @@ export class StepManager extends EventEmitter {
     }
   }
 
+  public duplicateAt(index: number): void {
+    if (index >= 0 && index < this.steps.length) {
+      const step = this.steps[index];
+      const newStep = this.addStep();
+      this.steps.pop();
+      this.steps.splice(index + 1, 0, newStep);
+      newStep.setSaveData(step.getSaveData())
+      this.emit('update', index);
+    } else {
+      console.error(`Invalid index: ${index}. Cannot delete step.`);
+    }
+  }
+
   public getSuccess(): boolean {
     return this.steps.every((step) => step.isStepCompleted(this.dependentData));
   }

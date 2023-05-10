@@ -16,19 +16,21 @@ import PlayDisabledIcon from '@mui/icons-material/PlayDisabled';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import StepSpecEditor from './step_spec_editor'
 import { ConnectableElement, useDrag, useDrop } from 'react-dnd';
 
 interface StepEditorProps {
   step: Step;
-  onDelete: any;
+  onDelete: () => void;
+  onDuplicate: () => void;
   moveItem: (dragId: string, dropId: string) => void;
   dependentData: { [key: string]: string };
   setIsLoading: (loading: boolean) => void
   isLoading: boolean
 }
 
-export default function StepEditor({ step, onDelete, moveItem, dependentData, setIsLoading, isLoading }: StepEditorProps) {
+export default function StepEditor({ step, onDelete, onDuplicate, moveItem, dependentData, setIsLoading, isLoading }: StepEditorProps) {
   const [openEditor, setOpenEditor] = useState("");
   const [temperature, setTemperature] = useState(step.getTemperature())
   const [isComplete, setIsComplete] = useState(step.isStepCompleted(dependentData))
@@ -123,6 +125,14 @@ export default function StepEditor({ step, onDelete, moveItem, dependentData, se
     setOpenEditor(`step-editor-${step.uuid}`)
   }
 
+  const renderDuplicate = () => (
+    <>
+      <IconButton onClick={onDuplicate}>
+        <ContentCopyIcon fontSize='small'/>
+      </IconButton>
+    </>
+  )
+
   const renderEdit = () => (
     <>
       <IconButton onClick={handleEditStep}>
@@ -152,6 +162,7 @@ export default function StepEditor({ step, onDelete, moveItem, dependentData, se
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             {description}
           </Typography>
+          {renderDuplicate()}
           {renderEdit()}
           {renderDelete()}
         </Toolbar>

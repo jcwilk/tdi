@@ -43,6 +43,7 @@ describe('Step', () => {
       input: { input1: 'Test input /dependency1' },
       completion: { output: 'Test prompt /dependency1' },
       test: {},
+      chat: {},
     }, {});
 
     const mockGetCompletion = getCompletion as jest.Mock;
@@ -62,6 +63,7 @@ describe('Step', () => {
       input: { input1: 'Test input /dependency1' },
       completion: { output: 'Test prompt /dependency1' },
       test: {},
+      chat: {},
     }, {});
 
     const mockGetCompletion = getCompletion as jest.Mock;

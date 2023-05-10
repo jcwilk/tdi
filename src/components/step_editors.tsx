@@ -51,11 +51,6 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
     </Box>
   );
 
-  const handleDelete = (index: number) => {
-    stepManager.deleteAt(index);
-    setSteps(stepManager.getSteps());
-  };
-
   const moveItem = (dragId: string, dropId: string) => {
     stepManager.moveStep(dragId, dropId);
   };
@@ -85,7 +80,8 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
         <Box key={step.uuid} sx={{ width: '100%', marginBottom: 2 }}>
           <StepEditor
             step={step}
-            onDelete={() => handleDelete(index)}
+            onDelete={() => stepManager.deleteAt(index)}
+            onDuplicate={() => stepManager.duplicateAt(index)}
             moveItem={moveItem}
             dependentData={dependentData}
             setIsLoading={setIsLoading}
