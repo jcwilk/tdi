@@ -57,7 +57,24 @@ export class Step extends EventEmitter {
   }
 
   public getSpec(): TDIStep {
-    return this.spec;
+    const spec = JSON.parse(JSON.stringify(this.spec));
+    for (const key in spec) {
+      if (this.isEmptyOrBlankObject(spec[key])) delete(spec[key])
+    }
+    return spec
+  }
+
+  private isEmptyOrBlankObject(obj: any) {
+    if(obj === undefined || obj === null) return true
+
+    // if it's a string or array or something just leave it
+    if(typeof(obj) !== "object") return false
+
+    for(var key in obj) {
+      if(obj.hasOwnProperty(key))
+        return false;
+    }
+    return true;
   }
 
   public setSpec(spec: TDIStep, dependentData: KeyValuePairs): void {

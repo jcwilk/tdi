@@ -15,7 +15,7 @@ type DependsEditorProps = {
 };
 
 const DependsEditor: React.FC<DependsEditorProps> = ({
-  depends,
+  depends = [],
   onDependsChange,
 }) => {
   const handleInputChange = (index: number, value: string) => {

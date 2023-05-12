@@ -56,7 +56,7 @@ const TDIStepEditor: React.FC<TDIStepEditorProps> = ({
             fullWidth
             multiline
             label="Description"
-            value={spec.description}
+            value={spec.description || ""}
             onChange={handleDescriptionChange}
           />
           <DependsEditor

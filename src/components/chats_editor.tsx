@@ -22,7 +22,7 @@ type ChatsEditorProps = {
 };
 
 const ChatsEditor: React.FC<ChatsEditorProps> = ({
-  chats,
+  chats = {},
   onChatsChange,
 }) => {
   const [inputKeys, setInputKeys] = React.useState<{ [key: string]: string }>(
@@ -161,7 +161,7 @@ const ChatsEditor: React.FC<ChatsEditorProps> = ({
         ))}
       <Stack direction="row" spacing={1}>
         <Button onClick={handleAddKey} startIcon={<AddIcon />}>
-          Add Key
+          Add Chat
         </Button>
       </Stack>
     </>

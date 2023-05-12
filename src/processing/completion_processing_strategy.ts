@@ -8,6 +8,8 @@ export class CompletionProcessingStrategy extends ProcessingStrategy {
     if (typeof(spec) !== 'string') return
 
     const prompt = this.interpolatePrompt(spec, dependentData);
-    await getCompletion(prompt, temperature, callback);
+    await getCompletion(prompt, temperature, (text) => {
+      if (text && text.trim().length > 0) callback(text)
+    });
   }
 }

@@ -1,3 +1,30 @@
+self.XMLHttpRequest = function () {
+  throw new Error('XMLHttpRequest is not allowed');
+};
+
+self.fetch = function () {
+  throw new Error('Fetch API is not allowed');
+};
+
+self.WebSocket = function () {
+  throw new Error('WebSocket is not allowed');
+};
+
+self.EventSource = function () {
+  throw new Error('EventSource is not allowed');
+};
+
+const originalImportScripts = self.importScripts;
+self.importScripts = function (...urls) {
+  const allowedUrlPrefix = '/tdi/jasmine/';
+  for (const url of urls) {
+    if (!url.startsWith(allowedUrlPrefix)) {
+      throw new Error(`importScripts is not allowed for URL: ${url}`);
+    }
+  }
+  originalImportScripts(...urls);
+};
+
 importScripts('/tdi/jasmine/jasmine.js');
 
 // Create a Jasmine environment using jasmineRequire

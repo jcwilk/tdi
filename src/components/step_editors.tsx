@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   TextField,
   Button,
@@ -23,17 +23,21 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
   const [dependentData, setDependentData] = useState(stepManager.getDependentData())
   const [isLoading, setIsLoading] = useState(false)
 
+  const stepManagerRef = useRef(stepManager)
+
   useEffect(() => {
+    stepManagerRef.current = stepManager;
+
     const callback = () => {
-      setSteps(stepManager.getSteps())
-      setNameFieldValue(stepManager.getName())
-      setDependentData(stepManager.getDependentData())
+      setSteps(stepManagerRef.current.getSteps())
+      setNameFieldValue(stepManagerRef.current.getName())
+      setDependentData(stepManagerRef.current.getDependentData())
     };
 
     stepManager.subscribe(callback);
 
     return () => {
-      stepManager.unsubscribe(callback);
+      stepManagerRef.current.unsubscribe(callback);
     }
   }, [stepManager]);
 
@@ -122,7 +126,7 @@ export default function StepEditors({ stepManager }: StepEditorsProps) {
               {renderNameField()}
             </Box>
           </Box>
-          <Masonry columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} spacing={2}>
+          <Masonry columns={{ xs: 1, sm: 2, md: 3, lg: 4 }}>
             {renderSteps()}
             {renderAddStepButton()}
             {renderStepOutput()}

@@ -21,7 +21,7 @@ type KeyValueEditorProps = {
 
 const KeyValueEditor: React.FC<KeyValueEditorProps> = ({
   title,
-  keyValuePairs,
+  keyValuePairs = {},
   onKeyValuePairsChange,
 }) => {
   const [openEditor, setOpenEditor] = React.useState('')

@@ -17,7 +17,7 @@ type TestsEditorProps = {
 };
 
 const TestsEditor: React.FC<TestsEditorProps> = ({
-  tests,
+  tests = {},
   onTestsChange,
 }) => {
   const [inputKeys, setInputKeys] = React.useState<{ [key: string]: string }>(

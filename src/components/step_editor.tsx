@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   AppBar,
   Box,
@@ -37,24 +37,30 @@ export default function StepEditor({ step, onDelete, onDuplicate, moveItem, depe
   const [dependentsSatisfied, setDependentsSatisfied] = useState(step.areDependentsSatisfied(dependentData))
   const [description, setDescription] = useState(step.getDescription())
 
+  const stepRef = useRef(step);
+  const dependentDataRef = useRef(dependentData)
+
   useEffect(() => {
+    stepRef.current = step;
+    dependentDataRef.current = dependentData;
+
     setDependentsSatisfied(step.areDependentsSatisfied(dependentData))
     setIsComplete(step.isStepCompleted(dependentData))
-  }, [dependentData])
+  }, [dependentData, step])
 
   useEffect(() => {
     const callback = () => {
-      setDependentsSatisfied(step.areDependentsSatisfied(dependentData))
-      setIsComplete(step.isStepCompleted(dependentData))
+      setDependentsSatisfied(stepRef.current.areDependentsSatisfied(dependentDataRef.current))
+      setIsComplete(stepRef.current.isStepCompleted(dependentDataRef.current))
 
-      setTemperature(step.getTemperature())
-      setDescription(step.getDescription())
+      setTemperature(stepRef.current.getTemperature())
+      setDescription(stepRef.current.getDescription())
     };
 
     step.subscribe(callback);
 
     return () => {
-      step.unsubscribe(callback);
+      stepRef.current.unsubscribe(callback);
     }
   }, [step]);
 
