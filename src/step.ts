@@ -43,6 +43,14 @@ export class Step extends EventEmitter {
     this.on('update', callback);
   }
 
+  public subscribePartialData(callback: (updates: KeyValuePairs) => void): void {
+    this.on('updatePartialData', callback);
+  }
+
+  public subscribeData(callback: (updates: KeyValuePairs) => void): void {
+    this.on('updateData', callback);
+  }
+
   public unsubscribe(callback: () => void): void {
     this.removeListener('update', callback);
   }
@@ -136,7 +144,7 @@ export class Step extends EventEmitter {
     return "unknown"
   }
 
-  public async runCompletion(dependentData: { [key: string]: string }): Promise<boolean> {
+  public async runStrategies(dependentData: { [key: string]: string }): Promise<boolean> {
     if (!this.areDependentsSatisfied(dependentData)) {
       return false;
     }
@@ -149,15 +157,26 @@ export class Step extends EventEmitter {
 
       const promises = [];
       for (const outputKey in keyValuePairs) {
+        let lastSeen = "";
+        let outputReceived = false;
+        let partialUpdate = (output: string) => {
+          lastSeen = output;
+          outputReceived = true;
+          this.emit('updatePartialData', { [outputKey]: output });
+        };
+        let after = () => {
+          if (outputReceived) {
+            this.emit('updateData', { [outputKey]: lastSeen });
+          }
+        };
+
         const promise = strategy.process(
           outputKey,
           keyValuePairs[outputKey],
           mergedData,
           this.temperature,
-          (output: string) => {
-            this.emit('update', { [outputKey]: output });
-          }
-        );
+          partialUpdate
+        ).then(after);
         promises.push(promise);
       }
 

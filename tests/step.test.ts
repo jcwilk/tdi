@@ -49,7 +49,7 @@ describe('Step', () => {
     const mockGetCompletion = getCompletion as jest.Mock;
     const dependentData = { dependency1: '' };
 
-    const result = await step.runCompletion(dependentData);
+    const result = await step.runStrategies(dependentData);
 
     expect(result).toBe(false);
     expect(mockGetCompletion).not.toHaveBeenCalled();
@@ -74,7 +74,7 @@ describe('Step', () => {
 
     const dependentData = { dependency1: 'Test value' };
 
-    const result = await step.runCompletion(dependentData);
+    const result = await step.runStrategies(dependentData);
 
     expect(result).toBe(true);
     expect(mockGetCompletion).toHaveBeenCalledTimes(1);

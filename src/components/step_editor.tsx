@@ -19,6 +19,7 @@ import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import StepSpecEditor from './step_spec_editor'
 import { ConnectableElement, useDrag, useDrop } from 'react-dnd';
+import md5 from 'js-md5';
 
 interface StepEditorProps {
   step: Step;
@@ -39,6 +40,7 @@ export default function StepEditor({ step, onDelete, onDuplicate, moveItem, depe
 
   const stepRef = useRef(step);
   const dependentDataRef = useRef(dependentData)
+  const dataHash = md5(JSON.stringify(dependentData))
 
   useEffect(() => {
     stepRef.current = step;
@@ -46,7 +48,7 @@ export default function StepEditor({ step, onDelete, onDuplicate, moveItem, depe
 
     setDependentsSatisfied(step.areDependentsSatisfied(dependentData))
     setIsComplete(step.isStepCompleted(dependentData))
-  }, [dependentData, step])
+  }, [dataHash, step])
 
   useEffect(() => {
     const callback = () => {
@@ -83,7 +85,7 @@ export default function StepEditor({ step, onDelete, onDuplicate, moveItem, depe
 
   const handleStep = async () => {
     setIsLoading(true);
-    await step.runCompletion(dependentData);
+    await step.runStrategies(dependentData);
     setIsLoading(false);
   };
 

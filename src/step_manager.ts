@@ -103,20 +103,47 @@ export class StepManager extends EventEmitter {
     const step = new Step()
     this.steps.push(step)
 
-    const callback = (data: KeyValuePairs) => {
-      // Merge data from the step's update event into dependentData
+    const partialDataUpdate = (data: KeyValuePairs) => {
       this.dependentData = { ...this.dependentData, ...data }
       this.pruneDependentData()
-
-      if (!this.getName() && this.dependentData.name) this.setName(this.dependentData.name)
 
       this.emit('update')
     }
 
-    step.subscribe(callback)
-    callback({})
+    const dataUpdate = (data: KeyValuePairs) => {
+      this.dependentData = { ...this.dependentData, ...data }
+      this.pruneDependentData()
+
+      if (!this.getName() && data._name) this.setName(data._name)
+
+      if (data._new_step) this.addNewStepFromJSON(data._new_step)
+
+      this.emit('update')
+    }
+
+    const stepUpdate = (data: KeyValuePairs) => {
+      this.dependentData = { ...this.dependentData, ...data }
+      this.pruneDependentData()
+
+      this.emit('update')
+    }
+
+    step.subscribePartialData(partialDataUpdate)
+    step.subscribeData(dataUpdate)
+    step.subscribe(stepUpdate)
 
     return step
+  }
+
+  private addNewStepFromJSON(json: string): void {
+    let parsed;
+    try {
+      parsed = JSON.parse(json);
+    } catch (err) {
+      return;
+    }
+    const newStep = this.addStep();
+    newStep.setSaveData(parsed);
   }
 
   public getDependentData(): { [key: string]: string } {
