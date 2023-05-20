@@ -109,7 +109,6 @@ export default function BoxPopup({
           <TextField
             multiline
             fullWidth
-            rows={10}
             value={textValue}
             variant="outlined"
             onChange={handleChange}
