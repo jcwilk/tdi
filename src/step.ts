@@ -56,7 +56,8 @@ export class Step extends EventEmitter {
   }
 
   public hasCompletions(): boolean {
-    return Object.values(this.spec.completion || {}).some(value => !!value && value.length > 0)
+    return Object.values(this.spec.completion || {}).some(Boolean) ||
+      Object.values(this.spec.chat || {}).some(Boolean);
   }
 
   public destroy(): void {
