@@ -150,7 +150,8 @@ export class Step extends EventEmitter {
       return false;
     }
 
-    const mergedData = { ...emptyStringValues(this.spec.input), ...dependentData };
+    const filteredDependentData = Object.fromEntries(Object.entries(dependentData).filter(([key]) => this.spec.depends.includes(key)));
+    const mergedData = { ...emptyStringValues(this.spec.input), ...filteredDependentData };
 
     const processStrategyType = async (strategyType: StrategyType) => {
       const strategy = StrategyFactory.createStrategy(strategyType);
