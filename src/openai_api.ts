@@ -108,7 +108,7 @@ export async function getChatCompletion(
       body: JSON.stringify({
         messages,
         model: "gpt-4",
-        max_tokens: 1900,
+        max_tokens: 4000,
         temperature,
         stream: true
       })
