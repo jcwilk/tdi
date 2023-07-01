@@ -11,12 +11,15 @@ import FolderIcon from '@mui/icons-material/Folder';
 import CodeIcon from '@mui/icons-material/Code'; // Import the CodeIcon for the new button
 import { APIKeyFetcher } from '../api_key_storage';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import Client from './chat/client'
+import ChatIcon from '@mui/icons-material/Chat';
 
 export default function TextFieldsForm() {
   const [stepManager, setStepManager] = useState<StepManager | null>(null);
   const [apiKey, setApiKey] = useState<boolean>(!!APIKeyFetcher());
   const [showSavedFunctionsDialog, setShowSavedFunctionsDialog] = useState<boolean>(false);
   const [showEditSpecificationsCodeDialog, setShowEditSpecificationsCodeDialog] = useState<boolean>(false); // New state for the new dialog
+  const [currentlyChatting, setCurrentlyChatting] = useState<boolean>(false); // TODO: set based on query param
 
   const loadStepManager = () => {
     if (apiKey === null) return;
@@ -39,6 +42,10 @@ export default function TextFieldsForm() {
   const handleApiKeySubmit = () => {
     setApiKey(true);
   };
+
+  const handleSwitchToFromChat = () => {
+    setCurrentlyChatting(!currentlyChatting);
+  }
 
   const handleOpenSavedFunctionsDialog = () => {
     setShowSavedFunctionsDialog(true);
@@ -78,8 +85,9 @@ export default function TextFieldsForm() {
             gap: '8px',
           }}
         >
-          <Button variant="contained" onClick={handleOpenSavedFunctionsDialog}>
-            <FolderIcon />
+
+          <Button variant="contained" onClick={handleSwitchToFromChat}>
+            <ChatIcon />
           </Button>
           <Button variant="contained" onClick={handleOpenEditSpecificationsCodeDialog}>
             <CodeIcon />
@@ -88,7 +96,12 @@ export default function TextFieldsForm() {
             <FolderIcon />
           </Button>
         </Box>
-        <StepEditors stepManager={stepManager} />
+        {currentlyChatting &&
+          <Client/>
+        }
+        {!currentlyChatting &&
+          <StepEditors stepManager={stepManager} />
+        }
         {showEditSpecificationsCodeDialog && (
           <EditSpecificationsCode
             stepManager={stepManager}
