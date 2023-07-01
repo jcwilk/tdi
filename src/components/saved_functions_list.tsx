@@ -20,7 +20,6 @@ import { TransitionProps } from '@mui/material/transitions';
 
 interface SavedFunctionsListProps {
   stepManager: StepManager;
-  updateTrigger: number;
   onClose: () => void;
   onSelect: (functionData: FunctionData) => void;
 }
@@ -34,7 +33,7 @@ const Transition = forwardRef(function Transition(
   return <Slide direction="up" ref={ref} {...props} />;
 });
 
-export default function SavedFunctionsList({ stepManager, updateTrigger, onClose, onSelect }: SavedFunctionsListProps) {
+export default function SavedFunctionsList({ stepManager, onClose, onSelect }: SavedFunctionsListProps) {
   const [savedFunctions, setSavedFunctions] = useState<FunctionData[]>([]);
   const indexedDBManager = new IndexedDBManager('FunctionsDB', 'functions');
 

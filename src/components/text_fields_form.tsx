@@ -17,7 +17,6 @@ export default function TextFieldsForm() {
   const [apiKey, setApiKey] = useState<boolean>(!!APIKeyFetcher());
   const [showSavedFunctionsDialog, setShowSavedFunctionsDialog] = useState<boolean>(false);
   const [showEditSpecificationsCodeDialog, setShowEditSpecificationsCodeDialog] = useState<boolean>(false); // New state for the new dialog
-  const [savedFunctionsUpdateTrigger, setSavedFunctionsUpdateTrigger] = useState<number>(0);
 
   const loadStepManager = () => {
     if (apiKey === null) return;
@@ -79,6 +78,9 @@ export default function TextFieldsForm() {
             gap: '8px',
           }}
         >
+          <Button variant="contained" onClick={handleOpenSavedFunctionsDialog}>
+            <FolderIcon />
+          </Button>
           <Button variant="contained" onClick={handleOpenEditSpecificationsCodeDialog}>
             <CodeIcon />
           </Button>
@@ -96,7 +98,6 @@ export default function TextFieldsForm() {
         {showSavedFunctionsDialog && (
           <SavedFunctionsList
             stepManager={stepManager}
-            updateTrigger={savedFunctionsUpdateTrigger}
             onClose={handleClose}
             onSelect={handleFunctionSelect}
           />
