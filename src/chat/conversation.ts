@@ -1,46 +1,58 @@
-import { BehaviorSubject, ReplaySubject, Subscription, merge } from 'rxjs';
-import { Message, Participant, configureParticipantStreams } from './participantSubjects';
-import { setupOutgoingMessageStream, teardownOutgoingMessageStream } from './outgoingMessageStream';
-import { setupTypingStream, teardownTypingStream } from './typingStream';
+import { BehaviorSubject, ReplaySubject, Subject, Subscription, merge } from 'rxjs';
+import { Participant, subscribeWhileAlive } from './participantSubjects';
+
+export type Message = {
+  id: string;
+  content: string;
+  participantId: string;
+  role: string; // 'user' or any other string implies a named ai agent
+};
+
+export type TypingUpdate = {
+  participantId: string;
+  content: string;
+}
 
 export type Conversation = {
   participants: Participant[];
   outgoingMessageStream$: ReplaySubject<Message>;
-  typingStream$: BehaviorSubject<Map<string, string>>;
+  typingStreamInput$: Subject<TypingUpdate>;
+  typingAggregationOutput$: BehaviorSubject<Map<string, string>>;
   outgoingMessageStreamSubscription?: Subscription;
-  typingStreamSubscriptions: Subscription[];
 };
 
 export function createConversation(): Conversation {
-  return {
+  const conversation: Conversation = {
     participants: [],
-    outgoingMessageStream$: new ReplaySubject(1),
-    typingStream$: new BehaviorSubject(new Map()),
-    typingStreamSubscriptions: []
-  };
+    outgoingMessageStream$: new ReplaySubject(10000),
+    typingStreamInput$: new Subject<TypingUpdate>(),
+    typingAggregationOutput$: new BehaviorSubject(new Map())
+  }
+
+  conversation.typingStreamInput$.subscribe({
+    next: ({participantId, content}) => {
+      const newTypingValues = new Map(conversation.typingAggregationOutput$.value);
+      newTypingValues.set(participantId, content);
+      conversation.typingAggregationOutput$.next(newTypingValues);
+    },
+  });
+
+  return conversation;
 }
 
 export function addParticipant(
   conversation: Conversation,
   participant: Participant
 ): Conversation {
-  configureParticipantStreams(participant, conversation);
+  subscribeWhileAlive(participant, conversation.outgoingMessageStream$, participant.incomingMessageStream);
+  subscribeWhileAlive(participant, participant.sendingStream, conversation.outgoingMessageStream$);
+  subscribeWhileAlive(participant, participant.typingStream, conversation.typingStreamInput$);
 
   const newParticipants = [...conversation.participants, participant];
 
-  conversation.outgoingMessageStreamSubscription?.unsubscribe();
-  const subscription = merge(
-    ...newParticipants.map(participant => participant.sendingStream)
-  ).subscribe(message => conversation.outgoingMessageStream$.next(message));
-
-  teardownTypingStream(conversation.typingStreamSubscriptions);
-  const typingStreamSubscriptions = setupTypingStream(newParticipants, conversation.typingStream$);
-
   return {
     ...conversation,
-    participants: newParticipants,
-    outgoingMessageStreamSubscription: subscription,
-    typingStreamSubscriptions
+    participants: newParticipants
   }
 }
 
@@ -50,20 +62,9 @@ export function removeParticipant(conversation: Conversation, id: string): Conve
 
   const newParticipants = conversation.participants.filter(participant => participant.id !== id);
 
-  if (conversation.outgoingMessageStreamSubscription) {
-    teardownOutgoingMessageStream(conversation.outgoingMessageStreamSubscription);
-  }
-  teardownTypingStream(conversation.typingStreamSubscriptions);
-
-  const { outgoingMessageStream$, subscription } = setupOutgoingMessageStream(newParticipants, conversation.outgoingMessageStream$);
-  const typingStreamSubscriptions = setupTypingStream(newParticipants, conversation.typingStream$);
-
   return {
     ...conversation,
-    participants: newParticipants,
-    outgoingMessageStreamSubscription: subscription,
-    outgoingMessageStream$,
-    typingStreamSubscriptions
+    participants: newParticipants
   };
 }
 

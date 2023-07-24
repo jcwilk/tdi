@@ -1,6 +1,6 @@
 // conversation.test.ts
-import { addParticipant, createConversation } from '../../src/chat/conversation';
-import { Message, createParticipant } from '../../src/chat/participantSubjects';
+import { Message, addParticipant, createConversation } from '../../src/chat/conversation';
+import { createParticipant } from '../../src/chat/participantSubjects';
 import { TestScheduler } from 'rxjs/testing';
 
 describe('Conversation', () => {
@@ -12,28 +12,27 @@ describe('Conversation', () => {
     });
   });
 
-  it('creates a conversation with the correct initial state', () => {
-    const { participants, outgoingMessageStream$, typingStream$ } = createConversation();
-    expect(participants).toEqual([]);
-    expect(outgoingMessageStream$).toBeDefined();
-    expect(typingStream$).toBeDefined();
-  });
-
   it('correctly processes typing and message sending of participants', () => {
     testScheduler.run(({ cold, expectObservable }) => {
-      const participant = createParticipant('user');
-      const conversation = addParticipant(createConversation(), participant);
-      const { outgoingMessageStream$, typingStream$ } = conversation;
+      const user = createParticipant('user');
+      const agent = createParticipant('agent');
+      const conversationOnlyUser = addParticipant(createConversation(), user);
+      const conversation = addParticipant(conversationOnlyUser, agent);
 
-      cold('-a').subscribe(() => participant.typingStream.next('Hello'));
-      expectObservable(typingStream$).toBe('ab', {
-        a: new Map([[participant.id, '']]),
-        b: new Map([[participant.id, 'Hello']])
+      const { outgoingMessageStream$, typingAggregationOutput$ } = conversation;
+
+      cold('a-').subscribe(() => user.typingStreamInput$.next('Hello'));
+      cold('-a').subscribe(() => agent.typingStreamInput$.next('Welcome!'));
+      expectObservable(typingAggregationOutput$).toBe('ab', {
+        a: new Map([[user.id, 'Hello'], [agent.id, '']]),
+        b: new Map([[user.id, 'Hello'], [agent.id, 'Welcome!']])
       });
 
-      const message: Message = { id: 'm1', content: 'Hello', participantId: 'p1', role: 'user' };
-      cold('-a').subscribe(() => participant.sendingStream.next(message));
-      expectObservable(outgoingMessageStream$).toBe('-a', { a: message });
+      const message1: Message = { id: 'm1', content: 'Test', participantId: user.id, role: user.role };
+      const message2: Message = { id: 'm2', content: 'Test2', participantId: agent.id, role: agent.role };
+      cold('a-').subscribe(() => user.sendingStream.next(message1));
+      cold('-a').subscribe(() => agent.sendingStream.next(message2));
+      expectObservable(outgoingMessageStream$).toBe('ab', { a: message1, b: message2 });
     });
   });
 });

@@ -36,8 +36,11 @@ describe('Participant', () => {
     testScheduler.run(({ cold, expectObservable }) => {
       const participant = createParticipant('AI');
 
-      cold('-a').subscribe(() => participant.typingStream.next('Hello'));
-      expectObservable(participant.typingStream).toBe('ab', { a: '', b: 'Hello' });
+      cold('-a').subscribe(() => participant.typingStreamInput$.next('Hello'));
+      expectObservable(participant.typingStream).toBe('ab', {
+        a: {participantId: participant.id, content: ''},
+        b: {participantId: participant.id, content: 'Hello'}
+      });
     });
   });
 });

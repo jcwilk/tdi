@@ -1,17 +1,11 @@
-import { BehaviorSubject, Subject, ReplaySubject, takeUntil } from 'rxjs';
-import { Conversation } from './conversation';
-
-export type Message = {
-  id: string;
-  content: string;
-  participantId: string;
-  role: string; // 'user' or any other string implies a named ai agent
-};
+import { BehaviorSubject, Subject, ReplaySubject, takeUntil, Observable } from 'rxjs';
+import { Message, TypingUpdate } from './conversation';
 
 export type Participant = {
   id: string;
   role: string;
-  typingStream: BehaviorSubject<string>;
+  typingStreamInput$: Subject<string>;
+  typingStream: BehaviorSubject<TypingUpdate>;
   sendingStream: Subject<Message>;
   incomingMessageStream: ReplaySubject<Message>;
   stopListening$: Subject<void>;
@@ -21,21 +15,31 @@ let currentId = 0;
 
 export function createParticipant(role: string): Participant {
   const id = `p${currentId++}`;
-  return {
+  const participant: Participant = {
     id,
     role,
-    typingStream: new BehaviorSubject(''),
+    typingStreamInput$: new Subject<string>(),
+    typingStream: new BehaviorSubject({ participantId: id, content: '' }),
     sendingStream: new Subject(),
-    incomingMessageStream: new ReplaySubject(1),
+    incomingMessageStream: new ReplaySubject(10000),
     stopListening$: new Subject()
   };
+
+  participant.typingStreamInput$.subscribe({
+    next: (content) => {
+      participant.typingStream.next({ participantId: id, content });
+    }
+  });
+
+  return participant;
 }
 
-export function configureParticipantStreams(
+export function subscribeWhileAlive(
   participant: Participant,
-  conversation: Conversation
+  source: Observable<any>,
+  subscriber: Subject<any>
 ): void {
-  conversation.outgoingMessageStream$.pipe(
+  source.pipe(
     takeUntil(participant.stopListening$)
-  ).subscribe(participant.incomingMessageStream);
+  ).subscribe(subscriber);
 }
