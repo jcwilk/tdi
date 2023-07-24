@@ -1,12 +1,15 @@
 import { Button, TextField, Box } from '@mui/material';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Subject, BehaviorSubject, ReplaySubject, merge } from 'rxjs';
+
+type Message = {
+  id: string;
+  text: string;
+  role: string
+}
 
 type MessageProps = {
-  message: {
-    id: string;
-    text: string;
-    role: string;
-  };
+  message: Message;
 };
 
 const Message: React.FC<MessageProps> = ({ message }) => {
@@ -30,6 +33,13 @@ const Message: React.FC<MessageProps> = ({ message }) => {
   );
 };
 
+const currentTypingMessageStream = new BehaviorSubject<string>('');
+const outgoingMessageStream = new Subject<Message>();
+const agentsMessageStream = new Subject<Message>();
+const mergedHistoryStream = new ReplaySubject<Message>(100); // hold on to the past 100 messages
+
+merge(outgoingMessageStream, agentsMessageStream).subscribe(mergedHistoryStream)
+
 const Client: React.FC = () => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<
@@ -38,15 +48,34 @@ const Client: React.FC = () => {
 
   const inputRef = useRef<any>(null);
 
+  useEffect(() => {
+    const typingSub = currentTypingMessageStream.subscribe((message: string) => {
+      setText(message)
+    })
+
+    const msgSub = mergedHistoryStream.subscribe((message: Message) => {
+      setMessages(priorMessages => [message, ...priorMessages]);
+    })
+
+    const outgoingSub = outgoingMessageStream.subscribe((message: Message) => {
+      setText('');
+      inputRef.current.focus();
+    })
+
+    return () => {
+      typingSub.unsubscribe()
+      msgSub.unsubscribe()
+      outgoingSub.unsubscribe()
+    }
+  }, [])
+
   const sendMessage = () => {
     const newMessage = {
       id: Math.random().toString(), // Generating a random id for the message
-      text: text,
+      text: currentTypingMessageStream.getValue(),
       role: 'user',
     };
-    setMessages([newMessage, ...messages]);
-    setText('');
-    inputRef.current.focus();
+    outgoingMessageStream.next(newMessage)
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -92,7 +121,7 @@ const Client: React.FC = () => {
           label="Message"
           variant="outlined"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => currentTypingMessageStream.next(e.target.value)}
           onKeyDown={handleKeyDown}
           inputRef={inputRef}
         />
