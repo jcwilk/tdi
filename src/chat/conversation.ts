@@ -1,4 +1,4 @@
-import { BehaviorSubject, ReplaySubject, Subject, Subscription, merge } from 'rxjs';
+import { BehaviorSubject, ReplaySubject, Subject, Subscription } from 'rxjs';
 import { Participant, subscribeWhileAlive } from './participantSubjects';
 
 export type Message = {

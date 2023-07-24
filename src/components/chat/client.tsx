@@ -1,18 +1,13 @@
-import { Button, TextField, Box } from '@mui/material';
-import React, { useState, useRef, useEffect } from 'react';
-import { Subject, BehaviorSubject, ReplaySubject, merge } from 'rxjs';
-
-type Message = {
-  id: string;
-  text: string;
-  role: string
-}
+import React, { useEffect, useState, useRef } from 'react';
+import { TextField, Button, Box } from '@mui/material';
+import { createParticipant } from '../../chat/participantSubjects';
+import { Message, createConversation, addParticipant } from '../../chat/conversation';
 
 type MessageProps = {
   message: Message;
 };
 
-const Message: React.FC<MessageProps> = ({ message }) => {
+const MessageBox: React.FC<MessageProps> = ({ message }) => {
   const isUser = message.role === 'user';
 
   return (
@@ -28,59 +23,63 @@ const Message: React.FC<MessageProps> = ({ message }) => {
         color: isUser ? '#fff' : '#f5f5f5',
       }}
     >
-      {message.text}
+      {message.content}
     </Box>
   );
 };
 
-const currentTypingMessageStream = new BehaviorSubject<string>('');
-const outgoingMessageStream = new Subject<Message>();
-const agentsMessageStream = new Subject<Message>();
-const mergedHistoryStream = new ReplaySubject<Message>(100); // hold on to the past 100 messages
-
-merge(outgoingMessageStream, agentsMessageStream).subscribe(mergedHistoryStream)
-
 const Client: React.FC = () => {
   const [text, setText] = useState('');
-  const [messages, setMessages] = useState<
-    { id: string; text: string; role: string }[]
-  >([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  const [conversation, setConversation] = useState(
+    addParticipant(
+      addParticipant(createConversation(), createParticipant('user')),
+      createParticipant('assistant')
+    )
+  );
+
+  const user = conversation.participants.find(participant => participant.role === 'user')!;
+  const assistant = conversation.participants.find(participant => participant.role === 'assistant')!;
+
+  const { outgoingMessageStream$, typingAggregationOutput$ } = conversation;
 
   const inputRef = useRef<any>(null);
 
   useEffect(() => {
-    const typingSub = currentTypingMessageStream.subscribe((message: string) => {
-      setText(message)
-    })
+    const typingSub = typingAggregationOutput$.subscribe((typing: Map<string, string>) => {
+      setText(typing.get(user.id) || '');
+    });
 
-    const msgSub = mergedHistoryStream.subscribe((message: Message) => {
-      setMessages(priorMessages => [message, ...priorMessages]);
-    })
+    const msgSub = outgoingMessageStream$.subscribe((message: Message) => {
+      setMessages(previousMessages => [message, ...previousMessages]);
+    });
 
-    const outgoingSub = outgoingMessageStream.subscribe((message: Message) => {
+    const outgoingSub = outgoingMessageStream$.subscribe(() => {
       setText('');
       inputRef.current.focus();
-    })
+    });
 
     return () => {
-      typingSub.unsubscribe()
-      msgSub.unsubscribe()
-      outgoingSub.unsubscribe()
-    }
-  }, [])
+      typingSub.unsubscribe();
+      msgSub.unsubscribe();
+      outgoingSub.unsubscribe();
+    };
+  }, [outgoingMessageStream$, typingAggregationOutput$]);
 
   const sendMessage = () => {
-    const newMessage = {
-      id: Math.random().toString(), // Generating a random id for the message
-      text: currentTypingMessageStream.getValue(),
+    const newMessage: Message = {
+      id: Math.random().toString(),
+      participantId: user.id,
+      content: text,
       role: 'user',
     };
-    outgoingMessageStream.next(newMessage)
+    user.sendingStream.next(newMessage);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && text !== '') {
-      event.preventDefault(); // To prevent form submission in case TextField is used within a form
+      event.preventDefault();
       sendMessage();
     }
   };
@@ -102,11 +101,11 @@ const Client: React.FC = () => {
           display: 'flex',
           flexDirection: 'column-reverse',
           padding: '20px',
-          userSelect: 'none', // Prevent user selection
+          userSelect: 'none',
         }}
       >
         {messages.map((message) => (
-          <Message key={message.id} message={message} />
+          <MessageBox key={message.id} message={message} />
         ))}
       </Box>
       <Box
@@ -121,7 +120,7 @@ const Client: React.FC = () => {
           label="Message"
           variant="outlined"
           value={text}
-          onChange={(e) => currentTypingMessageStream.next(e.target.value)}
+          onChange={(e) => user.typingStreamInput$.next(e.target.value)}
           onKeyDown={handleKeyDown}
           inputRef={inputRef}
         />
@@ -129,7 +128,7 @@ const Client: React.FC = () => {
           variant="contained"
           color="primary"
           onClick={sendMessage}
-          disabled={text === ''} // Disable button when text is empty
+          disabled={text === ''}
         >
           Send
         </Button>
