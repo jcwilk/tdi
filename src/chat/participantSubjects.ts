@@ -1,5 +1,6 @@
 import { BehaviorSubject, Subject, ReplaySubject, takeUntil, Observable } from 'rxjs';
 import { Message, TypingUpdate } from './conversation';
+import { v4 as uuidv4 } from 'uuid';
 
 export type Participant = {
   id: string;
@@ -11,10 +12,8 @@ export type Participant = {
   stopListening$: Subject<void>;
 };
 
-let currentId = 0;
-
 export function createParticipant(role: string): Participant {
-  const id = `p${currentId++}`;
+  const id = uuidv4();
   const participant: Participant = {
     id,
     role,
@@ -32,6 +31,24 @@ export function createParticipant(role: string): Participant {
   });
 
   return participant;
+}
+
+export function typeMessage(participant: Participant, content: string): void {
+  participant.typingStreamInput$.next(content);
+}
+
+export function sendMessage(participant: Participant): void {
+  const { content } = participant.typingStream.value;
+
+  if(!content) return;
+
+  participant.sendingStream.next({
+    id: uuidv4(),
+    content,
+    participantId: participant.id,
+    role: participant.role
+  });
+  participant.typingStreamInput$.next('');
 }
 
 export function subscribeWhileAlive(

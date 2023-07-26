@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { TextField, Button, Box } from '@mui/material';
-import { createParticipant } from '../../chat/participantSubjects';
+import { createParticipant, sendMessage, typeMessage } from '../../chat/participantSubjects';
 import { Message, createConversation, addParticipant } from '../../chat/conversation';
+import { addAssistant } from '../../chat/ai_agent';
 
 type MessageProps = {
   message: Message;
@@ -31,12 +32,15 @@ const MessageBox: React.FC<MessageProps> = ({ message }) => {
 const Client: React.FC = () => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [assistantTyping, setAssistantTyping] = useState('');
 
   const [conversation, setConversation] = useState(
-    addParticipant(
-      addParticipant(createConversation(), createParticipant('user')),
-      createParticipant('assistant')
-    )
+    addAssistant(
+      addParticipant(
+        createConversation(),
+        createParticipant('user')
+      )
+    ).conversation
   );
 
   const user = conversation.participants.find(participant => participant.role === 'user')!;
@@ -49,38 +53,23 @@ const Client: React.FC = () => {
   useEffect(() => {
     const typingSub = typingAggregationOutput$.subscribe((typing: Map<string, string>) => {
       setText(typing.get(user.id) || '');
+      setAssistantTyping(typing.get(assistant.id) || '');
     });
 
     const msgSub = outgoingMessageStream$.subscribe((message: Message) => {
       setMessages(previousMessages => [message, ...previousMessages]);
     });
 
-    const outgoingSub = outgoingMessageStream$.subscribe(() => {
-      setText('');
-      inputRef.current.focus();
-    });
-
     return () => {
       typingSub.unsubscribe();
       msgSub.unsubscribe();
-      outgoingSub.unsubscribe();
     };
   }, [outgoingMessageStream$, typingAggregationOutput$]);
 
-  const sendMessage = () => {
-    const newMessage: Message = {
-      id: Math.random().toString(),
-      participantId: user.id,
-      content: text,
-      role: 'user',
-    };
-    user.sendingStream.next(newMessage);
-  };
-
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && text !== '') {
+    if (event.key === 'Enter') {
       event.preventDefault();
-      sendMessage();
+      sendMessage(user);
     }
   };
 
@@ -104,6 +93,22 @@ const Client: React.FC = () => {
           userSelect: 'none',
         }}
       >
+        {assistantTyping && (
+          <Box
+            sx={{
+              marginBottom: '10px',
+              alignSelf: 'flex-start',
+              backgroundColor: '#616161',
+              borderRadius: '10px',
+              padding: '10px',
+              maxWidth: '70%',
+              wordWrap: 'break-word',
+              color: '#f5f5f5',
+            }}
+          >
+            {assistantTyping}
+          </Box>
+        )}
         {messages.map((message) => (
           <MessageBox key={message.id} message={message} />
         ))}
@@ -120,14 +125,14 @@ const Client: React.FC = () => {
           label="Message"
           variant="outlined"
           value={text}
-          onChange={(e) => user.typingStreamInput$.next(e.target.value)}
+          onChange={(e) => typeMessage(user, e.target.value)}
           onKeyDown={handleKeyDown}
           inputRef={inputRef}
         />
         <Button
           variant="contained"
           color="primary"
-          onClick={sendMessage}
+          onClick={() => { sendMessage(user); inputRef.current.focus();}}
           disabled={text === ''}
         >
           Send

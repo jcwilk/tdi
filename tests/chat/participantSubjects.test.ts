@@ -1,5 +1,5 @@
 // participantSubjects.test.ts
-import { createParticipant } from '../../src/chat/participantSubjects';
+import { createParticipant, sendMessage, typeMessage } from '../../src/chat/participantSubjects';
 import { TestScheduler } from 'rxjs/testing';
 
 describe('Participant', () => {
@@ -16,30 +16,19 @@ describe('Participant', () => {
     expect(participant.role).toBe('AI');
   });
 
-  it('allows participant to send a message', () => {
+  it('allows participant to type and send a message', () => {
     testScheduler.run(({ cold, expectObservable }) => {
       const participant = createParticipant('AI');
 
-      const message = {
-        id: '1',
-        content: 'Hello, world!',
-        participantId: participant.id,
-        role: participant.role
-      };
-
-      cold('-a').subscribe(() => participant.sendingStream.next(message));
-      expectObservable(participant.sendingStream).toBe('-a', { a: message });
-    });
-  });
-
-  it('allows participant to type a message', () => {
-    testScheduler.run(({ cold, expectObservable }) => {
-      const participant = createParticipant('AI');
-
-      cold('-a').subscribe(() => participant.typingStreamInput$.next('Hello'));
-      expectObservable(participant.typingStream).toBe('ab', {
-        a: {participantId: participant.id, content: ''},
-        b: {participantId: participant.id, content: 'Hello'}
+      cold('a-').subscribe(() => typeMessage(participant, 'Hello'));
+      cold('-a').subscribe(() => sendMessage(participant));
+      expectObservable(participant.sendingStream).toBe('-a', {
+        a: {
+          id: expect.any(String),
+          content: 'Hello',
+          participantId: participant.id,
+          role: participant.role
+        }
       });
     });
   });
