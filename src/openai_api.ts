@@ -93,6 +93,7 @@ function extractCompletionValue(text: string): string {
 export async function getChatCompletion(
   messages: ChatMessage[],
   temperature: number,
+  model = "gpt-4",
   onChunk: (chunk: string) => void,
 ): Promise<void> {
   const OPENAI_KEY = APIKeyFetcher();
@@ -107,7 +108,7 @@ export async function getChatCompletion(
       },
       body: JSON.stringify({
         messages,
-        model: "gpt-4",
+        model,
         max_tokens: 2000,
         temperature,
         stream: true
