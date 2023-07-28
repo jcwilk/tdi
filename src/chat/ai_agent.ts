@@ -19,7 +19,7 @@ export function addAssistant(conversation: Conversation): { conversation: Conver
   const addedConvo = addParticipant(conversation, assistant);
 
   const rawMessages = new Subject<Message>();
-  subscribeWhileAlive(assistant, addedConvo.outgoingMessageStream$, rawMessages);
+  subscribeWhileAlive(assistant, addedConvo.outgoingMessageStream, rawMessages);
 
   const messages: Message[] = [];
   rawMessages.subscribe({
@@ -42,7 +42,7 @@ export function addAssistant(conversation: Conversation): { conversation: Conver
       const typingStream = new Subject<string>();
       const sendingStream = new Subject<void>();
 
-      const interruptedMessage = addedConvo.typingAggregationOutput$.value.get(assistant.id);
+      const interruptedMessage = addedConvo.typingAggregationOutput.value.get(assistant.id);
 
       const conversationMessages = messages.map(({ role, content }) => ({ role, content }));
 

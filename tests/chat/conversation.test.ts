@@ -19,19 +19,19 @@ describe('Conversation', () => {
       const conversationOnlyUser = addParticipant(createConversation(), user);
       const conversation = addParticipant(conversationOnlyUser, agent);
 
-      const { outgoingMessageStream$, typingAggregationOutput$ } = conversation;
+      const { outgoingMessageStream, typingAggregationOutput } = conversation;
 
       cold('a-').subscribe(() => typeMessage(user, 'Hello'));
       cold('-a').subscribe(() => typeMessage(agent, 'Welcome!'));
       // TODO: too many typing events are firing somehow
-      // expectObservable(typingAggregationOutput$).toBe('ab', {
+      // expectObservable(typingAggregationOutput).toBe('ab', {
       //   a: new Map([[user.id, 'Hello'], [agent.id, '']]),
       //   b: new Map([[user.id, 'Hello'], [agent.id, 'Welcome!']])
       // });
 
       cold('a-').subscribe(() => sendMessage(user));
       cold('-a').subscribe(() => sendMessage(agent));
-      expectObservable(outgoingMessageStream$).toBe('ab', {
+      expectObservable(outgoingMessageStream).toBe('ab', {
         a: { id: expect.any(String), content: 'Hello', participantId: user.id, role: user.role },
         b: { id: expect.any(String), content: 'Welcome!', participantId: agent.id, role: agent.role }
       });

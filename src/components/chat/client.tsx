@@ -46,17 +46,17 @@ const Client: React.FC = () => {
   const user = conversation.participants.find(participant => participant.role === 'user')!;
   const assistant = conversation.participants.find(participant => participant.role === 'assistant')!;
 
-  const { outgoingMessageStream$, typingAggregationOutput$ } = conversation;
+  const { outgoingMessageStream, typingAggregationOutput } = conversation;
 
   const inputRef = useRef<any>(null);
 
   useEffect(() => {
-    const typingSub = typingAggregationOutput$.subscribe((typing: Map<string, string>) => {
+    const typingSub = typingAggregationOutput.subscribe((typing: Map<string, string>) => {
       setText(typing.get(user.id) || '');
       setAssistantTyping(typing.get(assistant.id) || '');
     });
 
-    const msgSub = outgoingMessageStream$.subscribe((message: Message) => {
+    const msgSub = outgoingMessageStream.subscribe((message: Message) => {
       setMessages(previousMessages => [message, ...previousMessages]);
     });
 
@@ -64,7 +64,7 @@ const Client: React.FC = () => {
       typingSub.unsubscribe();
       msgSub.unsubscribe();
     };
-  }, [outgoingMessageStream$, typingAggregationOutput$]);
+  }, [outgoingMessageStream, typingAggregationOutput]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {

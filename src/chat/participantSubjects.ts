@@ -5,11 +5,11 @@ import { v4 as uuidv4 } from 'uuid';
 export type Participant = {
   id: string;
   role: string;
-  typingStreamInput$: Subject<string>;
+  typingStreamInput: Subject<string>;
   typingStream: BehaviorSubject<TypingUpdate>;
   sendingStream: Subject<Message>;
   incomingMessageStream: ReplaySubject<Message>;
-  stopListening$: Subject<void>;
+  stopListening: Subject<void>;
 };
 
 export function createParticipant(role: string): Participant {
@@ -17,14 +17,14 @@ export function createParticipant(role: string): Participant {
   const participant: Participant = {
     id,
     role,
-    typingStreamInput$: new Subject<string>(),
+    typingStreamInput: new Subject<string>(),
     typingStream: new BehaviorSubject({ participantId: id, content: '' }),
     sendingStream: new Subject(),
     incomingMessageStream: new ReplaySubject(10000),
-    stopListening$: new Subject()
+    stopListening: new Subject()
   };
 
-  participant.typingStreamInput$.subscribe({
+  participant.typingStreamInput.subscribe({
     next: (content) => {
       participant.typingStream.next({ participantId: id, content });
     }
@@ -34,7 +34,7 @@ export function createParticipant(role: string): Participant {
 }
 
 export function typeMessage(participant: Participant, content: string): void {
-  participant.typingStreamInput$.next(content);
+  participant.typingStreamInput.next(content);
 }
 
 export function sendMessage(participant: Participant): void {
@@ -48,7 +48,7 @@ export function sendMessage(participant: Participant): void {
     participantId: participant.id,
     role: participant.role
   });
-  participant.typingStreamInput$.next('');
+  participant.typingStreamInput.next('');
 }
 
 export function subscribeWhileAlive(
@@ -57,6 +57,6 @@ export function subscribeWhileAlive(
   subscriber: Subject<any>
 ): void {
   source.pipe(
-    takeUntil(participant.stopListening$)
+    takeUntil(participant.stopListening)
   ).subscribe(subscriber);
 }

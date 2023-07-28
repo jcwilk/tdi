@@ -15,25 +15,25 @@ export type TypingUpdate = {
 
 export type Conversation = {
   participants: Participant[];
-  outgoingMessageStream$: ReplaySubject<Message>;
-  typingStreamInput$: Subject<TypingUpdate>;
-  typingAggregationOutput$: BehaviorSubject<Map<string, string>>;
+  outgoingMessageStream: ReplaySubject<Message>;
+  typingStreamInput: Subject<TypingUpdate>;
+  typingAggregationOutput: BehaviorSubject<Map<string, string>>;
   outgoingMessageStreamSubscription?: Subscription;
 };
 
 export function createConversation(): Conversation {
   const conversation: Conversation = {
     participants: [],
-    outgoingMessageStream$: new ReplaySubject(10000),
-    typingStreamInput$: new Subject<TypingUpdate>(),
-    typingAggregationOutput$: new BehaviorSubject(new Map())
+    outgoingMessageStream: new ReplaySubject(10000),
+    typingStreamInput: new Subject<TypingUpdate>(),
+    typingAggregationOutput: new BehaviorSubject(new Map())
   }
 
-  conversation.typingStreamInput$.subscribe({
+  conversation.typingStreamInput.subscribe({
     next: ({participantId, content}) => {
-      const newTypingValues = new Map(conversation.typingAggregationOutput$.value);
+      const newTypingValues = new Map(conversation.typingAggregationOutput.value);
       newTypingValues.set(participantId, content);
-      conversation.typingAggregationOutput$.next(newTypingValues);
+      conversation.typingAggregationOutput.next(newTypingValues);
     },
   });
 
@@ -44,9 +44,9 @@ export function addParticipant(
   conversation: Conversation,
   participant: Participant
 ): Conversation {
-  subscribeWhileAlive(participant, conversation.outgoingMessageStream$, participant.incomingMessageStream);
-  subscribeWhileAlive(participant, participant.sendingStream, conversation.outgoingMessageStream$);
-  subscribeWhileAlive(participant, participant.typingStream, conversation.typingStreamInput$);
+  subscribeWhileAlive(participant, conversation.outgoingMessageStream, participant.incomingMessageStream);
+  subscribeWhileAlive(participant, participant.sendingStream, conversation.outgoingMessageStream);
+  subscribeWhileAlive(participant, participant.typingStream, conversation.typingStreamInput);
 
   const newParticipants = [...conversation.participants, participant];
 
@@ -58,7 +58,7 @@ export function addParticipant(
 
 export function removeParticipant(conversation: Conversation, id: string): Conversation {
   const participant = getParticipant(conversation, id);
-  participant?.stopListening$.next();
+  participant?.stopListening.next();
 
   const newParticipants = conversation.participants.filter(participant => participant.id !== id);
 
