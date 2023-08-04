@@ -1,7 +1,4 @@
-export type ChatMessage = {
-  role: string,
-  content: string
-};
+import { ChatMessage } from "./openai_api";
 
 export type ChatStep = ChatMessage[]
 

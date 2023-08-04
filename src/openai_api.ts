@@ -1,6 +1,5 @@
 import { Configuration, OpenAIApi } from 'openai';
 import { APIKeyFetcher } from './api_key_storage';
-import { ChatMessage } from './scenarios';
 
 const getClient = function(): OpenAIApi | null {
   const apiKey = APIKeyFetcher();
@@ -9,6 +8,48 @@ const getClient = function(): OpenAIApi | null {
   const configuration = new Configuration({ apiKey, organization: "org-6d0xAcuSuOUHzq8s4TejB1TQ" });
   return new OpenAIApi(configuration);
 }
+
+export type ChatMessage = {
+  role: string,
+  content: string
+};
+
+type JsonSchemaType = "string" | "number" | "object" | "array" | "boolean" | "null";
+
+type JsonSchema = {
+  type?: JsonSchemaType | JsonSchemaType[],
+  items?: JsonSchema | JsonSchema[],
+  properties?: {
+    [key: string]: JsonSchema,
+  },
+  additionalProperties?: boolean | JsonSchema,
+  required?: string[],
+  enum?: any[],
+  maximum?: number,
+  minimum?: number,
+  maxLength?: number,
+  minLength?: number,
+  pattern?: string,
+  maxItems?: number,
+  minItems?: number,
+  allOf?: JsonSchema[],
+  anyOf?: JsonSchema[],
+  oneOf?: JsonSchema[],
+  not?: JsonSchema,
+  description?: string,
+};
+
+export type FunctionOption = {
+  name: string,
+  description?: string,
+  parameters: {
+    type: "object",
+    properties: {
+      [key: string]: JsonSchema,
+    },
+    required?: string[],
+  },
+};
 
 export async function getCompletion(
   prompt: string,
@@ -89,30 +130,51 @@ function extractCompletionValue(text: string): string {
   return extractedValues;
 }
 
-// TODO: this isn't calling the callback somehow
+type ChatCompletionPayload = {
+  messages: ChatMessage[],
+  model: string,
+  max_tokens: number,
+  temperature: number,
+  stream: boolean,
+  functions?: FunctionOption[]
+}
+
+export type FunctionCall = {
+  name: string,
+  arguments: {
+    [key: string]: any,
+  }
+}
+
 export async function getChatCompletion(
   messages: ChatMessage[],
   temperature: number,
   model = "gpt-4",
+  functions: FunctionOption[],
   onChunk: (chunk: string) => void,
+  onFunctionCall: (functionCall: FunctionCall) => void = () => {},
 ): Promise<void> {
   const OPENAI_KEY = APIKeyFetcher();
   if (!OPENAI_KEY) return;
 
   try {
+    const payload: ChatCompletionPayload = {
+      messages,
+      model,
+      max_tokens: 2000,
+      temperature,
+      stream: true
+    }
+    if (functions.length > 0) {
+      payload.functions = functions;
+    }
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${APIKeyFetcher()}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        messages,
-        model,
-        max_tokens: 2000,
-        temperature,
-        stream: true
-      })
+      body: JSON.stringify(payload)
     });
     if(!response.body) return
 
@@ -126,7 +188,7 @@ export async function getChatCompletion(
 
       if (done) return onChunk(fullText.trim())
 
-      const delta = extractChatValue(decoder.decode(value))
+      const delta = extractChatValue(decoder.decode(value), onFunctionCall)
 
       if (delta.length > 0) {
         fullText += delta
@@ -145,7 +207,8 @@ export async function getChatCompletion(
   }
 }
 
-function extractChatValue(text: string): string {
+function extractChatValue(text: string, onFunctionCall: (functionCall: FunctionCall) => void): string {
+  console.log(text)
   const jsonEntries = text.split('\n').filter(entry => entry.startsWith('data: '));
   let extractedValues = '';
 
@@ -160,7 +223,18 @@ function extractChatValue(text: string): string {
       const parsedJson = JSON.parse(jsonString);
       const choices = parsedJson?.choices;
       if (choices && Array.isArray(choices) && choices.length > 0) {
-        extractedValues += choices[0]?.delta?.content || "";
+        const deltaContent = choices[0]?.delta?.content || "";
+        extractedValues += deltaContent;
+
+        const functionCall = choices[0]?.delta?.function_call;
+        if (functionCall) {
+          const functionCallParsed = {
+            name: functionCall.name,
+            arguments: functionCall.arguments ? JSON.parse(functionCall.arguments) : {}
+          };
+          console.log("function called!!!", functionCallParsed)
+          onFunctionCall(functionCallParsed);
+        }
       }
     } catch (error) {
       console.error("Error parsing JSON:", error);
