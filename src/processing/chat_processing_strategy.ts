@@ -12,6 +12,6 @@ export class ChatProcessingStrategy extends ProcessingStrategy {
       newMessage.content = this.interpolatePrompt(message.content, dependentData);
       return newMessage
     })
-    await getChatCompletion(messages, temperature, callback);
+    await getChatCompletion(messages, temperature, "gpt-4", 2000, [], callback);
   }
 }

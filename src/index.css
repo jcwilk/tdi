@@ -20,3 +20,31 @@ canvas#regl-canvas {
     position: relative;
     z-index: 1;
 }
+
+/* Sample CSS for markdown styling */
+.markdown-content {
+    white-space: normal;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+    margin-top: 1em;
+}
+
+.markdown-content a {
+    color: #1976d2; /* or any preferred link color */
+    text-decoration: none;
+}
+
+.markdown-content a:hover {
+    text-decoration: underline;
+}
+
+.markdown-content pre {
+    max-width: 100%;
+    white-space: break-spaces;
+    padding: 1em;
+    background-color: #2f2f2f;
+    border-radius: 5px;
+}

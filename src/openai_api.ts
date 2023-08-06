@@ -150,8 +150,9 @@ export async function getChatCompletion(
   messages: ChatMessage[],
   temperature: number,
   model = "gpt-4",
-  functions: FunctionOption[],
-  onChunk: (chunk: string) => void,
+  maxTokens: number,
+  functions: FunctionOption[] = [],
+  onChunk: (chunk: string) => void = () => {},
   onFunctionCall: (functionCall: FunctionCall) => void = () => {},
 ): Promise<void> {
   const OPENAI_KEY = APIKeyFetcher();
@@ -161,7 +162,7 @@ export async function getChatCompletion(
     const payload: ChatCompletionPayload = {
       messages,
       model,
-      max_tokens: 2000,
+      max_tokens: maxTokens,
       temperature,
       stream: true
     }
@@ -208,7 +209,6 @@ export async function getChatCompletion(
 }
 
 function extractChatValue(text: string, onFunctionCall: (functionCall: FunctionCall) => void): string {
-  console.log(text)
   const jsonEntries = text.split('\n').filter(entry => entry.startsWith('data: '));
   let extractedValues = '';
 
@@ -232,7 +232,6 @@ function extractChatValue(text: string, onFunctionCall: (functionCall: FunctionC
             name: functionCall.name,
             arguments: functionCall.arguments ? JSON.parse(functionCall.arguments) : {}
           };
-          console.log("function called!!!", functionCallParsed)
           onFunctionCall(functionCallParsed);
         }
       }

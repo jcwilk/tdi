@@ -1,4 +1,4 @@
-import { Observable, ReplaySubject, Subject, concat, first, from, map, merge, takeUntil } from "rxjs";
+import { Observable, ReplaySubject, Subject, concat, first, from, map, merge, of, shareReplay, takeUntil } from "rxjs";
 
 import { ChatMessage, FunctionCall, FunctionOption, getChatCompletion } from "../openai_api";
 
@@ -24,48 +24,51 @@ export function isGPTFunctionCall(message: GPTMessage): message is GPTFunctionCa
   return "functionCall" in message;
 }
 
+export function isGPTTextUpdate(message: GPTMessage): message is GPTTextUpdate {
+  return "text" in message;
+}
+
+export function isGPTStopReason(message: GPTMessage): message is GPTStopReason {
+  console.log("isGPTStopReason", message, "stopReason" in message)
+  return "stopReason" in message;
+}
+
 export type GPTMessage = GPTTextUpdate | GPTStopReason | GPTFunctionCall
 
 export function chatCompletionStreams(
   messages: ChatMessage[],
   temperature: number,
   model = "gpt-4",
-  functions: FunctionOption[],
-  cancelStream = new Observable<void>()
+  maxTokens: number,
+  functions: FunctionOption[]
 ): chatCompletionStream {
   const typingInputStream = new Subject<string>();
   const typingStream = new Subject<string>();
   const sendingStream = new ReplaySubject<void>(1);
-  const internalCancelStream = new Subject<void>();
   const functionCallInputStream = new Subject<GPTFunctionCall>();
   const functionCallStream = new Subject<GPTFunctionCall>();
-
-  cancelStream.pipe(
-    takeUntil(internalCancelStream)
-  ).subscribe(internalCancelStream);
 
   const finishObserver = from(getChatCompletion(
     messages,
     temperature,
     model,
+    maxTokens,
     functions,
     partialText => typingInputStream.next(partialText),
     functionCall => functionCallInputStream.next({ functionCall })
   ));
 
-  typingInputStream.pipe(
-    takeUntil(internalCancelStream)
-  ).subscribe(typingStream);
+  typingInputStream.subscribe(typingStream);
 
-  functionCallInputStream.pipe(
-    takeUntil(internalCancelStream)
-  ).subscribe(functionCallStream);
+  functionCallInputStream.subscribe(functionCallStream);
 
-  const limitedSendingStream = finishObserver.pipe(
-    takeUntil(internalCancelStream)
-  );
-  limitedSendingStream.subscribe(internalCancelStream);
-  limitedSendingStream.subscribe(sendingStream);
+  finishObserver.subscribe(sendingStream);
+  finishObserver.subscribe(() => {
+    typingStream.complete();
+    functionCallStream.complete();
+    sendingStream.complete();
+  });
+
 
   return {
     typingStream,
@@ -78,16 +81,18 @@ export function chatCompletionMetaStream(
   messages: ChatMessage[],
   temperature: number,
   model = "gpt-4",
-  functions: FunctionOption[],
-  cancelStream = new Observable<void>()
+  maxTokens: number,
+  functions: FunctionOption[] = []
 ): Observable<GPTMessage> {
   const { typingStream, sendingStream, functionCallStream } = chatCompletionStreams(
     messages,
     temperature,
     model,
-    functions,
-    cancelStream
+    maxTokens,
+    functions
   )
+
+  sendingStream.subscribe(val => console.log("sendingStream", val));
 
   const typingAndFunctionCallStream = merge(
     typingStream.pipe(
@@ -98,8 +103,6 @@ export function chatCompletionMetaStream(
 
   return concat(
     typingAndFunctionCallStream,
-    sendingStream.pipe(
-      map(() => ({ stopReason: "stop" } as GPTStopReason)) // TODO: implement actually checking the stop reason
-    )
+    of({ stopReason: "stop" } as GPTStopReason) // TODO: implement actually checking the stop reason
   );
 }
