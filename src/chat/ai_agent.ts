@@ -6,12 +6,7 @@ import { Participant, createParticipant, sendMessage, subscribeWhileAlive, typeM
 import { GPTMessage, chatCompletionMetaStream, chatCompletionStreams, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, GPTTextUpdate, isGPTStopReason } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
 
-const mainSystemMessage: ChatMessage = {
-  role: "system",
-  content: `
-You are an AI conversationalist. Your job is to converse with the user. Your prose, grammar, spelling, typing, etc should all be consistent with typical instant messaging discourse within the constraints of needing to put your entire response into one message to send each time. Use natural grammar rather than perfect grammar.
-  `
-}
+
 
 const interruptionFunctions: FunctionOption[] = [
   {
@@ -80,7 +75,7 @@ function logStream(stream: Observable<any>, tag: string) {
 export function addAssistant(
   conversation: Conversation
 ): Conversation {
-  sendSystemMessage(conversation, mainSystemMessage.content);
+  //sendSystemMessage(conversation, mainSystemMessage.content);
 
   const assistant = createParticipant("assistant");
 

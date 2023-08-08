@@ -4,10 +4,14 @@ import { createParticipant, sendMessage, typeMessage } from '../../chat/particip
 import { Message, createConversation, addParticipant, Conversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/ai_agent';
 import ReactMarkdown from 'react-markdown';
+import RootMessages from './rootMessages';
+import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 
 type MessageProps = {
   message: Message;
 };
+
+const db = new ConversationDB();
 
 const MessageBox: React.FC<MessageProps> = ({ message }) => {
   let alignSelf: 'flex-end' | 'flex-start' | 'center';
@@ -60,19 +64,26 @@ const MessageBox: React.FC<MessageProps> = ({ message }) => {
 
 const Client: React.FC = () => {
   const [text, setText] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
 
   const [conversation, setConversation] = useState<Conversation>();
+  const [activeRootMessage, setActiveRootMessage] = useState<MessageDB | null>(null);
 
   useEffect(() => {
-    setConversation(addAssistant(
-      addParticipant(
-        createConversation(),
-        createParticipant('user')
-      )
-    ));
-  }, []);
+    if (conversation || !activeRootMessage) return;
+
+    db.getConversationFromRoot(activeRootMessage.hash).then((conversation) => {
+      setConversation(addAssistant(
+        addParticipant(
+          createConversation(conversation),
+          createParticipant('user')
+        )
+      ));
+    })
+
+    // TODO: teardown
+  }, [activeRootMessage]);
 
   const { outgoingMessageStream, typingAggregationOutput } = conversation || {};
 
@@ -84,7 +95,7 @@ const Client: React.FC = () => {
       setAssistantTyping(typing.get(assistant.id) || '');
     });
 
-    const msgSub = outgoingMessageStream.subscribe((message: Message) => {
+    const msgSub = outgoingMessageStream.subscribe((message: MessageDB) => {
       setMessages(previousMessages => [message, ...previousMessages]);
     });
 
@@ -96,14 +107,22 @@ const Client: React.FC = () => {
 
   const inputRef = useRef<any>(null);
 
-  if (!conversation) return <></>;
-
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       sendMessage(user);
     }
   };
+
+  const handleRootMessageSelect = (rootMessage: MessageDB) => {
+    setActiveRootMessage(rootMessage);
+    // Load the messages associated with the rootMessage
+    // This can be done using the DB methods we defined, and you might need additional functions for that.
+  };
+
+  if (!activeRootMessage || !conversation) {
+    return <RootMessages db={db} onSelect={handleRootMessageSelect} />;
+  }
 
   const user = conversation.participants.find(participant => participant.role === 'user')!;
   const assistant = conversation.participants.find(participant => participant.role === 'assistant')!;
@@ -129,10 +148,10 @@ const Client: React.FC = () => {
         }}
       >
         {assistantTyping && (
-          <MessageBox message={{ id: 'assistant-typing', participantId: 'TODO', role: 'assistant', content: assistantTyping }} />
+          <MessageBox key="assistant-typing" message={{ participantId: 'TODO', role: 'assistant', content: assistantTyping }} />
         )}
         {messages.map((message) => (
-          <MessageBox key={message.id} message={message} />
+          <MessageBox key={message.hash} message={message} />
         ))}
       </Box>
       <Box

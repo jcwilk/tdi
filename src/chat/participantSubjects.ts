@@ -43,7 +43,6 @@ export function sendMessage(participant: Participant): void {
   if(!content) return;
 
   participant.sendingStream.next({
-    id: uuidv4(),
     content,
     participantId: participant.id,
     role: participant.role

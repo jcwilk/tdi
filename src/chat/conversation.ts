@@ -1,12 +1,13 @@
-import { BehaviorSubject, ReplaySubject, Subject, Subscription } from 'rxjs';
+import { BehaviorSubject, ReplaySubject, Subject, Subscription, of } from 'rxjs';
 import { Participant, createParticipant, sendMessage, subscribeWhileAlive, typeMessage } from './participantSubjects';
 import { v4 as uuidv4 } from 'uuid';
+import { MessageDB } from './conversationDb';
+import { processMessagesWithHashing } from './messagePersistence';
 
 export type Message = {
-  id: string;
   content: string;
   participantId: string;
-  role: string; // 'user' or any other string implies a named ai agent
+  role: string;
 };
 
 export type TypingUpdate = {
@@ -16,7 +17,8 @@ export type TypingUpdate = {
 
 export type Conversation = {
   participants: Participant[];
-  outgoingMessageStream: ReplaySubject<Message>;
+  newMessagesInput: Subject<Message>;
+  outgoingMessageStream: ReplaySubject<MessageDB>;
   typingStreamInput: Subject<TypingUpdate>;
   typingAggregationOutput: BehaviorSubject<Map<string, string>>;
   outgoingMessageStreamSubscription?: Subscription;
@@ -24,20 +26,44 @@ export type Conversation = {
   id: string;
 };
 
-export function createConversation(): Conversation {
+export function createConversation(loadedMessages: MessageDB[]): Conversation {
   const systemParticipant = createParticipant("system");
 
   const conversation: Conversation = {
     participants: [],
-    outgoingMessageStream: new ReplaySubject(10000),
+    newMessagesInput: new Subject<Message>(),
+    outgoingMessageStream: new ReplaySubject<MessageDB>(10000),
     typingStreamInput: new Subject<TypingUpdate>(),
     typingAggregationOutput: new BehaviorSubject(new Map()),
     systemParticipant: systemParticipant,
     id: uuidv4()
   }
 
-  subscribeWhileAlive(systemParticipant, systemParticipant.sendingStream, conversation.outgoingMessageStream);
+  loadedMessages.forEach((message) => conversation.outgoingMessageStream.next(message));
+
+  subscribeWhileAlive(systemParticipant, systemParticipant.sendingStream, conversation.newMessagesInput);
   // TODO: next its stopListening stream when destroying this conversation. at time of writing conversation destruction hadn't yet been implemented.
+
+  const lastMessage = loadedMessages[loadedMessages.length - 1];
+  const lastLoadedMessageHashes = lastMessage?.hash ? [lastMessage.hash] : [];
+
+  const persistedMessages = processMessagesWithHashing(conversation.newMessagesInput, lastLoadedMessageHashes);
+
+  const tmpSubject = new Subject<MessageDB>();
+  persistedMessages.subscribe({
+    next: (value) => tmpSubject.next(value),
+    error: (err) => console.error("error persisting message", err)
+  });
+
+  tmpSubject.subscribe(() => console.log("persisted message"));
+
+  tmpSubject.subscribe(conversation.outgoingMessageStream);
+
+
+
+  conversation.outgoingMessageStream.subscribe((msg) => console.log("outgoing", msg));
+
+  //subscribeWhileAlive(systemParticipant, tmpSubject, conversation.outgoingMessageStream);
 
   conversation.typingStreamInput.subscribe({
     next: ({participantId, content}) => {
@@ -55,7 +81,7 @@ export function addParticipant(
   participant: Participant
 ): Conversation {
   subscribeWhileAlive(participant, conversation.outgoingMessageStream, participant.incomingMessageStream);
-  subscribeWhileAlive(participant, participant.sendingStream, conversation.outgoingMessageStream);
+  subscribeWhileAlive(participant, participant.sendingStream, conversation.newMessagesInput);
   subscribeWhileAlive(participant, participant.typingStream, conversation.typingStreamInput);
 
   const newParticipants = [...conversation.participants, participant];
