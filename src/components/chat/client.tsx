@@ -68,12 +68,12 @@ const Client: React.FC = () => {
   const [assistantTyping, setAssistantTyping] = useState('');
 
   const [conversation, setConversation] = useState<Conversation>();
-  const [activeRootMessage, setActiveRootMessage] = useState<MessageDB | null>(null);
+  const [activeLeafMessage, setActiveLeafMessage] = useState<MessageDB | null>(null);
 
   useEffect(() => {
-    if (conversation || !activeRootMessage) return;
+    if (conversation || !activeLeafMessage) return;
 
-    db.getConversationFromLeaf(activeRootMessage.hash).then((conversation) => {
+    db.getConversationFromLeaf(activeLeafMessage.hash).then((conversation) => {
       console.log('conversation', conversation)
       setConversation(addAssistant(
         addParticipant(
@@ -84,7 +84,7 @@ const Client: React.FC = () => {
     })
 
     // TODO: teardown
-  }, [activeRootMessage]);
+  }, [activeLeafMessage]);
 
   const { outgoingMessageStream, typingAggregationOutput } = conversation || {};
 
@@ -115,14 +115,14 @@ const Client: React.FC = () => {
     }
   };
 
-  const handleRootMessageSelect = (rootMessage: MessageDB) => {
-    setActiveRootMessage(rootMessage);
+  const handleLeafMessageSelect = (leafMessage: MessageDB) => {
+    setActiveLeafMessage(leafMessage);
     // Load the messages associated with the rootMessage
     // This can be done using the DB methods we defined, and you might need additional functions for that.
   };
 
-  if (!activeRootMessage || !conversation) {
-    return <LeafMessages db={db} onSelect={handleRootMessageSelect} />;
+  if (!activeLeafMessage || !conversation) {
+    return <LeafMessages db={db} onSelect={handleLeafMessageSelect} />;
   }
 
   const user = conversation.participants.find(participant => participant.role === 'user')!;
