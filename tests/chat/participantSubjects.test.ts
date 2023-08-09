@@ -24,7 +24,6 @@ describe('Participant', () => {
       cold('-a').subscribe(() => sendMessage(participant));
       expectObservable(participant.sendingStream).toBe('-a', {
         a: {
-          id: expect.any(String),
           content: 'Hello',
           participantId: participant.id,
           role: participant.role

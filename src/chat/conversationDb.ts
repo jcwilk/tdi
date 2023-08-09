@@ -99,7 +99,7 @@ export class ConversationDB {
       const message = await this.getMessageByHash(currentHash);
       if (message) {
         conversation.push(message);
-        const parentEdges = await this.getParentEdgesByChildHash(currentHash);
+        const parentEdges: EdgeDB[] = await this.getParentEdgesByChildHash(currentHash);
         currentHash = parentEdges[0]?.parentHash || null;
       } else {
         break;
