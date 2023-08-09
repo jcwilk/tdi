@@ -21,7 +21,8 @@ const RootMessages: React.FC<{ db: ConversationDB, onSelect: (rootMessage: Messa
 
   useEffect(() => {
     const fetchRootMessages = async () => {
-      const messages = await db.getRootMessages();
+      const messages = await db.getLeafMessages();
+      console.log("Root messages: ", messages);
       setRootMessages(messages);
     };
     fetchRootMessages();

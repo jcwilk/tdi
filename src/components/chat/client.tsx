@@ -73,7 +73,8 @@ const Client: React.FC = () => {
   useEffect(() => {
     if (conversation || !activeRootMessage) return;
 
-    db.getConversationFromRoot(activeRootMessage.hash).then((conversation) => {
+    db.getConversationFromLeaf(activeRootMessage.hash).then((conversation) => {
+      console.log('conversation', conversation)
       setConversation(addAssistant(
         addParticipant(
           createConversation(conversation),

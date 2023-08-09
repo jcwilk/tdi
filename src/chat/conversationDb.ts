@@ -29,9 +29,15 @@ export class ConversationDB {
         }
 
         if (!db.objectStoreNames.contains("edges")) {
-          const edgeStore = db.createObjectStore("edges", { autoIncrement: true });
+          const edgeStore = db.createObjectStore("edges", { keyPath: "compositeHash" });
+
+          // Index for childHash
           edgeStore.createIndex("childHash", "childHash", { unique: false });
+
+          // Index for parentHash
+          edgeStore.createIndex("parentHash", "parentHash", { unique: false });
         }
+
 
         console.log("Upgrading database...");
       };
@@ -62,7 +68,8 @@ export class ConversationDB {
       for (const parentHash of parentHashes) {
         edgeStore.put({
           childHash: message.hash,
-          parentHash: parentHash
+          parentHash: parentHash,
+          compositeHash: `${message.hash}_${parentHash}`
         });
       }
 
@@ -189,4 +196,41 @@ export class ConversationDB {
 
     return conversation;
   }
+
+  public async getLeafMessages(): Promise<MessageDB[]> {
+    const db = await this.dbPromise;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(["messages", "edges"]);
+      const allMessagesRequest = tx.objectStore("messages").getAll();
+
+      allMessagesRequest.onsuccess = async () => {
+        const allMessages: MessageDB[] = allMessagesRequest.result;
+        const leafMessages: MessageDB[] = [];
+
+        for (let message of allMessages) {
+          const childEdgeRequest = tx.objectStore("edges").index("parentHash").getAll(message.hash);
+          await new Promise((innerResolve, innerReject) => {
+            childEdgeRequest.onsuccess = () => {
+              // if there's no edge where this message is a child, then it's a leaf node.
+              if (!childEdgeRequest.result || childEdgeRequest.result.length === 0) {
+                leafMessages.push(message);
+              }
+              innerResolve(null);
+            };
+            childEdgeRequest.onerror = () => {
+              innerReject(new Error(`Failed to check for child edge of message hash: ${message.hash}`));
+            };
+          });
+        }
+
+        resolve(leafMessages);
+      };
+
+      allMessagesRequest.onerror = () => {
+        reject(new Error("Error retrieving all messages from the database."));
+      };
+    });
+  }
+
 }

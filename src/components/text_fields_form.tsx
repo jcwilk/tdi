@@ -89,6 +89,7 @@ export default function TextFieldsForm() {
             display: 'flex',
             flexDirection: 'row',
             gap: '8px',
+            zIndex: 1000
           }}
         >
 
