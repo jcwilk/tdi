@@ -16,16 +16,16 @@ You are an AI conversationalist. Your job is to converse with the user. Your pro
   participantId: "root"
 }
 
-const RootMessages: React.FC<{ db: ConversationDB, onSelect: (rootMessage: MessageDB) => void }> = ({ db, onSelect }) => {
-  const [rootMessages, setRootMessages] = useState<MessageDB[]>([]);
+const LeafMessages: React.FC<{ db: ConversationDB, onSelect: (leafMessage: MessageDB) => void }> = ({ db, onSelect }) => {
+  const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
 
   useEffect(() => {
-    const fetchRootMessages = async () => {
+    const fetchLeafMessages = async () => {
       const messages = await db.getLeafMessages();
-      console.log("Root messages: ", messages);
-      setRootMessages(messages);
+      console.log("Leaf messages: ", messages);
+      setLeafMessages(messages);
     };
-    fetchRootMessages();
+    fetchLeafMessages();
   }, []);
 
   const handleNewConversation = async () => {
@@ -51,7 +51,7 @@ const RootMessages: React.FC<{ db: ConversationDB, onSelect: (rootMessage: Messa
           Conversations
         </Typography>
         <List component="nav">
-          {rootMessages.map((message) => (
+          {leafMessages.map((message) => (
             <ListItem
               button
               key={message.hash}
@@ -88,4 +88,4 @@ const RootMessages: React.FC<{ db: ConversationDB, onSelect: (rootMessage: Messa
   );
 };
 
-export default RootMessages;
+export default LeafMessages;

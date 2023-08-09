@@ -4,7 +4,7 @@ import { createParticipant, sendMessage, typeMessage } from '../../chat/particip
 import { Message, createConversation, addParticipant, Conversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/ai_agent';
 import ReactMarkdown from 'react-markdown';
-import RootMessages from './rootMessages';
+import LeafMessages from './leafMessages';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 
 type MessageProps = {
@@ -122,7 +122,7 @@ const Client: React.FC = () => {
   };
 
   if (!activeRootMessage || !conversation) {
-    return <RootMessages db={db} onSelect={handleRootMessageSelect} />;
+    return <LeafMessages db={db} onSelect={handleRootMessageSelect} />;
   }
 
   const user = conversation.participants.find(participant => participant.role === 'user')!;
