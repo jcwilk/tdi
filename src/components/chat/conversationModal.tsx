@@ -10,7 +10,7 @@ import CloseIcon from '@mui/icons-material/Close';
 
 type ConversationModalProps = {
   activeLeafMessage: MessageDB;
-  onClose: () => void;
+  onClose: (activeLeafMessage: MessageDB) => void;
   onOpenNewConversation: (leafMessage: MessageDB) => void; // Callback for opening a new conversation on top
   db: ConversationDB;
 };
@@ -75,13 +75,13 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ activeLeafMessage
   const assistant = conversation.participants.find((participant) => participant.role === 'assistant')!;
 
   return (
-    <Dialog fullScreen open onClose={onClose} TransitionComponent={Transition}>
+    <Dialog fullScreen open onClose={() => onClose(activeLeafMessage)} TransitionComponent={Transition}>
       <AppBar sx={{ position: 'relative' }}>
           <Toolbar>
             <IconButton
               edge="start"
               color="inherit"
-              onClick={onClose}
+              onClick={() => onClose(activeLeafMessage)}
               aria-label="close"
             >
               <CloseIcon />

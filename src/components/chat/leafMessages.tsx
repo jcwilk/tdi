@@ -1,6 +1,3 @@
-// ... (previous imports) ...
-
-// Add this import
 import React, { useEffect, useState } from 'react';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Message } from '../../chat/conversation';

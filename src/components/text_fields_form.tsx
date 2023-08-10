@@ -23,8 +23,8 @@ export default function TextFieldsForm() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const chattingParam = params.get('c');
-    setCurrentlyChatting(chattingParam === 'true');
+    const chattingParam = params.get('ln');
+    setCurrentlyChatting(!!chattingParam);
   }, []);
 
   const loadStepManager = () => {

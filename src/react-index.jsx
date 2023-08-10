@@ -1,12 +1,15 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import TextFieldsForm from './components/text_fields_form';
+import { BrowserRouter as Router } from 'react-router-dom';
 
 const App = () => {
   return (
-    <div>
-      <TextFieldsForm />
-    </div>
+    <Router>
+      <div>
+        <TextFieldsForm />
+      </div>
+    </Router>
   );
 };
 
