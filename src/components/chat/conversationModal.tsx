@@ -7,12 +7,15 @@ import MessageBox from './messageBox'; // Assuming you've also extracted the Mes
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { addAssistant } from '../../chat/ai_agent';
 import CloseIcon from '@mui/icons-material/Close';
+import { NavigateFunction } from 'react-router-dom';
 
 type ConversationModalProps = {
   activeLeafMessage: MessageDB;
   onClose: (activeLeafMessage: MessageDB) => void;
   onOpenNewConversation: (leafMessage: MessageDB) => void; // Callback for opening a new conversation on top
+  onNewHash: (hash: string) => void;
   db: ConversationDB;
+  navigate: NavigateFunction;
 };
 
 const Transition = React.forwardRef<unknown, TransitionProps>((props, ref) => {
@@ -25,7 +28,7 @@ const Transition = React.forwardRef<unknown, TransitionProps>((props, ref) => {
   return <Slide direction="up" ref={ref} {...otherProps}>{children}</Slide>;
 });
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ activeLeafMessage, onClose, onOpenNewConversation, db }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ activeLeafMessage, onClose, onOpenNewConversation, onNewHash, db, navigate }) => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
@@ -34,11 +37,37 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ activeLeafMessage
   const inputRef = useRef<any>(null);
 
   useEffect(() => {
-    db.getConversationFromLeaf(activeLeafMessage.hash).then((conversationFromDb) => {
-      console.log('conversation', conversationFromDb);
-      setConversation(addAssistant(addParticipant(createConversation(conversationFromDb), createParticipant('user'))));
-    });
-  }, [activeLeafMessage, db]);
+    console.log("messages", messages)
+  }, [messages])
+
+  useEffect(() => {
+    return () => {
+      console.log("TEARDOWN")
+      if (conversation) {
+        conversation.teardown();
+      }
+    };
+  }, []);
+
+
+  useEffect(() => {
+    if (!conversation && db && activeLeafMessage) {
+      console.log("STARTING CONVO", activeLeafMessage, db)
+      db.getConversationFromLeaf(activeLeafMessage.hash).then((conversationFromDb) => {
+        console.log('conversation', conversationFromDb);
+        setConversation(addAssistant(addParticipant(createConversation(conversationFromDb), createParticipant('user'))));
+      });
+    }
+  }, []);
+
+  const currentLeafHash = messages[0]?.hash || activeLeafMessage.hash;
+
+  useEffect(() => {
+    if (currentLeafHash) {
+      console.log("new hash", currentLeafHash)
+      onNewHash(currentLeafHash);
+    }
+  }, [messages]);
 
   const { outgoingMessageStream, typingAggregationOutput } = conversation || {};
 
@@ -47,11 +76,16 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ activeLeafMessage
 
     const typingSub = typingAggregationOutput.subscribe((typing: Map<string, string>) => {
       setText(typing.get(user.id) || '');
-      setAssistantTyping(typing.get(assistant.id) || '');
+      const messageInProgress = typing.get(assistant.id)
+      if (messageInProgress) {
+        setAssistantTyping(messageInProgress);
+      }
     });
 
     const msgSub = outgoingMessageStream.subscribe((message: MessageDB) => {
+      console.log("new message", message)
       setMessages((previousMessages) => [message, ...previousMessages]);
+      setAssistantTyping('');
     });
 
     return () => {

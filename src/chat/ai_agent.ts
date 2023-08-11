@@ -66,12 +66,6 @@ function rateLimiter<T>(maxCalls: number, windowSize: number): (source: Observab
   };
 }
 
-function logStream(stream: Observable<any>, tag: string) {
-  stream.subscribe((value) => {
-    console.log(tag, value)
-  });
-}
-
 export function addAssistant(
   conversation: Conversation
 ): Conversation {

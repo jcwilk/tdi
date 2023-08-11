@@ -23,11 +23,17 @@ export type Conversation = {
   typingAggregationOutput: BehaviorSubject<Map<string, string>>;
   outgoingMessageStreamSubscription?: Subscription;
   systemParticipant: Participant;
+  teardown: () => void;
   id: string;
 };
 
 export function createConversation(loadedMessages: MessageDB[]): Conversation {
   const systemParticipant = createParticipant("system");
+
+  const teardown = () => {
+    conversation.participants.forEach((participant) => participant.stopListening.next());
+    conversation.systemParticipant.stopListening.next();
+  }
 
   const conversation: Conversation = {
     participants: [],
@@ -36,6 +42,7 @@ export function createConversation(loadedMessages: MessageDB[]): Conversation {
     typingStreamInput: new Subject<TypingUpdate>(),
     typingAggregationOutput: new BehaviorSubject(new Map()),
     systemParticipant: systemParticipant,
+    teardown,
     id: uuidv4()
   }
 
@@ -55,13 +62,7 @@ export function createConversation(loadedMessages: MessageDB[]): Conversation {
     error: (err) => console.error("error persisting message", err)
   });
 
-  tmpSubject.subscribe(() => console.log("persisted message"));
-
   tmpSubject.subscribe(conversation.outgoingMessageStream);
-
-
-
-  conversation.outgoingMessageStream.subscribe((msg) => console.log("outgoing", msg));
 
   //subscribeWhileAlive(systemParticipant, tmpSubject, conversation.outgoingMessageStream);
 

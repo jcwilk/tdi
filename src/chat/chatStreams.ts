@@ -29,7 +29,6 @@ export function isGPTTextUpdate(message: GPTMessage): message is GPTTextUpdate {
 }
 
 export function isGPTStopReason(message: GPTMessage): message is GPTStopReason {
-  console.log("isGPTStopReason", message, "stopReason" in message)
   return "stopReason" in message;
 }
 
@@ -91,8 +90,6 @@ export function chatCompletionMetaStream(
     maxTokens,
     functions
   )
-
-  sendingStream.subscribe(val => console.log("sendingStream", val));
 
   const typingAndFunctionCallStream = merge(
     typingStream.pipe(

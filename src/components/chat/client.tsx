@@ -7,31 +7,15 @@ import { useNavigate, useLocation } from 'react-router-dom';
 const db = new ConversationDB();
 
 const Client: React.FC = () => {
-  const [activeConversations, setActiveConversations] = useState<MessageDB[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
 
   const params = new URLSearchParams(location.search);
   const currentLeafHash = params.get('ln');
-
-  // Effect to watch for URL changes
-  useEffect(() => {
-    if (currentLeafHash) {
-      const foundIndex = activeConversations.findIndex(lm => lm.hash === currentLeafHash);
-      if (foundIndex !== -1) {
-        setActiveConversations(activeConversations.slice(0, foundIndex + 1));
-      } else {
-        db.getMessageByHash(currentLeafHash).then(foundLeafMessage => {
-          if (foundLeafMessage) {
-            setActiveConversations(prev => [...prev, foundLeafMessage]);
-          }
-        })
-      }
-    }
-  }, [currentLeafHash]);
+  const activeConversations: MessageDB[] = location.state?.activeConversations || [];
 
   const handleLeafMessageSelect = async (leafMessage: MessageDB) => {
-    navigate(`?ln=${leafMessage.hash}`); // Then navigate
+    navigate(`?ln=${leafMessage.hash}`, { state: { activeConversations: [...activeConversations, leafMessage] }}); // Then navigate
   };
 
   const handleLeafMessageClose = (leafMessage: MessageDB) => {
@@ -46,11 +30,13 @@ const Client: React.FC = () => {
     <>
       {activeConversations.map((leafMessage, index) => (
         <ConversationModal
-          key={leafMessage.hash}
+          key={`${leafMessage.hash}_${index}`}
           activeLeafMessage={leafMessage}
+          onNewHash={(hash) => { navigate(`?ln=${hash}`, {replace: true, state: { activeConversations }}) }}
           db={db}
           onClose={handleLeafMessageClose}
           onOpenNewConversation={handleLeafMessageSelect}
+          navigate={navigate}
         />
       ))}
     </>
