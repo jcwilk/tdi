@@ -7,6 +7,7 @@ import MessageBox from './messageBox'; // Assuming you've also extracted the Mes
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { addAssistant } from '../../chat/ai_agent';
 import CloseIcon from '@mui/icons-material/Close';
+import { emojiSha } from '../../chat/emojiSha';
 
 type ConversationModalProps = {
   initialLeafHash: string;
@@ -123,7 +124,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
               <CloseIcon />
             </IconButton>
             <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              {initialLeafHash}
+              {[...emojiSha(currentLeafHash)].slice(0, 5).join('')}
             </Typography>
           </Toolbar>
         </AppBar>
