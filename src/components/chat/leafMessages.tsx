@@ -3,7 +3,24 @@ import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Message } from '../../chat/conversation';
 import { firstValueFrom, of } from 'rxjs';
 import { processMessagesWithHashing } from '../../chat/messagePersistence';
-import { Box, Button, List, ListItem, ListItemText, Paper, Typography } from '@mui/material';
+import { Box, Button, List, ListItem, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import { emojiSha } from '../../chat/emojiSha';
+
+// Define the striped styling
+const StripedListItem = styled(ListItemButton)`
+&:nth-child(odd) {
+  background-color: #333; // Dark base color for odd items
+}
+&:nth-child(even) {
+  background-color: #444; // Slightly lighter shade for even items
+}
+`;
+
+export type RunningConversationOption = {
+  uuid: string;
+  message: MessageDB;
+}
 
 const mainSystemMessage: Message = {
   role: "system",
@@ -13,7 +30,7 @@ You are an AI conversationalist. Your job is to converse with the user. Your pro
   participantId: "root"
 }
 
-const LeafMessages: React.FC<{ db: ConversationDB, onSelect: (leafMessage: MessageDB) => void }> = ({ db, onSelect }) => {
+const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningConversationOption[], onSelect: (leafMessage: MessageDB, uuid?: string) => void }> = ({ db, runningLeafMessages, onSelect }) => {
   const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
 
   useEffect(() => {
@@ -30,39 +47,19 @@ const LeafMessages: React.FC<{ db: ConversationDB, onSelect: (leafMessage: Messa
     onSelect(firstMessage);
   }
 
+  // TODO: there's some bug with not being able to pull up more than the primary running conversation, despite them all showing up
   return (
     <Box
-      sx={{
-        fontFamily: '"Roboto Mono", monospace',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        backgroundColor: '#212121',
-        color: '#f5f5f5',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}
     >
       <Paper elevation={3} sx={{ padding: '20px' }}>
         <Typography variant="h4" align="center" gutterBottom>
-          Conversations
+          Running Conversations
         </Typography>
-        <List component="nav">
-          {leafMessages.map((message) => (
-            <ListItem
-              button
-              key={message.hash}
-              onClick={() => onSelect(message)}
-              sx={{
-                backgroundColor: '#616161',
-                color: '#f5f5f5',
-                '&:hover': {
-                  backgroundColor: '#757575',
-                },
-              }}
-            >
-              <ListItemText primary={message.content} />
-            </ListItem>
+        <List>
+          {runningLeafMessages.map(({uuid, message}) => (
+            <StripedListItem key={message.hash} onClick={() => onSelect(message, uuid)}>
+              <ListItemText primary={emojiSha(message.hash, 5) + " " + message.content} primaryTypographyProps={{ noWrap: true }} />
+            </StripedListItem>
           ))}
         </List>
         <Box
@@ -80,6 +77,16 @@ const LeafMessages: React.FC<{ db: ConversationDB, onSelect: (leafMessage: Messa
             New Conversation
           </Button>
         </Box>
+        <Typography variant="h4" align="center" gutterBottom>
+          Saved Conversations
+        </Typography>
+        <List>
+          {leafMessages.map((message) => (
+            <StripedListItem key={message.hash} onClick={() => onSelect(message)}>
+              <ListItemText primary={emojiSha(message.hash, 5) + " " + message.content} primaryTypographyProps={{ noWrap: true }} />
+            </StripedListItem>
+          ))}
+        </List>
       </Paper>
     </Box>
   );

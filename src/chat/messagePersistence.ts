@@ -6,6 +6,7 @@ import { Message } from './conversation';
 const hashFunction = async (message: MessageDB, parentHashes: string[]): Promise<string> => {
   // Serialize the message
   const serializedMessage = JSON.stringify(message);
+  // TODO: consider changing the fields that are getting serialized, it would be nice if a duplicate convo ended up with a duplicate SHA
 
   // Concatenate with parent hashes
   const dataForHashing = parentHashes.reduce((acc, hash) => acc + hash, serializedMessage);

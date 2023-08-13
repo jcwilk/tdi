@@ -13,6 +13,7 @@ type ConversationModalProps = {
   initialLeafHash: string;
   db: ConversationDB;
   open: boolean;
+  conversation: Conversation;
   onClose: () => void;
   onOpenNewConversation: (leafMessage: MessageDB) => void; // Callback for opening a new conversation on top
   onNewHash: (hash: string) => void;
@@ -28,12 +29,10 @@ const Transition = React.forwardRef<unknown, TransitionProps>((props, ref) => {
   return <Slide direction="up" ref={ref} {...otherProps}>{children}</Slide>;
 });
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, db, open, onClose, onOpenNewConversation, onNewHash }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, db, open, conversation, onClose, onOpenNewConversation, onNewHash }) => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
-
-  const [conversation, setConversation] = useState<Conversation>();
   const inputRef = useRef<any>(null);
 
   useEffect(() => {
@@ -47,17 +46,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
         conversation.teardown();
       }
     };
-  }, []);
-
-
-  useEffect(() => {
-    if (!conversation && db && initialLeafHash) {
-      console.log("STARTING CONVO", initialLeafHash, db)
-      db.getConversationFromLeaf(initialLeafHash).then((conversationFromDb) => {
-        console.log('conversation', conversationFromDb);
-        setConversation(addAssistant(addParticipant(createConversation(conversationFromDb), createParticipant('user'))));
-      });
-    }
   }, []);
 
   const currentLeafHash = messages[0]?.hash || initialLeafHash;
@@ -124,7 +112,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
               <CloseIcon />
             </IconButton>
             <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              {[...emojiSha(currentLeafHash)].slice(0, 5).join('')}
+              {emojiSha(currentLeafHash, 5)}
             </Typography>
           </Toolbar>
         </AppBar>

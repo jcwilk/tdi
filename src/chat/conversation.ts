@@ -54,6 +54,7 @@ export function createConversation(loadedMessages: MessageDB[]): Conversation {
   const lastMessage = loadedMessages[loadedMessages.length - 1];
   const lastLoadedMessageHashes = lastMessage?.hash ? [lastMessage.hash] : [];
 
+  // TODO: break this out of conversation, or at least out of its initialization - it's an undesirable coupling
   const persistedMessages = processMessagesWithHashing(conversation.newMessagesInput, lastLoadedMessageHashes);
 
   const tmpSubject = new Subject<MessageDB>();

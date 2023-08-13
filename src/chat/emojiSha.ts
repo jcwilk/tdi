@@ -17,28 +17,24 @@ const emojiMatrix: string[][] = [
   ["💀","💁","💂","💃","💄","💅","💈","💉","💋","💌","💍","💎","💏","💐","💑","💒"]
 ];
 
-export function emojiSha(hexStr: string): string {
-  // Check for non-hexadecimal characters
-  if (!/^[0-9a-fA-F]*$/.test(hexStr)) {
-      throw new Error("Input contains non-hexadecimal characters.");
+export function emojiSha(hexStr: string, maxEmojiCount: number): string {
+  if (!emojiMatrix || emojiMatrix.length === 0) {
+    throw new Error("Emoji matrix is required and should not be empty.");
   }
 
-  // Prepend a "0" if the length is odd
+  // Prepend a 0 if hexStr has an odd length
   if (hexStr.length % 2 !== 0) {
       hexStr = '0' + hexStr;
   }
 
-  let result = '';
+  let tempResult = '';
   for (let i = 0; i < hexStr.length; i += 2) {
       const row = parseInt(hexStr[i], 16);
-      const col = parseInt(hexStr[i + 1], 16);
-
-      if (!emojiMatrix[row] || !emojiMatrix[row][col]) {
-          throw new Error(`Invalid hex character detected at position ${i}: ${hexStr[i]}${hexStr[i+1]}`);
-      }
-
-      result += emojiMatrix[row][col];
+      const col = parseInt(hexStr[i+1], 16);
+      tempResult += emojiMatrix[row][col];
   }
 
-  return result;
+  // Extract the first 'maxEmojiCount' emojis
+  const resultArray = Array.from(tempResult); // This creates an array where each emoji is a single element
+  return resultArray.slice(0, maxEmojiCount).join('');
 }
