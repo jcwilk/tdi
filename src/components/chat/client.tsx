@@ -41,9 +41,10 @@ const Client: React.FC = () => {
   }, [conversationIndex]);
 
   const handleLeafMessageSelect = async (leafMessage: MessageDB) => {
+    const newConversationIndex = conversationIndex + 1;
     const navigateState: NavigateState = {
-      activeConversations: [...activeConversations, [leafMessage.hash, uuidv4()]],
-      conversationIndex: conversationIndex + 1
+      activeConversations: [...activeConversations.slice(0, newConversationIndex), [leafMessage.hash, uuidv4()]],
+      conversationIndex: newConversationIndex
     };
     console.log("navigateState", navigateState)
     navigate(`?ln=${leafMessage.hash}`, { state: navigateState });
