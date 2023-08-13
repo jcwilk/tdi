@@ -7,15 +7,14 @@ import MessageBox from './messageBox'; // Assuming you've also extracted the Mes
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { addAssistant } from '../../chat/ai_agent';
 import CloseIcon from '@mui/icons-material/Close';
-import { NavigateFunction } from 'react-router-dom';
 
 type ConversationModalProps = {
-  activeLeafMessage: MessageDB;
-  onClose: (activeLeafMessage: MessageDB) => void;
+  initialLeafHash: string;
+  db: ConversationDB;
+  open: boolean;
+  onClose: () => void;
   onOpenNewConversation: (leafMessage: MessageDB) => void; // Callback for opening a new conversation on top
   onNewHash: (hash: string) => void;
-  db: ConversationDB;
-  navigate: NavigateFunction;
 };
 
 const Transition = React.forwardRef<unknown, TransitionProps>((props, ref) => {
@@ -28,7 +27,7 @@ const Transition = React.forwardRef<unknown, TransitionProps>((props, ref) => {
   return <Slide direction="up" ref={ref} {...otherProps}>{children}</Slide>;
 });
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ activeLeafMessage, onClose, onOpenNewConversation, onNewHash, db, navigate }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, db, open, onClose, onOpenNewConversation, onNewHash }) => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
@@ -51,16 +50,16 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ activeLeafMessage
 
 
   useEffect(() => {
-    if (!conversation && db && activeLeafMessage) {
-      console.log("STARTING CONVO", activeLeafMessage, db)
-      db.getConversationFromLeaf(activeLeafMessage.hash).then((conversationFromDb) => {
+    if (!conversation && db && initialLeafHash) {
+      console.log("STARTING CONVO", initialLeafHash, db)
+      db.getConversationFromLeaf(initialLeafHash).then((conversationFromDb) => {
         console.log('conversation', conversationFromDb);
         setConversation(addAssistant(addParticipant(createConversation(conversationFromDb), createParticipant('user'))));
       });
     }
   }, []);
 
-  const currentLeafHash = messages[0]?.hash || activeLeafMessage.hash;
+  const currentLeafHash = messages[0]?.hash || initialLeafHash;
 
   useEffect(() => {
     if (currentLeafHash) {
@@ -108,20 +107,23 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ activeLeafMessage
   const user = conversation.participants.find((participant) => participant.role === 'user')!;
   const assistant = conversation.participants.find((participant) => participant.role === 'assistant')!;
 
+  console.log("OPEN", open)
+  if (!open) return null;
+
   return (
-    <Dialog fullScreen open onClose={() => onClose(activeLeafMessage)} TransitionComponent={Transition}>
+    <Dialog fullScreen open onClose={() => onClose()} TransitionComponent={Transition}>
       <AppBar sx={{ position: 'relative' }}>
           <Toolbar>
             <IconButton
               edge="start"
               color="inherit"
-              onClick={() => onClose(activeLeafMessage)}
+              onClick={() => onClose()}
               aria-label="close"
             >
               <CloseIcon />
             </IconButton>
             <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              {activeLeafMessage.hash}
+              {initialLeafHash}
             </Typography>
           </Toolbar>
         </AppBar>
