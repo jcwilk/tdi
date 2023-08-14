@@ -138,7 +138,7 @@ function switchedOutputStreamsFromRespondableMessages(
 ) {
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
-    switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, "gpt-4", 1000)),
+    switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, "gpt-3.5-turbo", 1000)),
     hotShareUntil(assistant.stopListening)
   )
 }

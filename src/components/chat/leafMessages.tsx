@@ -9,10 +9,10 @@ import { emojiSha } from '../../chat/emojiSha';
 
 // Define the striped styling
 const StripedListItem = styled(ListItemButton)`
-&:nth-child(odd) {
+&:nth-of-type(odd) {
   background-color: #333; // Dark base color for odd items
 }
-&:nth-child(even) {
+&:nth-of-type(even) {
   background-color: #444; // Slightly lighter shade for even items
 }
 `;
@@ -32,6 +32,7 @@ You are an AI conversationalist. Your job is to converse with the user. Your pro
 
 const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningConversationOption[], onSelect: (leafMessage: MessageDB, uuid?: string) => void }> = ({ db, runningLeafMessages, onSelect }) => {
   const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
+  console.log("runningLeafMessages", runningLeafMessages)
 
   useEffect(() => {
     const fetchLeafMessages = async () => {
@@ -47,7 +48,6 @@ const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningC
     onSelect(firstMessage);
   }
 
-  // TODO: there's some bug with not being able to pull up more than the primary running conversation, despite them all showing up
   return (
     <Box
     >
@@ -57,7 +57,7 @@ const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningC
         </Typography>
         <List>
           {runningLeafMessages.map(({uuid, message}) => (
-            <StripedListItem key={message.hash} onClick={() => onSelect(message, uuid)}>
+            <StripedListItem key={uuid} onClick={() => onSelect(message, uuid)}>
               <ListItemText primary={emojiSha(message.hash, 5) + " " + message.content} primaryTypographyProps={{ noWrap: true }} />
             </StripedListItem>
           ))}
