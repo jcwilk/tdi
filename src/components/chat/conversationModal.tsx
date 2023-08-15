@@ -100,7 +100,18 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
 
   return (
     <Dialog fullScreen open onClose={() => onClose()} TransitionComponent={Transition}>
-      <AppBar sx={{ position: 'relative' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100vh',
+          overflow: 'hidden',
+          fontFamily: '"Roboto Mono", monospace',
+          backgroundColor: '#212121',
+          color: '#f5f5f5',
+        }}
+      >
+        <AppBar sx={{ position: 'relative' }}>
           <Toolbar>
             <IconButton
               edge="start"
@@ -115,20 +126,11 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
             </Typography>
           </Toolbar>
         </AppBar>
-      <Box
-        sx={{
-          fontFamily: '"Roboto Mono", monospace',
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100vh',
-          backgroundColor: '#212121',
-          color: '#f5f5f5',
-        }}
-      >
+
         <Box
           sx={{
             flexGrow: 1,
-            overflow: 'auto',
+            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column-reverse',
             padding: '20px',
@@ -141,6 +143,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
             <MessageBox key={message.hash} message={message} openConversation={() => onOpenNewConversation(message)} />
           ))}
         </Box>
+
         <Box
           sx={{
             display: 'flex',
@@ -149,8 +152,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
           }}
         >
           <TextField
-            multiline
-            maxRows={4} // or however many maximum rows you'd like
             sx={{ flexGrow: 1, marginRight: '10px' }}
             label="Message"
             variant="outlined"

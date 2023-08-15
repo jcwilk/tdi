@@ -3,6 +3,7 @@ import { Box, Button, Tooltip } from '@mui/material';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import { Message } from '../../chat/conversation';
 import MarkdownRenderer from './markdownRenderer';
+import CopyButton from './copyButton';
 
 type MessageProps = {
   message: Message;
@@ -68,18 +69,20 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation }) => {
   return (
     <Box
       sx={{
+        position: 'relative',  // Make the Box position relative to place the absolute positioned CopyButton
         marginBottom: '10px',
         alignSelf: alignSelf,
         backgroundColor: backgroundColor,
         borderRadius: '10px',
-        padding: '0px 20px',  // Adjusted padding: 5px vertical, 10px horizontal
+        padding: '0px 20px',
         maxWidth: '70%',
         wordWrap: 'break-word',
         color: textColor,
         whiteSpace: 'pre-wrap',
       }}
     >
-      <div className="markdown-content" onClick={openConversation}>  {/* Add a wrapper div with class */}
+      <CopyButton contentToCopy={message.content} />
+      <div className="markdown-content" onClick={openConversation}>
         <MarkdownRenderer content={message.content} />
       </div>
     </Box>
