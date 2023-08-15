@@ -1,11 +1,41 @@
-import React, {  } from 'react';
-import { Box } from '@mui/material';
+import React, { ReactNode } from 'react';
+import { Box, Button, Tooltip } from '@mui/material';
+import FileCopyIcon from '@mui/icons-material/FileCopy';
 import { Message } from '../../chat/conversation';
-import ReactMarkdown from 'react-markdown';
+import MarkdownRenderer from './markdownRenderer';
 
 type MessageProps = {
   message: Message;
   openConversation?: () => void;
+};
+
+interface CodeBlockProps {
+  node?: any; // Depending on the ReactMarkdown types, this can be more specific.
+  children: ReactNode | ReactNode[];
+}
+
+const CodeBlock: React.FC<CodeBlockProps> = ({ node, children, ...props }) => {
+  const handleCopy = () => {
+    const content = Array.isArray(children) ? children.join('') : children;
+    navigator.clipboard.writeText(content?.toString() ?? "");
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <Tooltip title="Copy to clipboard">
+        <Button
+          onClick={handleCopy}
+          style={{ position: 'absolute', top: 5, right: 5, zIndex: 10 }}
+          size="small"
+        >
+          <FileCopyIcon fontSize="small" />
+        </Button>
+      </Tooltip>
+      <pre>
+        <code {...props}>{children}</code>
+      </pre>
+    </div>
+  );
 };
 
 const MessageBox: React.FC<MessageProps> = ({ message, openConversation }) => {
@@ -50,7 +80,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation }) => {
       }}
     >
       <div className="markdown-content" onClick={openConversation}>  {/* Add a wrapper div with class */}
-        <ReactMarkdown>{message.content}</ReactMarkdown>
+        <MarkdownRenderer content={message.content} />
       </div>
     </Box>
   );

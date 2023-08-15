@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Box, Dialog, Slide, TextField, Button, AppBar, Toolbar, IconButton, Typography } from '@mui/material';
 import { TransitionProps } from '@mui/material/transitions';
-import { createParticipant, sendMessage, typeMessage } from '../../chat/participantSubjects';
-import { addParticipant, Conversation, createConversation } from '../../chat/conversation';
+import { sendMessage, typeMessage } from '../../chat/participantSubjects';
+import { Conversation } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
-import { addAssistant } from '../../chat/ai_agent';
 import CloseIcon from '@mui/icons-material/Close';
 import { emojiSha } from '../../chat/emojiSha';
 
@@ -83,7 +82,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
   }, [outgoingMessageStream, typingAggregationOutput]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       sendMessage(user);
     }
@@ -150,6 +149,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
           }}
         >
           <TextField
+            multiline
+            maxRows={4} // or however many maximum rows you'd like
             sx={{ flexGrow: 1, marginRight: '10px' }}
             label="Message"
             variant="outlined"
