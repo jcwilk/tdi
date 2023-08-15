@@ -1,91 +1,51 @@
-import { StepData } from './step_manager';
+import { StepSaveData } from './step';
+import Dexie from 'dexie';
 
 export interface FunctionData {
-  stepData: StepData[];
+  stepData: StepSaveData[];
   name: string;
   id?: number;
 }
 
+class FunctionDatabase extends Dexie {
+  functions: Dexie.Table<FunctionData, number>;
+
+  constructor(dbName: string) {
+    super(dbName);
+
+    // Define tables and indexes
+    this.version(1).stores({
+      functions: '++id'
+    });
+
+    this.functions = this.table('functions');
+  }
+}
+
 export class IndexedDBManager {
-  private dbName: string;
-  private storeName: string;
+  private db: FunctionDatabase;
 
   constructor(dbName: string, storeName: string) {
-    this.dbName = dbName;
-    this.storeName = storeName;
+    this.db = new FunctionDatabase(dbName);
   }
 
-  public async openDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName);
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        db.createObjectStore(this.storeName, { keyPath: 'id', autoIncrement: true });
-      };
-
-      request.onsuccess = (event) => {
-        resolve((event.target as IDBOpenDBRequest).result);
-      };
-
-      request.onerror = (event) => {
-        reject(new Error('Error opening IndexedDB'));
-      };
-    });
+  public async saveFunctionData(data: FunctionData): Promise<number> {
+    return this.db.functions.add(data);
   }
 
-  public async saveFunctionData(data: FunctionData): Promise<void> {
-    const db = await this.openDB();
-    const transaction = db.transaction(this.storeName, 'readwrite');
-    const objectStore = transaction.objectStore(this.storeName);
-    objectStore.put(data);
-  }
-
-  public async updateFunctionDataById(id: number, data: FunctionData): Promise<void> {
-    const db = await this.openDB();
-    const transaction = db.transaction(this.storeName, 'readwrite');
-    const objectStore = transaction.objectStore(this.storeName);
-    objectStore.put({ ...data, id });
+  public async updateFunctionDataById(id: number, data: FunctionData): Promise<number> {
+    return this.db.functions.put({ ...data, id });
   }
 
   public async getAllFunctionData(): Promise<FunctionData[]> {
-    return new Promise(async (resolve, reject) => {
-      const db = await this.openDB();
-      const transaction = db.transaction(this.storeName, 'readonly');
-      const objectStore = transaction.objectStore(this.storeName);
-      const request = objectStore.getAll();
-
-      request.onsuccess = (event) => {
-        resolve((event.target as IDBRequest).result);
-      };
-
-      request.onerror = (event) => {
-        reject(new Error('Error retrieving data from IndexedDB'));
-      };
-    });
+    return this.db.functions.toArray();
   }
 
-  public async getFunctionDataById(id: number): Promise<FunctionData> {
-    return new Promise(async (resolve, reject) => {
-      const db = await this.openDB();
-      const transaction = db.transaction(this.storeName, 'readonly');
-      const objectStore = transaction.objectStore(this.storeName);
-      const request = objectStore.get(id);
-
-      request.onsuccess = (event) => {
-        resolve((event.target as IDBRequest).result);
-      };
-
-      request.onerror = (event) => {
-        reject(new Error('Error retrieving data by ID from IndexedDB'));
-      };
-    });
+  public async getFunctionDataById(id: number): Promise<FunctionData | undefined> {
+    return this.db.functions.get(id);
   }
 
   public async deleteFunctionDataById(id: number): Promise<void> {
-    const db = await this.openDB();
-    const transaction = db.transaction(this.storeName, 'readwrite');
-    const objectStore = transaction.objectStore(this.storeName);
-    objectStore.delete(id);
+    return this.db.functions.delete(id);
   }
 }
