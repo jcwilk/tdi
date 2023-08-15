@@ -7,6 +7,8 @@ import MessageBox from './messageBox'; // Assuming you've also extracted the Mes
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
 import { emojiSha } from '../../chat/emojiSha';
+import { Mic } from '@mui/icons-material';
+import { getTranscription } from '../../openai_api';
 
 type ConversationModalProps = {
   initialLeafHash: string;
@@ -32,6 +34,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
+  const [stopRecording, setStopRecording] = useState<((event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => void) | null>(null);
   const inputRef = useRef<any>(null);
 
   useEffect(() => {
@@ -86,6 +89,20 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
       event.preventDefault();
       sendMessage(user);
     }
+  };
+
+  // Placeholder function to start recording
+  const startRecording = async (event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
+    const { getTranscript } = await getTranscription();
+
+    setStopRecording(() => {
+      return async () => {
+        setStopRecording(null);
+        const transcript = await getTranscript();
+        typeMessage(user, transcript);
+        sendMessage(user);
+      }
+    });
   };
 
   if (!conversation) {
@@ -151,6 +168,16 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
             padding: '10px',
           }}
         >
+          <IconButton
+            component={  'button'}
+            sx={{ marginRight: '10px' }}
+            onMouseDown={startRecording as (event: React.MouseEvent<HTMLButtonElement> | undefined) => void}
+            onMouseUp={stopRecording as (event: React.MouseEvent<HTMLButtonElement> | undefined) => void}
+            onTouchStart={startRecording as (event: React.TouchEvent<HTMLButtonElement> | undefined) => void}
+            onTouchEnd={stopRecording as (event: React.TouchEvent<HTMLButtonElement> | undefined) => void}
+          >
+            <Mic />
+          </IconButton>
           <TextField
             sx={{ flexGrow: 1, marginRight: '10px' }}
             label="Message"

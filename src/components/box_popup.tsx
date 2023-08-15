@@ -16,7 +16,7 @@ interface BoxPopupProps {
   openEditor: string;
   onClose: (text: string) => void;
   onSubmitText?: string;
-  onSubmit?: () => void;
+  onSubmit?: (text: string) => void;
   description: string;
   text: string;
   fieldId: string;
@@ -76,7 +76,7 @@ export default function BoxPopup({
       onClose={() => onClose(textValue)}
       title={description}
       submitText={onSubmitText}
-      onSubmit={() => onSubmit(textValue)}
+      onSubmit={() => onSubmit && onSubmit(textValue)}
     >
       <Box sx={{ p: 2 }}>
         <Stack spacing={1}>
