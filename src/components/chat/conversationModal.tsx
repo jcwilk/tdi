@@ -11,7 +11,6 @@ import { Mic } from '@mui/icons-material';
 import { getTranscription } from '../../openai_api';
 
 type ConversationModalProps = {
-  initialLeafHash: string;
   db: ConversationDB;
   open: boolean;
   conversation: Conversation;
@@ -30,7 +29,7 @@ const Transition = React.forwardRef<unknown, TransitionProps>((props, ref) => {
   return <Slide direction="up" ref={ref} {...otherProps}>{children}</Slide>;
 });
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, db, open, conversation, onClose, onOpenNewConversation, onNewHash }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ db, open, conversation, onClose, onOpenNewConversation, onNewHash }) => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
@@ -41,16 +40,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
     console.log("messages", messages)
   }, [messages])
 
-  useEffect(() => {
-    return () => {
-      console.log("TEARDOWN")
-      if (conversation) {
-        conversation.teardown();
-      }
-    };
-  }, []);
-
-  const currentLeafHash = messages[0]?.hash || initialLeafHash;
+  const currentLeafHash = messages[0]?.hash;
 
   useEffect(() => {
     if (currentLeafHash) {
@@ -139,7 +129,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ initialLeafHash, 
               <CloseIcon />
             </IconButton>
             <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              {emojiSha(currentLeafHash, 5)}
+              {currentLeafHash && emojiSha(currentLeafHash, 5)}
             </Typography>
           </Toolbar>
         </AppBar>
