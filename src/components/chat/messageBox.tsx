@@ -5,10 +5,12 @@ import { Message } from '../../chat/conversation';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import ForkButton from './forkButton';
+import PruneButton from './pruneButton';
 
 type MessageProps = {
   message: Message;
   openConversation?: () => void;
+  onPrune?: () => void;
 };
 
 interface CodeBlockProps {
@@ -40,7 +42,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ node, children, ...props }) => {
   );
 };
 
-const MessageBox: React.FC<MessageProps> = ({ message, openConversation }) => {
+const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune }) => {
   let alignSelf: 'flex-end' | 'flex-start' | 'center';
   let backgroundColor: string;
   let textColor: string;
@@ -89,6 +91,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation }) => {
         display: 'flex',
         zIndex: 10,
       }}>
+        {onPrune && <PruneButton onClick={onPrune} />}
         {openConversation && <ForkButton onClick={openConversation} />}
         <CopyButton contentToCopy={message.content} />
       </div>

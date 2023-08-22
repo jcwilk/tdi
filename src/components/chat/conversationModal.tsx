@@ -9,6 +9,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { emojiSha } from '../../chat/emojiSha';
 import { Mic } from '@mui/icons-material';
 import { getTranscription } from '../../openai_api';
+import { rebaseConversation } from '../../chat/messagePersistence';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -84,6 +85,21 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
     });
   };
 
+  const handlePrune = async (hash: string) => {
+    console.log("prune1")
+    if(messages.length === 0) return
+
+
+    const lastMessage = messages[0];
+    console.log("prune2", lastMessage, hash)
+    const newLeafMessage = await rebaseConversation(lastMessage, [hash]);
+    console.log("prune2.5", newLeafMessage)
+    if(newLeafMessage.hash == lastMessage.hash) return;
+
+    console.log("prune3")
+    onOpenNewConversation(newLeafMessage);
+  }
+
   if (!conversation) {
     return null; // Or you can render some loading state.
   }
@@ -136,7 +152,12 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             <MessageBox key="assistant-typing" message={{ participantId: 'TODO', role: 'assistant', content: assistantTyping }} />
           )}
           {messages.map((message) => (
-            <MessageBox key={message.hash} message={message} openConversation={() => onOpenNewConversation(message)} />
+            <MessageBox
+              key={message.hash}
+              message={message}
+              openConversation={() => onOpenNewConversation(message)}
+              onPrune={() => handlePrune(message.hash)}
+            />
           ))}
         </Box>
 

@@ -1,5 +1,5 @@
-import { Observable, pipe } from 'rxjs';
-import { map, mergeMap } from 'rxjs/operators';
+import { Observable, from, lastValueFrom, pipe } from 'rxjs';
+import { concatMap, map, mergeMap, scan } from 'rxjs/operators';
 import { ConversationDB, MessageDB } from './conversationDb';
 import { Message } from './conversation';
 
@@ -21,34 +21,89 @@ const processMessagesWithHashing = (
   source$: Observable<Message>,
   initialParentHashes: string[] = []
 ): Observable<MessageDB> => {
-  let lastMessageHashes = initialParentHashes;
+  const conversationDB = new ConversationDB();
 
-  const conversationDB = new ConversationDB(); // The DB class provided earlier
+  let lastProcessedHash: string | null = null;
 
   return source$.pipe(
     map((message): MessageDB => {
-      // Augmentation
       return {
         ...message,
         timestamp: Date.now(),
-        hash: '' // Temporary placeholder, will replace later
+        hash: ''
       };
     }),
-    // TODO: do we need to worry about order issues with mergemap?
-    mergeMap(async (messageDB): Promise<MessageDB> => {
-      // Hashing
-      console.log("hashing...")
-      messageDB.hash = await hashFunction(messageDB, lastMessageHashes);
+    concatMap(async (messageDB, index): Promise<MessageDB> => {
+      const currentParentHashes = index === 0 ? initialParentHashes : (lastProcessedHash ? [lastProcessedHash] : []);
+
+      messageDB.hash = await hashFunction(messageDB, currentParentHashes);
+      console.log("persisting...");
+      await conversationDB.saveMessage(messageDB, currentParentHashes);
+
+      // Update the lastProcessedHash after processing the current message
+      lastProcessedHash = messageDB.hash;
+
       return messageDB;
-    }),
-    mergeMap(async (messageDB) => {
-      // Persistence
-      console.log("persisting...")
-      await conversationDB.saveMessage(messageDB, lastMessageHashes);
-      lastMessageHashes = [messageDB.hash];
-      return messageDB; // Returning processed message
     })
   );
 };
 
-export { processMessagesWithHashing };
+const rebaseConversation = async (
+  leafMessage: MessageDB,
+  excludedHashes: string[]
+): Promise<MessageDB> => {
+  const conversationDB = new ConversationDB();
+
+  // Fetch the full conversation from the leaf to the root
+  const conversation = await conversationDB.getConversationFromLeaf(leafMessage.hash);
+
+  // Initialize parentHashes with an empty array for the root
+  let parentHashes: string[] = [];
+
+  // To store the newly created leaf message
+  let newLeafMessage: MessageDB = { ...leafMessage };
+
+  // Flag to indicate if messages need to be reprocessed from this point onward
+  let requiresReprocessing = false;
+
+  // Array to store Messages needing reprocessing
+  let messagesForReprocessing: Message[] = [];
+
+  // Process the conversation messages in order, from root to leaf
+  for (const message of conversation) {
+    // Skip any excluded messages and set the flag for reprocessing
+    if (excludedHashes.includes(message.hash)) {
+      requiresReprocessing = true;
+      continue;
+    }
+
+    if (requiresReprocessing) {
+      // Convert MessageDB to Message
+      messagesForReprocessing.push({
+        content: message.content,
+        participantId: message.participantId,
+        role: message.role
+      });
+    } else {
+      // If we are not in reprocessing mode, the parent for the next message
+      // is simply the hash of the current message
+      parentHashes = [message.hash];
+      newLeafMessage = message;
+    }
+  }
+
+  console.log("REPRO", messagesForReprocessing, parentHashes)
+
+  if (messagesForReprocessing.length > 0) {
+    // Convert the array of Messages to an Observable and process with hashing
+    const source$ = from(messagesForReprocessing);
+    const newMessages$ = processMessagesWithHashing(source$, parentHashes);
+
+    // Convert Observable to Promise and wait for completion
+    newLeafMessage = await lastValueFrom(newMessages$);
+  }
+
+  return newLeafMessage;
+};
+
+export { processMessagesWithHashing, rebaseConversation };
