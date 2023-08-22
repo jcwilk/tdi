@@ -83,7 +83,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation }) => {
     >
       <CopyButton contentToCopy={message.content} />
       <div className="markdown-content" onClick={openConversation}>
-        <MarkdownRenderer content={message.content} />
+        <MarkdownRenderer content={`\u200B${message.content}`} />
       </div>
     </Box>
   );

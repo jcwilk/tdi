@@ -172,6 +172,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ db, open, convers
             sx={{ flexGrow: 1, marginRight: '10px' }}
             label="Message"
             variant="outlined"
+            multiline
+            maxRows={10}
             value={text}
             onChange={(e) => typeMessage(user, e.target.value)}
             onKeyDown={handleKeyDown}
