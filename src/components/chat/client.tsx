@@ -31,6 +31,7 @@ const Client: React.FC = () => {
   const params = new URLSearchParams(location.search);
 
   const [runningConversations, setRunningConversations] = useState<Map<string, Conversation>>(new Map<string, Conversation>());
+
   const stateConversations: string[] = location.state?.activeConversations ?? [];
 
   const activeConversations: Conversation[] = stateConversations.map(uuid => runningConversations.get(uuid)).filter(result => result !== undefined) as Conversation[];
@@ -103,12 +104,11 @@ const Client: React.FC = () => {
 
   return (
     <>
+      { /* TODO: we could hypothetically render only the top convo - having them all rendered helps for transitions, but I removed them for now for simplicity */ }
       {activeConversations.map((conversation, index) => {
         return (
           <ConversationModal
             key={conversation.id}
-            db={db}
-            open={index >= activeConversations.length - 1}
             conversation={conversation}
             onNewHash={(hash) => { navigate(`?ln=${hash}`, {replace: true, state: { activeConversations: activeConversations.map(({ id }) => id) }}) }}
             onClose={handleLeafMessageClose}

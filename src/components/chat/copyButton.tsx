@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Button } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import copy from 'copy-to-clipboard';
+import CornerButton from './cornerButton';
 
 type CopyButtonProps = {
   contentToCopy: string;
@@ -15,27 +15,18 @@ const CopyButton: React.FC<CopyButtonProps> = ({ contentToCopy }) => {
     event.stopPropagation();
     copy(contentToCopy);
     setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000); // Reset after 2s
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
   return (
-    <Button
-      style={{
-        position: 'absolute',
-        right: '-2px',  // Decreased the padding to the edge
-        top: '-2px',    // Same here
-        zIndex: 10,
-        cursor: 'pointer',
-        color: '#ffffff',  // Set icon color to white
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',  // Semi-transparent dark circle
-        borderRadius: '50%',  // Make the background a circle
-        padding: '4px',  // Give a little padding to the icon
-        minWidth: 'auto',  // Ensure the button does not have a minimum width
-      }}
+    <CornerButton
       onClick={handleCopyClick}
-    >
-      {isCopied ? <CheckCircleOutlineIcon fontSize='small'/> : <ContentCopyIcon fontSize='small'/>}
-    </Button>
+      icon={
+        isCopied
+          ? <CheckCircleOutlineIcon fontSize='small' />
+          : <ContentCopyIcon fontSize='small' />
+      }
+    />
   );
 };
 

@@ -4,6 +4,7 @@ import FileCopyIcon from '@mui/icons-material/FileCopy';
 import { Message } from '../../chat/conversation';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
+import ForkButton from './forkButton';
 
 type MessageProps = {
   message: Message;
@@ -81,8 +82,17 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation }) => {
         whiteSpace: 'pre-wrap',
       }}
     >
-      <CopyButton contentToCopy={message.content} />
-      <div className="markdown-content" onClick={openConversation}>
+      <div style={{
+        position: 'absolute',
+        right: '-10px',
+        top: '-5px',
+        display: 'flex',
+        zIndex: 10,
+      }}>
+        {openConversation && <ForkButton onClick={openConversation} />}
+        <CopyButton contentToCopy={message.content} />
+      </div>
+      <div className="markdown-content">
         <MarkdownRenderer content={`\u200B${message.content}`} />
       </div>
     </Box>

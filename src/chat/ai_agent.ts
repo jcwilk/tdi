@@ -70,6 +70,7 @@ export function addAssistant(
   conversation: Conversation
 ): Conversation {
   //sendSystemMessage(conversation, mainSystemMessage.content);
+  console.log("new convo!")
 
   const assistant = createParticipant("assistant");
 
@@ -79,13 +80,14 @@ export function addAssistant(
 
   const messagesAndTyping = messages.pipe(
     withLatestFrom(assistant.typingStream),
-    hotShareUntil(assistant.stopListening)
+    takeUntil(assistant.stopListening)
   );
   const newSystemMessages = filterByIsSystemMessage(messagesAndTyping);
   const newUninterruptedUserMessages = filterByIsUninterruptedUserMessage(messagesAndTyping);
   const newInterruptingUserMessages = filterByIsInterruptingUserMessage(messagesAndTyping);
 
-  const newRespondableMessages = merge(newSystemMessages, newUninterruptedUserMessages).pipe(
+  const newRespondableMessages = merge(newUninterruptedUserMessages, newSystemMessages).pipe(
+    tap(([messages, _typing]) => console.log("TAPPED", messages)),
     map(([messages, _typing]) => messages)
   );
 
@@ -104,7 +106,7 @@ function createMessageStream(conversation: Conversation, assistant: Participant)
   conversation.outgoingMessageStream.pipe(
     scan((allMessages: Message[], newMessage: Message) => [...allMessages, newMessage], []),
     filter((allMessages) => allMessages[allMessages.length - 1].participantId !== assistant.id),
-    hotShareUntil(assistant.stopListening)
+    takeUntil(assistant.stopListening)
   ).subscribe(messages);
 
   return messages;
@@ -122,12 +124,14 @@ function filterByIsSystemMessage(messagesAndTyping: Observable<[Message[], Typin
 
 function filterByIsUninterruptedUserMessage(messagesAndTyping: Observable<[Message[], TypingUpdate]>): Observable<[Message[], TypingUpdate]> {
   return messagesAndTyping.pipe(
-    filter(([messages, typing]) =>
-      messages.length > 0
+    filter(([messages, typing]) => {
+      console.log("MESSTYPE", messages, typing)
+      return messages.length > 0
       &&
       messages[messages.length - 1].role === "user"
       &&
       typing.content.length === 0
+    }
     )
   )
 }

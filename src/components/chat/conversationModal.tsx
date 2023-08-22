@@ -11,25 +11,13 @@ import { Mic } from '@mui/icons-material';
 import { getTranscription } from '../../openai_api';
 
 type ConversationModalProps = {
-  db: ConversationDB;
-  open: boolean;
   conversation: Conversation;
   onClose: () => void;
   onOpenNewConversation: (leafMessage: MessageDB) => void; // Callback for opening a new conversation on top
   onNewHash: (hash: string) => void;
 };
 
-const Transition = React.forwardRef<unknown, TransitionProps>((props, ref) => {
-  const { children, ...otherProps } = props;
-
-  if (!React.isValidElement(children)) {
-    return null;
-  }
-
-  return <Slide direction="up" ref={ref} {...otherProps}>{children}</Slide>;
-});
-
-const ConversationModal: React.FC<ConversationModalProps> = ({ db, open, conversation, onClose, onOpenNewConversation, onNewHash }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, onOpenNewConversation, onNewHash }) => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
@@ -71,6 +59,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ db, open, convers
     return () => {
       typingSub.unsubscribe();
       msgSub.unsubscribe();
+      console.log("TEARDOWN MODAL")
     };
   }, [outgoingMessageStream, typingAggregationOutput]);
 
@@ -106,7 +95,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ db, open, convers
   if (!open) return null;
 
   return (
-    <Dialog fullScreen open onClose={() => onClose()} TransitionComponent={Transition}>
+    <Dialog fullScreen open onClose={onClose}>
       <Box
         sx={{
           display: 'flex',
