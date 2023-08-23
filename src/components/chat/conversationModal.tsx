@@ -186,7 +186,10 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           fieldId={editingMessage?.hash ?? "non-id"}
           openEditor={editingMessage?.hash ?? "closed"}
           onClose={() => setEditingMessage(null)}
-          onSubmit={(text) => editingMessage && handleEdit(editingMessage, text)}
+          onSubmit={async (text) => {
+            editingMessage && await handleEdit(editingMessage, text);
+            setEditingMessage(null);
+          }}
           onSubmitText='Update'
           description="Message"
           text={editingMessage?.content || ""}
