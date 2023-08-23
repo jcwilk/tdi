@@ -4,9 +4,11 @@ import { ConversationDB, MessageDB } from './conversationDb';
 import { Message } from './conversation';
 
 const hashFunction = async (message: MessageDB, parentHashes: string[]): Promise<string> => {
-  // Serialize the message
-  const serializedMessage = JSON.stringify(message);
-  // TODO: consider changing the fields that are getting serialized, it would be nice if a duplicate convo ended up with a duplicate SHA
+  // Extract the required fields
+  const { content, role } = message;
+
+  // Serialize the required fields
+  const serializedMessage = JSON.stringify({ content, role });
 
   // Concatenate with parent hashes
   const dataForHashing = parentHashes.reduce((acc, hash) => acc + hash, serializedMessage);
@@ -38,12 +40,12 @@ const processMessagesWithHashing = (
 
       messageDB.hash = await hashFunction(messageDB, currentParentHashes);
       console.log("persisting...");
-      await conversationDB.saveMessage(messageDB, currentParentHashes);
+      const persistedMessage = await conversationDB.saveMessage(messageDB, currentParentHashes);
 
       // Update the lastProcessedHash after processing the current message
-      lastProcessedHash = messageDB.hash;
+      lastProcessedHash = persistedMessage.hash;
 
-      return messageDB;
+      return persistedMessage;
     })
   );
 };

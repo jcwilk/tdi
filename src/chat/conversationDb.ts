@@ -31,7 +31,12 @@ export class ConversationDB extends Dexie {
     this.edges = this.table('edges');
   }
 
-  async saveMessage(message: MessageDB, parentHashes: string[]): Promise<void> {
+  async saveMessage(message: MessageDB, parentHashes: string[]): Promise<MessageDB> {
+    const existingMessage = await this.getMessageByHash(message.hash);
+    if (existingMessage) {
+      return existingMessage;
+    }
+
     const edges = parentHashes.map(parentHash => ({
       childHash: message.hash,
       parentHash: parentHash,
@@ -41,6 +46,7 @@ export class ConversationDB extends Dexie {
     return this.transaction('rw', this.messages, this.edges, async () => {
       await this.messages.add(message);
       await this.edges.bulkAdd(edges);
+      return message;
     });
   }
 
@@ -62,30 +68,6 @@ export class ConversationDB extends Dexie {
     }
 
     return conversation.reverse();
-  }
-
-  async getRootMessages(): Promise<MessageDB[]> {
-    const childHashes = await this.edges.toArray().then(edges => edges.map(edge => edge.childHash));
-    return this.messages.where('hash').noneOf(childHashes).toArray();
-  }
-
-  async getFirstChildByHash(parentHash: string): Promise<MessageDB | undefined> {
-    const childEdge = await this.edges.where('parentHash').equals(parentHash).first();
-    if (!childEdge) return;
-
-    return this.getMessageByHash(childEdge.childHash);
-  }
-
-  async getConversationFromRoot(rootHash: string): Promise<MessageDB[]> {
-    const conversation: MessageDB[] = [];
-    let currentMessage = await this.getMessageByHash(rootHash);
-
-    while (currentMessage) {
-      conversation.push(currentMessage);
-      currentMessage = await this.getFirstChildByHash(currentMessage.hash);
-    }
-
-    return conversation;
   }
 
   async getLeafMessages(): Promise<MessageDB[]> {
