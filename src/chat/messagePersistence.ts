@@ -50,7 +50,49 @@ const processMessagesWithHashing = (
   );
 };
 
-const rebaseConversation = async (
+const identifyMessagesForReprocessing = (conversation: MessageDB[], startIndex: number): Message[] => {
+  return conversation.slice(startIndex).map(message => ({
+    content: message.content,
+    participantId: message.participantId,
+    role: message.role
+  }));
+};
+
+const editConversation = async (
+  leafMessage: MessageDB,
+  index: number,
+  newMessage: Message
+): Promise<MessageDB> => {
+  const conversationDB = new ConversationDB();
+
+  // Fetch the full conversation from the leaf to the root
+  const conversation = await conversationDB.getConversationFromLeaf(leafMessage.hash);
+
+  if (index < 0 || index >= conversation.length) {
+    throw new Error("Invalid index");
+  }
+
+  // The messages before the index remain untouched.
+  const precedingMessages = conversation.slice(0, index);
+
+  // The parent hash for the newMessage would be the hash of the message before the given index.
+  const parentHashes = index === 0 ? [] : [precedingMessages[precedingMessages.length - 1].hash];
+
+  // We'll need to reprocess the message at the given index and any subsequent messages.
+  const messagesForReprocessing = identifyMessagesForReprocessing(conversation, index);
+  messagesForReprocessing[0] = newMessage;  // Replace the message at the given index with the new message
+
+  // Convert the array of Messages to an Observable and process with hashing
+  const source$ = from(messagesForReprocessing);
+  const newMessages$ = processMessagesWithHashing(source$, parentHashes);
+
+  // Convert Observable to Promise and wait for completion
+  const newLeafMessage = await lastValueFrom(newMessages$);
+
+  return newLeafMessage;
+};
+
+const pruneConversation = async (
   leafMessage: MessageDB,
   excludedHashes: string[]
 ): Promise<MessageDB> => {
@@ -59,40 +101,25 @@ const rebaseConversation = async (
   // Fetch the full conversation from the leaf to the root
   const conversation = await conversationDB.getConversationFromLeaf(leafMessage.hash);
 
-  // Initialize parentHashes with an empty array for the root
-  let parentHashes: string[] = [];
-
   // To store the newly created leaf message
   let newLeafMessage: MessageDB = { ...leafMessage };
 
-  // Flag to indicate if messages need to be reprocessed from this point onward
-  let requiresReprocessing = false;
+  // Determine the first excluded message index
+  const firstExcludedIndex = conversation.findIndex(message => excludedHashes.includes(message.hash));
 
-  // Array to store Messages needing reprocessing
-  let messagesForReprocessing: Message[] = [];
-
-  // Process the conversation messages in order, from root to leaf
-  for (const message of conversation) {
-    // Skip any excluded messages and set the flag for reprocessing
-    if (excludedHashes.includes(message.hash)) {
-      requiresReprocessing = true;
-      continue;
-    }
-
-    if (requiresReprocessing) {
-      // Convert MessageDB to Message
-      messagesForReprocessing.push({
-        content: message.content,
-        participantId: message.participantId,
-        role: message.role
-      });
-    } else {
-      // If we are not in reprocessing mode, the parent for the next message
-      // is simply the hash of the current message
-      parentHashes = [message.hash];
-      newLeafMessage = message;
-    }
+  // If no excluded message is found, return the leaf as is.
+  if (firstExcludedIndex === -1) {
+    return leafMessage;
   }
+
+  // All messages before the first excluded index remain untouched.
+  const precedingMessages = conversation.slice(0, firstExcludedIndex);
+
+  // The parent hash for the next reprocessed message would be the hash of the message before the first excluded one.
+  const parentHashes = firstExcludedIndex === 0 ? [] : [precedingMessages[precedingMessages.length - 1].hash];
+
+  // Identify the messages for reprocessing starting from the first excluded message index
+  const messagesForReprocessing = identifyMessagesForReprocessing(conversation, firstExcludedIndex + 1);
 
   console.log("REPRO", messagesForReprocessing, parentHashes)
 
@@ -108,4 +135,4 @@ const rebaseConversation = async (
   return newLeafMessage;
 };
 
-export { processMessagesWithHashing, rebaseConversation };
+export { processMessagesWithHashing, editConversation, pruneConversation };

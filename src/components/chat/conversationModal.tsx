@@ -9,7 +9,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import { emojiSha } from '../../chat/emojiSha';
 import { Mic } from '@mui/icons-material';
 import { getTranscription } from '../../openai_api';
-import { rebaseConversation } from '../../chat/messagePersistence';
+import { editConversation, pruneConversation } from '../../chat/messagePersistence';
+import BoxPopup from '../box_popup';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -18,11 +19,21 @@ type ConversationModalProps = {
   onNewHash: (hash: string) => void;
 };
 
+function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]): number {
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i][property] === value) {
+      return i;
+    }
+  }
+  return -1; // Return -1 if no match is found
+}
+
 const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, onOpenNewConversation, onNewHash }) => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
   const [stopRecording, setStopRecording] = useState<((event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => void) | null>(null);
+  const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
   const inputRef = useRef<any>(null);
 
   useEffect(() => {
@@ -86,17 +97,26 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
   };
 
   const handlePrune = async (hash: string) => {
-    console.log("prune1")
     if(messages.length === 0) return
 
-
     const lastMessage = messages[0];
-    console.log("prune2", lastMessage, hash)
-    const newLeafMessage = await rebaseConversation(lastMessage, [hash]);
-    console.log("prune2.5", newLeafMessage)
+    const newLeafMessage = await pruneConversation(lastMessage, [hash]);
     if(newLeafMessage.hash == lastMessage.hash) return;
 
-    console.log("prune3")
+    onOpenNewConversation(newLeafMessage);
+  }
+
+  const handleEdit = async (message: MessageDB, newContent: string) => {
+    if(messages.length === 0) return;
+    const lastMessage = messages[0];
+
+    const index = findIndexByProperty(messages, "hash", message.hash)
+    if(index < 0) return;
+    const reversedIndex = messages.length - 1 - index; // we store the messages in reverse for rendering purposes
+
+    const newLeafMessage = await editConversation(lastMessage, reversedIndex, {role: message.role, participantId: message.participantId, content: newContent});
+    if(newLeafMessage.hash == lastMessage.hash) return;
+
     onOpenNewConversation(newLeafMessage);
   }
 
@@ -157,9 +177,21 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
               message={message}
               openConversation={() => onOpenNewConversation(message)}
               onPrune={() => handlePrune(message.hash)}
+              onEdit={() => setEditingMessage(message)}
             />
           ))}
         </Box>
+
+        <BoxPopup
+          fieldId={editingMessage?.hash ?? "non-id"}
+          openEditor={editingMessage?.hash ?? "closed"}
+          onClose={() => setEditingMessage(null)}
+          onSubmit={(text) => editingMessage && handleEdit(editingMessage, text)}
+          onSubmitText='Update'
+          description="Message"
+          text={editingMessage?.content || ""}
+          fieldName='Content'
+        />
 
         <Box
           sx={{

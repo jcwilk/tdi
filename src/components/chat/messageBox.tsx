@@ -6,11 +6,13 @@ import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import ForkButton from './forkButton';
 import PruneButton from './pruneButton';
+import EditButton from './editButton';
 
 type MessageProps = {
   message: Message;
   openConversation?: () => void;
   onPrune?: () => void;
+  onEdit?: () => void;
 };
 
 interface CodeBlockProps {
@@ -42,7 +44,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ node, children, ...props }) => {
   );
 };
 
-const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune }) => {
+const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune, onEdit }) => {
   let alignSelf: 'flex-end' | 'flex-start' | 'center';
   let backgroundColor: string;
   let textColor: string;
@@ -92,6 +94,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune
         zIndex: 10,
       }}>
         {onPrune && <PruneButton onClick={onPrune} />}
+        {onEdit && <EditButton onClick={onEdit} />}
         {openConversation && <ForkButton onClick={openConversation} />}
         <CopyButton contentToCopy={message.content} />
       </div>
