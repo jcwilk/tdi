@@ -12,7 +12,8 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { v4 as uuidv4 } from "uuid";
-import { ChatStep, ChatMessage } from "../scenarios";
+import { ChatStep } from "../scenarios";
+import { ChatMessage } from "../openai_api";
 import BoxPopup from './box_popup';
 import styles from './css/step_spec_editor.module.css';
 
