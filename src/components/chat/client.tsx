@@ -75,6 +75,8 @@ const Client: React.FC = () => {
   useEffect(() => {
     if (currentLeafHash && activeConversations.length === 0) {
       db.getMessageByHash(currentLeafHash).then(message => {
+        navigate("?", {replace: true, state: {}})
+
         if (message) {
           handleLeafMessageSelect(message);
         }
