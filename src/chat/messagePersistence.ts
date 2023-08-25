@@ -101,9 +101,6 @@ const pruneConversation = async (
   // Fetch the full conversation from the leaf to the root
   const conversation = await conversationDB.getConversationFromLeaf(leafMessage.hash);
 
-  // To store the newly created leaf message
-  let newLeafMessage: MessageDB = { ...leafMessage };
-
   // Determine the first excluded message index
   const firstExcludedIndex = conversation.findIndex(message => excludedHashes.includes(message.hash));
 
@@ -114,6 +111,11 @@ const pruneConversation = async (
 
   // All messages before the first excluded index remain untouched.
   const precedingMessages = conversation.slice(0, firstExcludedIndex);
+
+  // If there are no messages to reprocess after the excluded message, return the last preceding message as the new leaf
+  if (firstExcludedIndex === conversation.length - 1) {
+    return precedingMessages[precedingMessages.length - 1];
+  }
 
   // The parent hash for the next reprocessed message would be the hash of the message before the first excluded one.
   const parentHashes = firstExcludedIndex === 0 ? [] : [precedingMessages[precedingMessages.length - 1].hash];
@@ -129,10 +131,10 @@ const pruneConversation = async (
     const newMessages$ = processMessagesWithHashing(source$, parentHashes);
 
     // Convert Observable to Promise and wait for completion
-    newLeafMessage = await lastValueFrom(newMessages$);
+    return await lastValueFrom(newMessages$);
   }
 
-  return newLeafMessage;
+  return precedingMessages[precedingMessages.length - 1];
 };
 
 export { processMessagesWithHashing, editConversation, pruneConversation };
