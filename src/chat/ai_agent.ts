@@ -67,7 +67,8 @@ function rateLimiter<T>(maxCalls: number, windowSize: number): (source: Observab
 }
 
 export function addAssistant(
-  conversation: Conversation
+  conversation: Conversation,
+  model: string
 ): Conversation {
   //sendSystemMessage(conversation, mainSystemMessage.content);
   console.log("new convo!")
@@ -91,7 +92,7 @@ export function addAssistant(
     map(([messages, _typing]) => messages)
   );
 
-  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, assistant);
+  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, assistant, model);
   handleGptMessages(assistant, conversation, typingAndSending);
 
   const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages, assistant);
@@ -138,11 +139,12 @@ function filterByIsUninterruptedUserMessage(messagesAndTyping: Observable<[Messa
 
 function switchedOutputStreamsFromRespondableMessages(
   newRespondableMessages: Observable<Message[]>,
-  assistant: Participant
+  assistant: Participant,
+  model: string
 ) {
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
-    switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, "gpt-3.5-turbo", 1000)),
+    switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, model, 1000)),
     hotShareUntil(assistant.stopListening)
   )
 }

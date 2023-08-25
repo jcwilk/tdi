@@ -7,7 +7,7 @@ import { createParticipant } from '../../chat/participantSubjects';
 import { Conversation, addParticipant, createConversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/ai_agent';
 import { emojiSha } from '../../chat/emojiSha';
-import { ReplaySubject, pluck } from 'rxjs';
+import { ReplaySubject, pluck, tap } from 'rxjs';
 
 const db = new ConversationDB();
 
@@ -22,6 +22,10 @@ function pluckLast<T>(subject: ReplaySubject<T>): T | null {
   });
   subscription.unsubscribe();
   return lastValue;
+}
+
+function buildParticipatedConversation(messages: MessageDB[], model: string = "gpt-3.5-turbo") {
+  return addAssistant(addParticipant(createConversation(messages), createParticipant('user')), model)
 }
 
 const Client: React.FC = () => {
@@ -59,7 +63,7 @@ const Client: React.FC = () => {
       const conversationFromDb = await db.getConversationFromLeaf(initialLeafHash);
       console.log('conversation', conversationFromDb);
 
-      const conversation = addAssistant(addParticipant(createConversation(conversationFromDb), createParticipant('user')));
+      const conversation = buildParticipatedConversation(conversationFromDb);
       setRunningConversations(runningConversations => new Map(runningConversations).set(conversation.id, conversation))
       uuid = conversation.id;
     }
@@ -92,6 +96,23 @@ const Client: React.FC = () => {
     navigate(-1); // Will revert to the previous URL
   };
 
+  const handleModelChange = (conversation: Conversation, model: string) => {
+    const messages: MessageDB[] = [];
+
+    conversation
+      .outgoingMessageStream
+      .pipe(
+        tap(message => messages.push(message))
+      )
+      .subscribe()
+      .unsubscribe();
+
+    const newConversation = buildParticipatedConversation(messages, model);
+    newConversation.id = conversation.id; // TODO: this is a hack to keep the same uuid - I feel dirty and I'm sorry, I'll come back to it.
+    setRunningConversations(runningConversations => new Map(runningConversations).set(conversation.id, newConversation));
+    conversation.teardown();
+  }
+
   if (!activeConversations.length) {
     const runningLeafMessages: RunningConversationOption[] = [];
     for (const [uuid, conversation] of runningConversations) {
@@ -107,14 +128,17 @@ const Client: React.FC = () => {
   return (
     <>
       { /* TODO: we could hypothetically render only the top convo - having them all rendered helps for transitions, but I removed them for now for simplicity */ }
+      { console.log("AC", activeConversations) }
       {activeConversations.map((conversation, index) => {
         return (
           <ConversationModal
             key={conversation.id}
             conversation={conversation}
+            initialGptModel={"gpt-3.5-turbo"}
             onNewHash={(hash) => { navigate(`?ln=${hash}`, {replace: true, state: { activeConversations: activeConversations.map(({ id }) => id) }}) }}
             onClose={handleLeafMessageClose}
             onOpenNewConversation={handleLeafMessageSelect}
+            onNewModel={model => handleModelChange(conversation, model)}
           />
         );
       })}

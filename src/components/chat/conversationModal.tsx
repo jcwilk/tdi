@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Box, Dialog, Slide, TextField, Button, AppBar, Toolbar, IconButton, Typography } from '@mui/material';
+import { Box, Dialog, Slide, TextField, Button, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { TransitionProps } from '@mui/material/transitions';
 import { sendMessage, typeMessage } from '../../chat/participantSubjects';
 import { Conversation } from '../../chat/conversation';
@@ -11,12 +11,16 @@ import { Mic } from '@mui/icons-material';
 import { getTranscription } from '../../openai_api';
 import { editConversation, pruneConversation } from '../../chat/messagePersistence';
 import BoxPopup from '../box_popup';
+import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
+import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
 
 type ConversationModalProps = {
   conversation: Conversation;
+  initialGptModel: string;
   onClose: () => void;
   onOpenNewConversation: (leafMessage: MessageDB) => void; // Callback for opening a new conversation on top
   onNewHash: (hash: string) => void;
+  onNewModel: (model: string) => void;
 };
 
 function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]): number {
@@ -28,17 +32,14 @@ function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]):
   return -1; // Return -1 if no match is found
 }
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, onOpenNewConversation, onNewHash }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, initialGptModel, onClose, onOpenNewConversation, onNewHash, onNewModel }) => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
   const [stopRecording, setStopRecording] = useState<((event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => void) | null>(null);
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
+  const [gptModel, setGptModel] = useState<string>(initialGptModel);
   const inputRef = useRef<any>(null);
-
-  useEffect(() => {
-    console.log("messages", messages)
-  }, [messages])
 
   const currentLeafHash = messages[0]?.hash;
 
@@ -127,6 +128,14 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
   const user = conversation.participants.find((participant) => participant.role === 'user')!;
   const assistant = conversation.participants.find((participant) => participant.role === 'assistant')!;
 
+  const handleModelChange = (event: React.MouseEvent<HTMLElement>, newModel: string | null) => {
+    if (newModel === null) return;
+
+    setGptModel(newModel);
+    onNewModel(newModel);
+    setMessages([]); // TODO: there's got to be a better way to do this... without this it starts duplicating the conversation
+  }
+
   console.log("OPEN", open)
   if (!open) return null;
 
@@ -156,6 +165,17 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
               {currentLeafHash && emojiSha(currentLeafHash, 5)}
             </Typography>
+
+            <ToggleButtonGroup
+              color="primary"
+              value={gptModel}
+              exclusive
+              onChange={handleModelChange}
+              aria-label="Platform"
+            >
+              <ToggleButton value="gpt-3.5-turbo"><DirectionsRunIcon /></ToggleButton>
+              <ToggleButton value="gpt-4"><DirectionsWalkIcon /></ToggleButton>
+            </ToggleButtonGroup>
           </Toolbar>
         </AppBar>
 
