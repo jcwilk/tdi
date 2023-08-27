@@ -1,12 +1,10 @@
 // a series of functions that will be used to create an AI agent
 
-import { BehaviorSubject, Observable, Subject, UnaryFunction, combineLatest, combineLatestWith, debounceTime, filter, map, merge, mergeMap, multicast, partition, scan, share, startWith, switchMap, take, takeUntil, tap, withLatestFrom } from "rxjs";
+import { BehaviorSubject, Observable, Subject, UnaryFunction, filter, map, merge, scan, share, switchMap, takeUntil, tap, withLatestFrom } from "rxjs";
 import { Conversation, Message, TypingUpdate, addParticipant, sendSystemMessage } from "./conversation";
-import { Participant, createParticipant, sendMessage, subscribeWhileAlive, typeMessage } from "./participantSubjects";
-import { GPTMessage, chatCompletionMetaStream, chatCompletionStreams, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, GPTTextUpdate, isGPTStopReason } from "./chatStreams";
+import { Participant, createParticipant, sendMessage, typeMessage } from "./participantSubjects";
+import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTStopReason } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
-
-
 
 const interruptionFunctions: FunctionOption[] = [
   {
@@ -92,7 +90,7 @@ export function addAssistant(
     map(([messages, _typing]) => messages)
   );
 
-  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, assistant, model);
+  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, assistant, model, conversation.functions);
   handleGptMessages(assistant, conversation, typingAndSending);
 
   const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages, assistant);
@@ -140,11 +138,12 @@ function filterByIsUninterruptedUserMessage(messagesAndTyping: Observable<[Messa
 function switchedOutputStreamsFromRespondableMessages(
   newRespondableMessages: Observable<Message[]>,
   assistant: Participant,
-  model: string
+  model: string,
+  functions: FunctionOption[]
 ) {
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
-    switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, model, 1000)),
+    switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, model, 1000, functions)),
     hotShareUntil(assistant.stopListening)
   )
 }

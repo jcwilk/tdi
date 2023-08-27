@@ -8,11 +8,13 @@ import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
 import { emojiSha } from '../../chat/emojiSha';
 import { Mic } from '@mui/icons-material';
-import { getTranscription } from '../../openai_api';
+import { FunctionOption, getTranscription } from '../../openai_api';
 import { editConversation, pruneConversation } from '../../chat/messagePersistence';
 import BoxPopup from '../box_popup';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
+import FunctionsIcon from '@mui/icons-material/Functions';
+import { FunctionManagement } from './functionManagement';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -21,6 +23,7 @@ type ConversationModalProps = {
   onOpenNewConversation: (leafMessage: MessageDB) => void; // Callback for opening a new conversation on top
   onNewHash: (hash: string) => void;
   onNewModel: (model: string) => void;
+  onFunctionsChange: (conversation: Conversation, updatedFunctions: FunctionOption[]) => void;
 };
 
 function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]): number {
@@ -32,7 +35,42 @@ function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]):
   return -1; // Return -1 if no match is found
 }
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, initialGptModel, onClose, onOpenNewConversation, onNewHash, onNewModel }) => {
+const allFunctions: FunctionOption[] = [
+  {
+    name: "ALERT",
+    description: "Displays a browser alert with the provided message.",
+    parameters: {
+      type: "object",
+      properties: {
+        message: {
+          type: "string",
+          description: "The message to display in the alert.",
+        },
+      },
+      required: ["message"],
+    },
+  },
+  {
+    name: "PROMPT",
+    description: "Opens a prompt dialog asking the user to input some text.",
+    parameters: {
+      type: "object",
+      properties: {
+        message: {
+          type: "string",
+          description: "The message to display in the prompt.",
+        },
+        defaultValue: {
+          type: "string",
+          description: "The default value to prefill in the prompt input.",
+        },
+      },
+      required: ["message"],
+    },
+  },
+];
+
+const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, initialGptModel, onClose, onOpenNewConversation, onNewHash, onNewModel, onFunctionsChange }) => {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<MessageDB[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
@@ -40,6 +78,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
   const [gptModel, setGptModel] = useState<string>(initialGptModel);
   const inputRef = useRef<any>(null);
+  const [isFuncMgmtOpen, setFuncMgmtOpen] = useState(false);
+  const [selectedFunctions, setSelectedFunctions] = useState<FunctionOption[]>([]);
 
   const currentLeafHash = messages[0]?.hash;
 
@@ -75,6 +115,12 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
       console.log("TEARDOWN MODAL")
     };
   }, [outgoingMessageStream, typingAggregationOutput]);
+
+  const handleFunctionUpdate = (updatedFunctions: FunctionOption[]) => {
+    setMessages([]); // TODO: there's got to be a better way to do this... without this it starts duplicating the conversation
+    setSelectedFunctions(updatedFunctions);
+    onFunctionsChange(conversation, updatedFunctions);
+  };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -131,9 +177,9 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const handleModelChange = (event: React.MouseEvent<HTMLElement>, newModel: string | null) => {
     if (newModel === null) return;
 
+    setMessages([]); // TODO: there's got to be a better way to do this... without this it starts duplicating the conversation
     setGptModel(newModel);
     onNewModel(newModel);
-    setMessages([]); // TODO: there's got to be a better way to do this... without this it starts duplicating the conversation
   }
 
   console.log("OPEN", open)
@@ -157,7 +203,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             <IconButton
               edge="start"
               color="inherit"
-              onClick={() => onClose()}
+              onClick={() => onClose()} // Assuming you have onClose method already
               aria-label="close"
             >
               <CloseIcon />
@@ -166,11 +212,19 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
               {currentLeafHash && emojiSha(currentLeafHash, 5)}
             </Typography>
 
+            <IconButton
+              color="inherit"
+              onClick={() => setFuncMgmtOpen(true)}
+              aria-label="function-management"
+            >
+              <FunctionsIcon />
+            </IconButton>
+
             <ToggleButtonGroup
               color="primary"
               value={gptModel}
               exclusive
-              onChange={handleModelChange}
+              onChange={handleModelChange} // Assuming you have handleModelChange method
               aria-label="Platform"
             >
               <ToggleButton value="gpt-3.5-turbo"><DirectionsRunIcon /></ToggleButton>
@@ -178,6 +232,15 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             </ToggleButtonGroup>
           </Toolbar>
         </AppBar>
+
+        {isFuncMgmtOpen &&
+          <FunctionManagement
+            availableFunctions={allFunctions} // Replace with your array of available functions
+            selectedFunctions={selectedFunctions} // Replace with your current selected functions
+            onUpdate={handleFunctionUpdate}
+            onClose={() => setFuncMgmtOpen(false)}
+          />
+        }
 
         <Box
           sx={{

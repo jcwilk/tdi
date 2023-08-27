@@ -3,6 +3,7 @@ import { Participant, createParticipant, sendMessage, subscribeWhileAlive, typeM
 import { v4 as uuidv4 } from 'uuid';
 import { MessageDB } from './conversationDb';
 import { processMessagesWithHashing } from './messagePersistence';
+import { FunctionOption } from '../openai_api';
 
 export type Message = {
   content: string;
@@ -24,6 +25,7 @@ export type Conversation = {
   outgoingMessageStreamSubscription?: Subscription;
   systemParticipant: Participant;
   teardown: () => void;
+  functions: FunctionOption[];
   id: string;
 };
 
@@ -41,9 +43,10 @@ export function createConversation(loadedMessages: MessageDB[]): Conversation {
     outgoingMessageStream: new ReplaySubject<MessageDB>(10000),
     typingStreamInput: new Subject<TypingUpdate>(),
     typingAggregationOutput: new BehaviorSubject(new Map()),
-    systemParticipant: systemParticipant,
+    systemParticipant,
     teardown,
-    id: uuidv4()
+    id: uuidv4(),
+    functions: []
   }
 
   loadedMessages.forEach((message) => conversation.outgoingMessageStream.next(message));

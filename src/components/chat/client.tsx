@@ -7,7 +7,8 @@ import { createParticipant } from '../../chat/participantSubjects';
 import { Conversation, addParticipant, createConversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/ai_agent';
 import { emojiSha } from '../../chat/emojiSha';
-import { ReplaySubject, pluck, tap } from 'rxjs';
+import { ReplaySubject, tap } from 'rxjs';
+import { FunctionOption } from '../../openai_api';
 
 const db = new ConversationDB();
 
@@ -113,6 +114,27 @@ const Client: React.FC = () => {
     conversation.teardown();
   }
 
+  const handleFunctionsChange = (conversation: Conversation, updatedFunctions: FunctionOption[]) => {
+    const messages: MessageDB[] = [];
+
+    // TODO: desperate need of refactoring but trying to get to working behavior first
+    conversation
+      .outgoingMessageStream
+      .pipe(
+        tap(message => messages.push(message))
+      )
+      .subscribe()
+      .unsubscribe();
+
+    const conversationWithoutAssistant = addParticipant(createConversation(messages), createParticipant('user'));
+    conversationWithoutAssistant.functions = updatedFunctions;
+    const newConversation = addAssistant(conversationWithoutAssistant, 'gpt-3.5-turbo'); // TODO: need to keep track of the model in a better way somehow
+    newConversation.id = conversation.id; // TODO: this is a hack to keep the same uuid - I feel dirty and I'm sorry, I'll come back to it.
+    setRunningConversations(runningConversations => new Map(runningConversations).set(conversation.id, newConversation));
+    conversation.teardown();
+  }
+
+
   if (!activeConversations.length) {
     const runningLeafMessages: RunningConversationOption[] = [];
     for (const [uuid, conversation] of runningConversations) {
@@ -139,6 +161,7 @@ const Client: React.FC = () => {
             onClose={handleLeafMessageClose}
             onOpenNewConversation={handleLeafMessageSelect}
             onNewModel={model => handleModelChange(conversation, model)}
+            onFunctionsChange={handleFunctionsChange}
           />
         );
       })}
