@@ -1,10 +1,8 @@
-import { Observable, ReplaySubject, Subject, concat, first, from, map, merge, of, shareReplay, takeUntil } from "rxjs";
-
+import { Observable, ReplaySubject, Subject, concat, from, map, merge, of } from "rxjs";
 import { ChatMessage, FunctionCall, FunctionOption, getChatCompletion } from "../openai_api";
 
 export type chatCompletionStream = {
   typingStream: Subject<string>,
-  sendingStream: ReplaySubject<void>,
   functionCallStream: Subject<GPTFunctionCall>
 }
 
@@ -61,17 +59,24 @@ export function chatCompletionStreams(
 
   functionCallInputStream.subscribe(functionCallStream);
 
-  finishObserver.subscribe(sendingStream);
-  finishObserver.subscribe(() => {
-    typingStream.complete();
-    functionCallStream.complete();
-    sendingStream.complete();
-  });
+  finishObserver.subscribe({
+    error: (err) => {
+      console.error('Error during chat completion:', err);
 
+      // Send the error into the typingStream
+      typingStream.error(err);
+
+      // Complete the streams if necessary, or handle the error in another way.
+      functionCallStream.complete();
+    },
+    complete: () => {
+      typingStream.complete();
+      functionCallStream.complete();
+    }
+  });
 
   return {
     typingStream,
-    sendingStream,
     functionCallStream
   }
 }
@@ -88,7 +93,7 @@ export function chatCompletionMetaStream(
     if (model === "gpt-3.5-turbo") model = "gpt-3.5-turbo-0613";
   }
 
-  const { typingStream, sendingStream, functionCallStream } = chatCompletionStreams(
+  const { typingStream, functionCallStream } = chatCompletionStreams(
     messages,
     temperature,
     model,
@@ -99,7 +104,6 @@ export function chatCompletionMetaStream(
   functionCallStream.subscribe((message) => {
     console.log("FUNCTION CALL", message)
   })
-
 
   const typingAndFunctionCallStream = merge(
     typingStream.pipe(

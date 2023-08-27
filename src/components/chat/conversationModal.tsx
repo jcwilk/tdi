@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Box, Dialog, Slide, TextField, Button, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material';
-import { TransitionProps } from '@mui/material/transitions';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { Box, Dialog, TextField, Button, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { sendMessage, typeMessage } from '../../chat/participantSubjects';
 import { Conversation } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
-import { ConversationDB, MessageDB } from '../../chat/conversationDb';
+import { MessageDB } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
 import { emojiSha } from '../../chat/emojiSha';
 import { Mic } from '@mui/icons-material';
@@ -15,6 +14,7 @@ import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
 import FunctionsIcon from '@mui/icons-material/Functions';
 import { FunctionManagement } from './functionManagement';
+import { v4 as uuidv4 } from 'uuid';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -70,9 +70,24 @@ const allFunctions: FunctionOption[] = [
   },
 ];
 
+export type ErrorMessage = {
+  content: string;
+  role: string;
+  hash: string;
+}
+
+// type guard for ErrorMessage which checks role === 'error'
+function isErrorMessage(message: MessageDB | ErrorMessage): message is ErrorMessage {
+  return message.role === 'error';
+}
+
+function isMessageDB(message: MessageDB | ErrorMessage): message is MessageDB {
+  return !isErrorMessage(message);
+}
+
 const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, initialGptModel, onClose, onOpenNewConversation, onNewHash, onNewModel, onFunctionsChange }) => {
   const [text, setText] = useState('');
-  const [messages, setMessages] = useState<MessageDB[]>([]);
+  const [messages, setMessages] = useState<(MessageDB | ErrorMessage)[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
   const [stopRecording, setStopRecording] = useState<((event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => void) | null>(null);
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
@@ -80,15 +95,16 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const inputRef = useRef<any>(null);
   const [isFuncMgmtOpen, setFuncMgmtOpen] = useState(false);
   const [selectedFunctions, setSelectedFunctions] = useState<FunctionOption[]>([]);
+  const messagesWithoutErrors = useMemo(() => messages.filter(isMessageDB), [messages]);
 
-  const currentLeafHash = messages[0]?.hash;
+  const currentLeafHash = messagesWithoutErrors[0]?.hash; // no need for useMemo because it's a primitive
 
   useEffect(() => {
     if (currentLeafHash) {
       console.log("new hash", currentLeafHash)
       onNewHash(currentLeafHash);
     }
-  }, [messages]);
+  }, [messagesWithoutErrors]);
 
   const { outgoingMessageStream, typingAggregationOutput } = conversation || {};
 
@@ -103,10 +119,20 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
       }
     });
 
-    const msgSub = outgoingMessageStream.subscribe((message: MessageDB) => {
-      console.log("new message", message)
-      setMessages((previousMessages) => [message, ...previousMessages]);
-      setAssistantTyping('');
+    const msgSub = outgoingMessageStream.subscribe({
+      error: (err) => {
+        const errorMessage: ErrorMessage = {
+          content: err.message,
+          role: 'error',
+          hash: "fffffffff", // TODO!
+        }
+        setMessages((previousMessages) => [errorMessage, ...previousMessages]);
+      },
+      next: (message: MessageDB) => {
+        console.log("new message", message)
+        setMessages((previousMessages) => [message, ...previousMessages]);
+        setAssistantTyping('');
+      }
     });
 
     return () => {
@@ -144,9 +170,9 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   };
 
   const handlePrune = async (hash: string) => {
-    if(messages.length === 0) return
+    if(messagesWithoutErrors.length === 0) return
 
-    const lastMessage = messages[0];
+    const lastMessage = messagesWithoutErrors[0];
     const newLeafMessage = await pruneConversation(lastMessage, [hash]);
     if(newLeafMessage.hash == lastMessage.hash) return;
 
@@ -154,12 +180,12 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   }
 
   const handleEdit = async (message: MessageDB, newContent: string) => {
-    if(messages.length === 0) return;
-    const lastMessage = messages[0];
+    if(messagesWithoutErrors.length === 0) return;
+    const lastMessage = messagesWithoutErrors[0];
 
-    const index = findIndexByProperty(messages, "hash", message.hash)
+    const index = findIndexByProperty(messagesWithoutErrors, "hash", message.hash)
     if(index < 0) return;
-    const reversedIndex = messages.length - 1 - index; // we store the messages in reverse for rendering purposes
+    const reversedIndex = messagesWithoutErrors.length - 1 - index; // we store the messages in reverse for rendering purposes
 
     const newLeafMessage = await editConversation(lastMessage, reversedIndex, {role: message.role, participantId: message.participantId, content: newContent});
     if(newLeafMessage.hash == lastMessage.hash) return;
@@ -181,9 +207,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
     setGptModel(newModel);
     onNewModel(newModel);
   }
-
-  console.log("OPEN", open)
-  if (!open) return null;
 
   return (
     <Dialog fullScreen open onClose={onClose}>
@@ -258,9 +281,9 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             <MessageBox
               key={message.hash}
               message={message}
-              openConversation={() => onOpenNewConversation(message)}
-              onPrune={() => handlePrune(message.hash)}
-              onEdit={() => setEditingMessage(message)}
+              openConversation={() => isMessageDB(message) && onOpenNewConversation(message)}
+              onPrune={() => isMessageDB(message) && handlePrune(message.hash)}
+              onEdit={() => isMessageDB(message) && setEditingMessage(message)}
             />
           ))}
         </Box>

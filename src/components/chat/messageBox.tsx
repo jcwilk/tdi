@@ -7,9 +7,10 @@ import CopyButton from './copyButton';
 import ForkButton from './forkButton';
 import PruneButton from './pruneButton';
 import EditButton from './editButton';
+import { ErrorMessage } from './conversationModal';
 
 type MessageProps = {
-  message: Message;
+  message: Message | ErrorMessage;
   openConversation?: () => void;
   onPrune?: () => void;
   onEdit?: () => void;
@@ -64,6 +65,11 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune
       alignSelf = 'center';
       backgroundColor = '#000'; // Black background for system messages
       textColor = '#E0E0E0';  // Light gray text color
+      break;
+    case 'error':
+      alignSelf = 'center';
+      backgroundColor = '#111';
+      textColor = '#c00';
       break;
     default:
       alignSelf = 'center';

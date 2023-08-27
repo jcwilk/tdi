@@ -114,3 +114,7 @@ export function teardownConversation(conversation: Conversation) {
   conversation.newMessagesInput.complete();
   conversation.typingStreamInput.complete();
 }
+
+export function sendError(conversation: Conversation, error: Error) {
+  conversation.outgoingMessageStream.error(error);
+}

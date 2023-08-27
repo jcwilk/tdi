@@ -158,54 +158,50 @@ export async function getChatCompletion(
   const OPENAI_KEY = APIKeyFetcher();
   if (!OPENAI_KEY) return;
 
-  try {
-    const payload: ChatCompletionPayload = {
-      messages,
-      model,
-      max_tokens: maxTokens,
-      temperature,
-      stream: true
-    }
-    if (functions.length > 0) {
-      payload.functions = functions;
-    }
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${APIKeyFetcher()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload)
-    });
-    if(!response.body) return
+  const payload: ChatCompletionPayload = {
+    messages,
+    model,
+    max_tokens: maxTokens,
+    temperature,
+    stream: true
+  }
+  if (functions.length > 0) {
+    payload.functions = functions;
+  }
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${APIKeyFetcher()}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload)
+  });
+  if(!response.body) return
 
-    const decoder = new TextDecoder('utf8');
-    const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf8');
+  const reader = response.body.getReader();
 
-    let fullText = ''
+  let fullText = ''
 
-    async function read() {
-      const { value, done } = await reader.read();
+  async function read() {
+    const { value, done } = await reader.read();
 
-      if (done) return onChunk(fullText.trim())
+    if (done) return onChunk(fullText.trim())
 
-      const delta = extractChatValue(decoder.decode(value), onFunctionCall)
+    const delta = extractChatValue(decoder.decode(value), onFunctionCall)
 
-      if (delta.length > 0) {
-        fullText += delta
-        onChunk(fullText.trim())
-      }
-
-      await read()
-
+    if (delta.length > 0) {
+      fullText += delta
+      onChunk(fullText.trim())
     }
 
     await read()
 
-    return // fullText
-  } catch (error) {
-    return //error;
   }
+
+  await read()
+
+  return // fullText
 }
 
 function extractChatValue(text: string, onFunctionCall: (functionCall: FunctionCall) => void): string {

@@ -1,7 +1,7 @@
 // a series of functions that will be used to create an AI agent
 
 import { BehaviorSubject, Observable, Subject, UnaryFunction, filter, map, merge, scan, share, switchMap, takeUntil, tap, withLatestFrom } from "rxjs";
-import { Conversation, Message, TypingUpdate, addParticipant, sendSystemMessage } from "./conversation";
+import { Conversation, Message, TypingUpdate, addParticipant, sendError, sendSystemMessage } from "./conversation";
 import { Participant, createParticipant, sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTStopReason } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
@@ -86,14 +86,27 @@ export function addAssistant(
   const newInterruptingUserMessages = filterByIsInterruptingUserMessage(messagesAndTyping);
 
   const newRespondableMessages = merge(newUninterruptedUserMessages, newSystemMessages).pipe(
-    tap(([messages, _typing]) => console.log("TAPPED", messages)),
     map(([messages, _typing]) => messages)
   );
 
   const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, assistant, model, conversation.functions);
+
+  typingAndSending.subscribe({
+    error: (err) => {
+      sendError(conversation, err);
+    }
+  })
+
   handleGptMessages(assistant, conversation, typingAndSending);
 
   const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages, assistant);
+
+  interruptingFunctionCalls.subscribe({
+    error: (err) => {
+      sendError(conversation, err);
+    }
+  })
+
   sendSystemMessagesForInterruptions(assistant, conversation, interruptingFunctionCalls);
 
   return conversation;
