@@ -4,7 +4,7 @@ import ConversationModal from './conversationModal';
 import LeafMessages, { RunningConversationOption } from './leafMessages';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createParticipant } from '../../chat/participantSubjects';
-import { Conversation, addParticipant, createConversation } from '../../chat/conversation';
+import { Conversation, addParticipant, createConversation, teardownConversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/ai_agent';
 import { emojiSha } from '../../chat/emojiSha';
 import { ReplaySubject, tap } from 'rxjs';
@@ -89,7 +89,7 @@ const Client: React.FC = () => {
     }
 
     return () => {
-      runningConversations.forEach(conversation => conversation.teardown())
+      runningConversations.forEach(conversation => teardownConversation(conversation))
     }
   }, []);
 
@@ -111,7 +111,7 @@ const Client: React.FC = () => {
     const newConversation = buildParticipatedConversation(messages, model);
     newConversation.id = conversation.id; // TODO: this is a hack to keep the same uuid - I feel dirty and I'm sorry, I'll come back to it.
     setRunningConversations(runningConversations => new Map(runningConversations).set(conversation.id, newConversation));
-    conversation.teardown();
+    teardownConversation(conversation);
   }
 
   const handleFunctionsChange = (conversation: Conversation, updatedFunctions: FunctionOption[]) => {
@@ -131,7 +131,7 @@ const Client: React.FC = () => {
     const newConversation = addAssistant(conversationWithoutAssistant, 'gpt-3.5-turbo'); // TODO: need to keep track of the model in a better way somehow
     newConversation.id = conversation.id; // TODO: this is a hack to keep the same uuid - I feel dirty and I'm sorry, I'll come back to it.
     setRunningConversations(runningConversations => new Map(runningConversations).set(conversation.id, newConversation));
-    conversation.teardown();
+    teardownConversation(conversation);
   }
 
 

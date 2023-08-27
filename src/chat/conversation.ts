@@ -1,9 +1,10 @@
-import { BehaviorSubject, ReplaySubject, Subject, Subscription, of } from 'rxjs';
-import { Participant, createParticipant, sendMessage, subscribeWhileAlive, typeMessage } from './participantSubjects';
+import { BehaviorSubject, Observable, ReplaySubject, Subject, finalize, scan } from 'rxjs';
+import { Participant, createParticipant, sendMessage, teardownParticipant, typeMessage } from './participantSubjects';
 import { v4 as uuidv4 } from 'uuid';
 import { MessageDB } from './conversationDb';
 import { processMessagesWithHashing } from './messagePersistence';
 import { FunctionOption } from '../openai_api';
+import { subscribeUntilFinalized } from './rxjsUtilities';
 
 export type Message = {
   content: string;
@@ -22,20 +23,13 @@ export type Conversation = {
   outgoingMessageStream: ReplaySubject<MessageDB>;
   typingStreamInput: Subject<TypingUpdate>;
   typingAggregationOutput: BehaviorSubject<Map<string, string>>;
-  outgoingMessageStreamSubscription?: Subscription;
   systemParticipant: Participant;
-  teardown: () => void;
   functions: FunctionOption[];
   id: string;
 };
 
 export function createConversation(loadedMessages: MessageDB[]): Conversation {
   const systemParticipant = createParticipant("system");
-
-  const teardown = () => {
-    conversation.participants.forEach((participant) => participant.stopListening.next());
-    conversation.systemParticipant.stopListening.next();
-  }
 
   const conversation: Conversation = {
     participants: [],
@@ -44,15 +38,13 @@ export function createConversation(loadedMessages: MessageDB[]): Conversation {
     typingStreamInput: new Subject<TypingUpdate>(),
     typingAggregationOutput: new BehaviorSubject(new Map()),
     systemParticipant,
-    teardown,
     id: uuidv4(),
     functions: []
   }
 
   loadedMessages.forEach((message) => conversation.outgoingMessageStream.next(message));
 
-  subscribeWhileAlive(systemParticipant, systemParticipant.sendingStream, conversation.newMessagesInput);
-  // TODO: next its stopListening stream when destroying this conversation. at time of writing conversation destruction hadn't yet been implemented.
+  subscribeUntilFinalized(systemParticipant.sendingStream, conversation.newMessagesInput);
 
   const lastMessage = loadedMessages[loadedMessages.length - 1];
   const lastLoadedMessageHashes = lastMessage?.hash ? [lastMessage.hash] : [];
@@ -60,23 +52,15 @@ export function createConversation(loadedMessages: MessageDB[]): Conversation {
   // TODO: break this out of conversation, or at least out of its initialization - it's an undesirable coupling
   const persistedMessages = processMessagesWithHashing(conversation.newMessagesInput, lastLoadedMessageHashes);
 
-  const tmpSubject = new Subject<MessageDB>();
-  persistedMessages.subscribe({
-    next: (value) => tmpSubject.next(value),
-    error: (err) => console.error("error persisting message", err)
-  });
+  subscribeUntilFinalized(persistedMessages, conversation.outgoingMessageStream);
 
-  tmpSubject.subscribe(conversation.outgoingMessageStream);
-
-  //subscribeWhileAlive(systemParticipant, tmpSubject, conversation.outgoingMessageStream);
-
-  conversation.typingStreamInput.subscribe({
-    next: ({participantId, content}) => {
-      const newTypingValues = new Map(conversation.typingAggregationOutput.value);
-      newTypingValues.set(participantId, content);
-      conversation.typingAggregationOutput.next(newTypingValues);
-    },
-  });
+  subscribeUntilFinalized(conversation.typingStreamInput.pipe(
+    scan((typingMap: Map<string, string>, typingUpdate: TypingUpdate) => {
+      const newTypingValues = new Map(typingMap);
+      newTypingValues.set(typingUpdate.participantId, typingUpdate.content);
+      return newTypingValues;
+    }, new Map())
+  ), conversation.typingAggregationOutput);
 
   return conversation;
 }
@@ -85,9 +69,11 @@ export function addParticipant(
   conversation: Conversation,
   participant: Participant
 ): Conversation {
-  subscribeWhileAlive(participant, conversation.outgoingMessageStream, participant.incomingMessageStream);
-  subscribeWhileAlive(participant, participant.sendingStream, conversation.newMessagesInput);
-  subscribeWhileAlive(participant, participant.typingStream, conversation.typingStreamInput);
+  subscribeUntilFinalized(conversation.outgoingMessageStream, participant.incomingMessageStream);
+
+  // We don't necessarily want to complete the conversation just because the subscriber completed
+  participant.sendingStream.subscribe(conversation.newMessagesInput);
+  participant.typingStream.subscribe(conversation.typingStreamInput);
 
   const newParticipants = [...conversation.participants, participant];
 
@@ -99,8 +85,9 @@ export function addParticipant(
 
 export function removeParticipant(conversation: Conversation, id: string): Conversation {
   const participant = getParticipant(conversation, id);
-  participant?.stopListening.next();
+  if (!participant) return conversation;
 
+  teardownParticipant(participant)
   const newParticipants = conversation.participants.filter(participant => participant.id !== id);
 
   return {
@@ -118,4 +105,12 @@ export function sendSystemMessage(conversation: Conversation, message: string) {
 
   typeMessage(systemParticipant, message);
   sendMessage(systemParticipant);
+}
+
+export function teardownConversation(conversation: Conversation) {
+  conversation.participants.forEach((participant) => teardownParticipant(participant));
+  teardownParticipant(conversation.systemParticipant);
+
+  conversation.newMessagesInput.complete();
+  conversation.typingStreamInput.complete();
 }

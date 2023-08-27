@@ -1,4 +1,4 @@
-import { BehaviorSubject, Subject, ReplaySubject, takeUntil, Observable } from 'rxjs';
+import { BehaviorSubject, Subject, ReplaySubject, takeUntil, Observable, map, finalize } from 'rxjs';
 import { Message, TypingUpdate } from './conversation';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -9,7 +9,6 @@ export type Participant = {
   typingStream: BehaviorSubject<TypingUpdate>;
   sendingStream: Subject<Message>;
   incomingMessageStream: ReplaySubject<Message>;
-  stopListening: Subject<void>;
 };
 
 export function createParticipant(role: string): Participant {
@@ -20,15 +19,13 @@ export function createParticipant(role: string): Participant {
     typingStreamInput: new Subject<string>(),
     typingStream: new BehaviorSubject({ participantId: id, content: '' }),
     sendingStream: new Subject(),
-    incomingMessageStream: new ReplaySubject(10000),
-    stopListening: new Subject()
+    incomingMessageStream: new ReplaySubject(10000)
   };
 
-  participant.typingStreamInput.subscribe({
-    next: (content) => {
-      participant.typingStream.next({ participantId: id, content });
-    }
-  });
+  participant.typingStreamInput.pipe(
+    map((content) => ({ participantId: id, content })),
+    finalize(() => participant.typingStream.complete())
+  ).subscribe(participant.typingStream);
 
   return participant;
 }
@@ -42,20 +39,15 @@ export function sendMessage(participant: Participant): void {
 
   if(!content) return;
 
+  participant.typingStreamInput.next('');
   participant.sendingStream.next({
     content,
     participantId: participant.id,
     role: participant.role
   });
-  participant.typingStreamInput.next('');
 }
 
-export function subscribeWhileAlive(
-  participant: Participant,
-  source: Observable<any>,
-  subscriber: Subject<any>
-): void {
-  source.pipe(
-    takeUntil(participant.stopListening)
-  ).subscribe(subscriber);
+export function teardownParticipant(participant: Participant): void {
+  participant.typingStreamInput.complete();
+  participant.incomingMessageStream.complete();
 }

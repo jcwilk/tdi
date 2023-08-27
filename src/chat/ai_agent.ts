@@ -5,6 +5,7 @@ import { Conversation, Message, TypingUpdate, addParticipant, sendSystemMessage 
 import { Participant, createParticipant, sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTStopReason } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
+import { subscribeUntilFinalized } from "./rxjsUtilities";
 
 const interruptionFunctions: FunctionOption[] = [
   {
@@ -78,8 +79,7 @@ export function addAssistant(
   const messages = createMessageStream(conversation, assistant);
 
   const messagesAndTyping = messages.pipe(
-    withLatestFrom(assistant.typingStream),
-    takeUntil(assistant.stopListening)
+    withLatestFrom(assistant.typingStream)
   );
   const newSystemMessages = filterByIsSystemMessage(messagesAndTyping);
   const newUninterruptedUserMessages = filterByIsUninterruptedUserMessage(messagesAndTyping);
@@ -102,11 +102,10 @@ export function addAssistant(
 function createMessageStream(conversation: Conversation, assistant: Participant) {
   const messages = new BehaviorSubject<Message[]>([]);
 
-  conversation.outgoingMessageStream.pipe(
+  subscribeUntilFinalized(conversation.outgoingMessageStream.pipe(
     scan((allMessages: Message[], newMessage: Message) => [...allMessages, newMessage], []),
-    filter((allMessages) => allMessages[allMessages.length - 1].participantId !== assistant.id),
-    takeUntil(assistant.stopListening)
-  ).subscribe(messages);
+    filter((allMessages) => allMessages[allMessages.length - 1].participantId !== assistant.id)
+  ), messages);
 
   return messages;
 }
@@ -144,7 +143,7 @@ function switchedOutputStreamsFromRespondableMessages(
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
     switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, model, 1000, functions)),
-    hotShareUntil(assistant.stopListening)
+    hotShare()
   )
 }
 
@@ -161,17 +160,15 @@ function filterByIsInterruptingUserMessage(messagesAndTyping: Observable<[Messag
 }
 
 function handleGptMessages(assistant: Participant, conversation: Conversation, typingAndSending: Observable<GPTMessage>) {
-  const garbageCollectible = typingAndSending.pipe(
-    takeUntil(assistant.stopListening)
-  );
+  typingAndSending.pipe(
+    filter(isGPTTextUpdate),
+    tap(({ text }) => typeMessage(assistant, text))
+  ).subscribe();
 
-  garbageCollectible.pipe(
-    filter(isGPTTextUpdate)
-  ).subscribe((typing) => typeMessage(assistant, typing.text));
-
-  garbageCollectible.pipe(
-    filter(isGPTStopReason)
-  ).subscribe(() => {sendMessage(assistant)});
+  typingAndSending.pipe(
+    filter(isGPTStopReason),
+    tap(() => sendMessage(assistant)),
+  ).subscribe();
 }
 
 function switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages: Observable<[Message[], TypingUpdate]>, assistant: Participant) {
@@ -196,30 +193,24 @@ The ONLY scenario where you should not call a function is if the latest user mes
     }),
     filter(([gptMessage, _typingUpdate]) => isGPTFunctionCall(gptMessage)),
     map(([gptMessage, typingUpdate]) => [gptMessage, typingUpdate] as [GPTFunctionCall, TypingUpdate]),
-    hotShareUntil(assistant.stopListening)
+    hotShare()
   )
 }
 
 function sendSystemMessagesForInterruptions(assistant: Participant, conversation: Conversation, interruptingFunctionCalls: Observable<[GPTFunctionCall, TypingUpdate]>) {
-  const garbageCollectible = interruptingFunctionCalls.pipe(
-    takeUntil(assistant.stopListening)
-  );
+  interruptingFunctionCalls.pipe(
+    filter(([{ functionCall }, _typingUpdate]) => functionCall.name === "cancel"),
+    tap(() => sendSystemMessage(conversation, "Assistant was interrupted by the user and the message in progress was discarded."))
+  ).subscribe();
 
-  garbageCollectible.pipe(
-    filter(([{ functionCall }, _typingUpdate]) => functionCall.name === "cancel")
-  ).subscribe(() => {
-    sendSystemMessage(conversation, "Assistant was interrupted by the user and the message in progress was discarded.");
-  });
-
-  garbageCollectible.pipe(
-    filter(([{ functionCall }, typingUpdate]) => functionCall.name === "append")
-  ).subscribe(([_gptFunctionCall, typingUpdate]) => {
-    sendSystemMessage(conversation, `Assistant was interrupted by the user. The message in progress was:
+  interruptingFunctionCalls.pipe(
+    filter(([{ functionCall }, typingUpdate]) => functionCall.name === "append"),
+    tap(([_, typingUpdate]) => sendSystemMessage(conversation, `Assistant was interrupted by the user. The message in progress was:
 \`\`\`
 ${typingUpdate.content}
 \`\`\`
 
-Your message MUST be a continuation of this message in progress, but MUST also include a rapid pivot to fit with the most recent user messages. Do not duplicate the message in progress in the new message.
-`);
-  });
+Your message MUST be a continuation of this message in progress, but MUST also include a rapid pivot to fit with the most recent user messages. Do not duplicate the message in progress in the new message.`
+    ))
+  ).subscribe();
 }
