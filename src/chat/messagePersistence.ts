@@ -32,15 +32,17 @@ const processMessagesWithHashing = (
       return {
         ...message,
         timestamp: Date.now(),
-        hash: ''
+        hash: '',
+        parentHash: null
       };
     }),
     concatMap(async (messageDB, index): Promise<MessageDB> => {
       const currentParentHashes = index === 0 ? initialParentHashes : (lastProcessedHash ? [lastProcessedHash] : []);
 
       messageDB.hash = await hashFunction(messageDB, currentParentHashes);
+      messageDB.parentHash = currentParentHashes[0];
       console.log("persisting...");
-      const persistedMessage = await conversationDB.saveMessage(messageDB, currentParentHashes);
+      const persistedMessage = await conversationDB.saveMessage(messageDB, currentParentHashes[0]);
 
       // Update the lastProcessedHash after processing the current message
       lastProcessedHash = persistedMessage.hash;
