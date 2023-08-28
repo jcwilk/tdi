@@ -14,7 +14,7 @@ import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
 import FunctionsIcon from '@mui/icons-material/Functions';
 import { FunctionManagement } from './functionManagement';
-import { v4 as uuidv4 } from 'uuid';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -89,7 +89,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<(MessageDB | ErrorMessage)[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
-  const [stopRecording, setStopRecording] = useState<((event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => void) | null>(null);
+  const [stopRecording, setStopRecording] = useState<(() => void) | null>(null);
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
   const [gptModel, setGptModel] = useState<string>(initialGptModel);
   const inputRef = useRef<any>(null);
@@ -155,16 +155,24 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
     }
   };
 
-  // Placeholder function to start recording
   const startRecording = async (event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
+    if (stopRecording) return;
+
     const { getTranscript } = await getTranscription();
 
-    setStopRecording(() => {
+    setStopRecording((priorStopRecording) => {
+      if (priorStopRecording) {
+        getTranscript(); // kill the recording, another one started already
+        return priorStopRecording;
+      }
+
+
+
       return async () => {
-        setStopRecording(null);
         const transcript = await getTranscript();
         typeMessage(user, transcript);
         sendMessage(user);
+        setStopRecording(null);
       }
     });
   };
@@ -307,18 +315,9 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             display: 'flex',
             justifyContent: 'space-between',
             padding: '10px',
+            alignItems: 'flex-end' // to align the TextField with the bottom of the button
           }}
         >
-          <IconButton
-            component={  'button'}
-            sx={{ marginRight: '10px' }}
-            onMouseDown={startRecording as (event: React.MouseEvent<HTMLButtonElement> | undefined) => void}
-            onMouseUp={stopRecording as (event: React.MouseEvent<HTMLButtonElement> | undefined) => void}
-            onTouchStart={startRecording as (event: React.TouchEvent<HTMLButtonElement> | undefined) => void}
-            onTouchEnd={stopRecording as (event: React.TouchEvent<HTMLButtonElement> | undefined) => void}
-          >
-            <Mic />
-          </IconButton>
           <TextField
             sx={{ flexGrow: 1, marginRight: '10px' }}
             label="Message"
@@ -330,18 +329,54 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             onKeyDown={handleKeyDown}
             inputRef={inputRef}
           />
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => {
-              sendMessage(user);
-              inputRef.current.focus();
+
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center', // Horizontally center the mic button
+              width: 'fit-content' // To ensure the box doesn't take up more width than needed
             }}
-            disabled={text === ''}
           >
-            Send
-          </Button>
+            <Box
+              sx={{
+                height: '48px', // Assuming the height of the mic button is 48px
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginBottom: '5px'
+              }}
+            >
+              <IconButton
+                component={'button'}
+                onMouseDown={startRecording as (event: React.MouseEvent<HTMLButtonElement> | undefined) => void}
+                onMouseUp={stopRecording as (event: React.MouseEvent<HTMLButtonElement> | undefined) => void}
+                onTouchStart={startRecording as (event: React.TouchEvent<HTMLButtonElement> | undefined) => void}
+                onTouchEnd={stopRecording as (event: React.TouchEvent<HTMLButtonElement> | undefined) => void}
+              >
+                {stopRecording ? <RecordVoiceOverIcon /> : <Mic />}
+              </IconButton>
+            </Box>
+
+            <Button
+              sx={{
+                flexGrow: 1, // To allow the Send button to grow
+                height: '100%', // Take up the remaining height
+              }}
+              variant="contained"
+              color="primary"
+              onClick={() => {
+                sendMessage(user);
+                inputRef.current.focus();
+              }}
+              disabled={text === ''}
+            >
+              Send
+            </Button>
+          </Box>
         </Box>
+
+
       </Box>
     </Dialog>
   );
