@@ -323,6 +323,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             label="Message"
             variant="outlined"
             multiline
+            minRows={2}
             maxRows={10}
             value={text}
             onChange={(e) => typeMessage(user, e.target.value)}

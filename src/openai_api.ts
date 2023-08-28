@@ -146,6 +146,36 @@ export type FunctionCall = {
   }
 }
 
+export async function getEmbedding(
+  inputText: string,
+  model: string = "text-embedding-ada-002"
+): Promise<number[]> {
+  const OPENAI_KEY = APIKeyFetcher();
+  if (!OPENAI_KEY) throw new Error("API Key not found");
+
+  const payload = {
+    input: inputText,
+    model: model
+  };
+
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to fetch embedding: ${error}`);
+  }
+
+  const data = await response.json();
+  return data.data[0].embedding;
+}
+
 export async function getChatCompletion(
   messages: ChatMessage[],
   temperature: number,

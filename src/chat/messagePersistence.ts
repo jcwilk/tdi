@@ -2,8 +2,9 @@ import { Observable, from, lastValueFrom, pipe } from 'rxjs';
 import { concatMap, map, mergeMap, scan } from 'rxjs/operators';
 import { ConversationDB, MessageDB } from './conversationDb';
 import { Message } from './conversation';
+import { getEmbedding } from '../openai_api';
 
-const hashFunction = async (message: MessageDB, parentHashes: string[]): Promise<string> => {
+const hashFunction = async (message: Message, parentHashes: string[]): Promise<string> => {
   // Extract the required fields
   const { content, role } = message;
 
@@ -28,21 +29,18 @@ const processMessagesWithHashing = (
   let lastProcessedHash: string | null = null;
 
   return source$.pipe(
-    map((message): MessageDB => {
-      return {
-        ...message,
-        timestamp: Date.now(),
-        hash: '',
-        parentHash: null
-      };
-    }),
-    concatMap(async (messageDB, index): Promise<MessageDB> => {
+    concatMap(async (message: Message, index): Promise<MessageDB> => {
       const currentParentHashes = index === 0 ? initialParentHashes : (lastProcessedHash ? [lastProcessedHash] : []);
 
-      messageDB.hash = await hashFunction(messageDB, currentParentHashes);
-      messageDB.parentHash = currentParentHashes[0];
+      const messageDB: MessageDB = {
+        ...message,
+        timestamp: Date.now(),
+        hash: await hashFunction(message, currentParentHashes),
+        parentHash: currentParentHashes[0],
+        embedding: await getEmbedding(message.content)
+      };
       console.log("persisting...");
-      const persistedMessage = await conversationDB.saveMessage(messageDB, currentParentHashes[0]);
+      const persistedMessage = await conversationDB.saveMessage(messageDB);
 
       // Update the lastProcessedHash after processing the current message
       lastProcessedHash = persistedMessage.hash;
