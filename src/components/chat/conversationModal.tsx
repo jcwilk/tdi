@@ -15,6 +15,8 @@ import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
 import FunctionsIcon from '@mui/icons-material/Functions';
 import { FunctionManagement } from './functionManagement';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+import SendIcon from '@mui/icons-material/Send';
+import MemoryIcon from '@mui/icons-material/Memory';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -89,7 +91,9 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<(MessageDB | ErrorMessage)[]>([]);
   const [assistantTyping, setAssistantTyping] = useState('');
-  const [stopRecording, setStopRecording] = useState<(() => void) | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [stopRecording, setStopRecording] = useState<(() => Promise<string>) | null>(null);
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
   const [gptModel, setGptModel] = useState<string>(initialGptModel);
   const inputRef = useRef<any>(null);
@@ -155,26 +159,26 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
     }
   };
 
-  const startRecording = async (event: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
-    if (stopRecording) return;
-
-    const { getTranscript } = await getTranscription();
-
-    setStopRecording((priorStopRecording) => {
-      if (priorStopRecording) {
-        getTranscript(); // kill the recording, another one started already
-        return priorStopRecording;
-      }
-
-
-
-      return async () => {
-        const transcript = await getTranscript();
+  const toggleRecording = async () => {
+    if (isRecording) {
+      setIsRecording(false);
+      setIsTranscribing(true);
+      if (stopRecording) {
+        const transcript = await stopRecording();
         typeMessage(user, transcript);
         sendMessage(user);
         setStopRecording(null);
+        setIsTranscribing(false);
       }
-    });
+    } else if (!isTranscribing) {
+      const { getTranscript } = await getTranscription();
+
+      setStopRecording(() => async () => {
+        return await getTranscript();
+      });
+
+      setIsRecording(true);
+    }
   };
 
   const handlePrune = async (hash: string) => {
@@ -350,12 +354,9 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             >
               <IconButton
                 component={'button'}
-                onMouseDown={startRecording as (event: React.MouseEvent<HTMLButtonElement> | undefined) => void}
-                onMouseUp={stopRecording as (event: React.MouseEvent<HTMLButtonElement> | undefined) => void}
-                onTouchStart={startRecording as (event: React.TouchEvent<HTMLButtonElement> | undefined) => void}
-                onTouchEnd={stopRecording as (event: React.TouchEvent<HTMLButtonElement> | undefined) => void}
+                onClick={toggleRecording}
               >
-                {stopRecording ? <RecordVoiceOverIcon /> : <Mic />}
+                {isTranscribing ? <MemoryIcon /> : isRecording ? <RecordVoiceOverIcon /> : <Mic />}
               </IconButton>
             </Box>
 
@@ -372,7 +373,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
               }}
               disabled={text === ''}
             >
-              Send
+              <SendIcon />
             </Button>
           </Box>
         </Box>

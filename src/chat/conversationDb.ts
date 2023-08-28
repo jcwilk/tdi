@@ -79,7 +79,7 @@ export class ConversationDB extends Dexie {
     const parentHashes = [...new Set(
       messagesArray
         .map(message => message.parentHash)
-        .filter(hash => hash !== null && typeof hash === 'string')
+        .filter(hash => hash !== null && typeof hash === 'string') as string[]
     )];
 
     // Retrieve messages where their hash is not in the list of parent hashes
