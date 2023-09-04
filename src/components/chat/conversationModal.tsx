@@ -100,8 +100,11 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const [isFuncMgmtOpen, setFuncMgmtOpen] = useState(false);
   const [selectedFunctions, setSelectedFunctions] = useState<FunctionOption[]>([]);
   const messagesWithoutErrors = useMemo(() => messages.filter(isMessageDB), [messages]);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [lastScrollHeight, setLastScrollHeight] = useState<number>(0);
 
-  const currentLeafHash = messagesWithoutErrors[0]?.hash; // no need for useMemo because it's a primitive
+  const currentLeafHash = messagesWithoutErrors[messagesWithoutErrors.length - 1]?.hash; // no need for useMemo because it's a primitive
 
   useEffect(() => {
     if (currentLeafHash) {
@@ -109,6 +112,19 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
       onNewHash(currentLeafHash);
     }
   }, [messagesWithoutErrors]);
+
+  useEffect(() => {
+    const messagesContainer = messagesContainerRef.current;
+    if (messagesContainer) {
+      const scrollOffsetMax = 200; // adjust this value to determine how close to the bottom the user should be to trigger auto-scroll
+      const isNearBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - scrollOffsetMax <= messagesContainer.clientHeight;
+      //console.log("scrolling", isNearBottom, messagesContainer.scrollHeight - messagesContainer.scrollTop, messagesContainer.scrollHeight, messagesContainer.scrollTop, messagesContainer.clientHeight)
+      if (isNearBottom || messagesContainer.scrollTop >= lastScrollHeight) {
+        messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+        setLastScrollHeight(messagesContainer.scrollTop);
+      }
+    }
+  }, [messages, assistantTyping]);
 
   const { outgoingMessageStream, typingAggregationOutput } = conversation || {};
 
@@ -134,7 +150,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
       },
       next: (message: MessageDB) => {
         console.log("new message", message)
-        setMessages((previousMessages) => [message, ...previousMessages]);
+        setMessages((previousMessages) => [...previousMessages, message]);
         setAssistantTyping('');
       }
     });
@@ -184,7 +200,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const handlePrune = async (hash: string) => {
     if(messagesWithoutErrors.length === 0) return
 
-    const lastMessage = messagesWithoutErrors[0];
+    const lastMessage = messagesWithoutErrors[messagesWithoutErrors.length - 1];
     const newLeafMessage = await pruneConversation(lastMessage, [hash]);
     if(newLeafMessage.hash == lastMessage.hash) return;
 
@@ -193,20 +209,14 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
 
   const handleEdit = async (message: MessageDB, newContent: string) => {
     if(messagesWithoutErrors.length === 0) return;
-    const lastMessage = messagesWithoutErrors[0];
+    const lastMessage = messagesWithoutErrors[messagesWithoutErrors.length - 1];
 
-    const index = findIndexByProperty(messagesWithoutErrors, "hash", message.hash)
-    if(index < 0) return;
-    const reversedIndex = messagesWithoutErrors.length - 1 - index; // we store the messages in reverse for rendering purposes
+    const index = findIndexByProperty(messagesWithoutErrors, "hash", message.hash);
 
-    const newLeafMessage = await editConversation(lastMessage, reversedIndex, {role: message.role, participantId: message.participantId, content: newContent});
+    const newLeafMessage = await editConversation(lastMessage, index, {role: message.role, participantId: message.participantId, content: newContent});
     if(newLeafMessage.hash == lastMessage.hash) return;
 
     onOpenNewConversation(newLeafMessage);
-  }
-
-  if (!conversation) {
-    return null; // Or you can render some loading state.
   }
 
   const user = conversation.participants.find((participant) => participant.role === 'user')!;
@@ -278,18 +288,16 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
         }
 
         <Box
+          ref={messagesContainerRef}
           sx={{
             flexGrow: 1,
             overflowY: 'auto',
             display: 'flex',
-            flexDirection: 'column-reverse',
             padding: '20px',
+            flexDirection: 'column',
           }}
         >
-          {assistantTyping && (
-            <MessageBox key="assistant-typing" message={{ participantId: 'TODO', role: 'assistant', content: assistantTyping }} />
-          )}
-          {messages.map((message) => (
+          {messages.map((message, index) => (
             <MessageBox
               key={message.hash}
               message={message}
@@ -298,6 +306,10 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
               onEdit={() => isMessageDB(message) && setEditingMessage(message)}
             />
           ))}
+          {assistantTyping && (
+            <MessageBox key="assistant-typing" message={{ participantId: 'TODO', role: 'assistant', content: assistantTyping }} />
+          )}
+          <div ref={messagesEndRef} />
         </Box>
 
         <BoxPopup
