@@ -2,7 +2,7 @@
 
 import { BehaviorSubject, Observable, Subject, UnaryFunction, filter, map, merge, scan, share, switchMap, takeUntil, tap, withLatestFrom } from "rxjs";
 import { Conversation, Message, TypingUpdate, addParticipant, sendError, sendSystemMessage } from "./conversation";
-import { Participant, createParticipant, sendMessage, typeMessage } from "./participantSubjects";
+import { Participant, callFunction, createParticipant, sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTStopReason } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
 import { subscribeUntilFinalized } from "./rxjsUtilities";
@@ -176,6 +176,11 @@ function handleGptMessages(assistant: Participant, conversation: Conversation, t
   typingAndSending.pipe(
     filter(isGPTTextUpdate),
     tap(({ text }) => typeMessage(assistant, text))
+  ).subscribe();
+
+  typingAndSending.pipe(
+    filter(isGPTFunctionCall),
+    tap(({ functionCall }) => callFunction(assistant, functionCall))
   ).subscribe();
 
   typingAndSending.pipe(

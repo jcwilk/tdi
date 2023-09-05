@@ -41,7 +41,7 @@ function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]):
 
 const allFunctions: FunctionOption[] = [
   {
-    name: "ALERT",
+    name: "alert",
     description: "Displays a browser alert with the provided message.",
     parameters: {
       type: "object",
@@ -55,7 +55,7 @@ const allFunctions: FunctionOption[] = [
     },
   },
   {
-    name: "PROMPT",
+    name: "prompt",
     description: "Opens a prompt dialog asking the user to input some text.",
     parameters: {
       type: "object",

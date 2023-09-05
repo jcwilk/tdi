@@ -1,4 +1,4 @@
-import { Observable, ReplaySubject, Subject, concat, from, map, merge, of } from "rxjs";
+import { BehaviorSubject, Observable, ReplaySubject, Subject, concat, concatMap, filter, from, map, merge, of } from "rxjs";
 import { ChatMessage, FunctionCall, FunctionOption, getChatCompletion } from "../openai_api";
 
 export type chatCompletionStream = {
@@ -101,15 +101,21 @@ export function chatCompletionMetaStream(
     functions
   )
 
+  const bufferedFunctionCallStream = new BehaviorSubject<GPTFunctionCall | null>(null);
+
+  functionCallStream.subscribe(bufferedFunctionCallStream);
+
   functionCallStream.subscribe((message) => {
     console.log("FUNCTION CALL", message)
   })
 
-  const typingAndFunctionCallStream = merge(
+  const typingAndFunctionCallStream = concat(
     typingStream.pipe(
       map(text => ({ text } as GPTTextUpdate)),
     ),
-    functionCallStream
+    bufferedFunctionCallStream.pipe(
+      filter((message): message is GPTFunctionCall => message !== null)
+    )
   );
 
   return concat(

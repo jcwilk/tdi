@@ -1,6 +1,7 @@
 import { BehaviorSubject, Subject, ReplaySubject, takeUntil, Observable, map, finalize } from 'rxjs';
 import { Message, TypingUpdate } from './conversation';
 import { v4 as uuidv4 } from 'uuid';
+import { FunctionCall } from '../openai_api';
 
 export type Participant = {
   id: string;
@@ -45,6 +46,20 @@ export function sendMessage(participant: Participant): void {
     participantId: participant.id,
     role: participant.role
   });
+}
+
+export function callFunction(participant: Participant, functionCall: FunctionCall): void {
+  const code = `${functionCall.name}("${functionCall.parameters.message}")`;
+  console.log("eval!", code)
+
+  const result = eval(code);
+
+  participant.sendingStream.next({
+    content: "Function call: " + JSON.stringify({...functionCall, result}),
+    participantId: participant.id,
+    role: participant.role
+  });
+
 }
 
 export function teardownParticipant(participant: Participant): void {
