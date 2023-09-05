@@ -17,6 +17,8 @@ import { FunctionManagement } from './functionManagement';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import SendIcon from '@mui/icons-material/Send';
 import MemoryIcon from '@mui/icons-material/Memory';
+import { TransitionProps } from '@mui/material/transitions';
+import { Checkbox } from '@mui/material';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -100,9 +102,11 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const [isFuncMgmtOpen, setFuncMgmtOpen] = useState(false);
   const [selectedFunctions, setSelectedFunctions] = useState<FunctionOption[]>([]);
   const messagesWithoutErrors = useMemo(() => messages.filter(isMessageDB), [messages]);
-  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const [lastScrollHeight, setLastScrollHeight] = useState<number>(0);
+  const [autoScroll, setAutoScroll] = useState<boolean>(true);
+
+  // ugly hack for getting a log when a new modal is created
+  useState(() => { console.log("new modal!") });
 
   const currentLeafHash = messagesWithoutErrors[messagesWithoutErrors.length - 1]?.hash; // no need for useMemo because it's a primitive
 
@@ -114,17 +118,11 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   }, [messagesWithoutErrors]);
 
   useEffect(() => {
-    const messagesContainer = messagesContainerRef.current;
-    if (messagesContainer) {
-      const scrollOffsetMax = 200; // adjust this value to determine how close to the bottom the user should be to trigger auto-scroll
-      const isNearBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - scrollOffsetMax <= messagesContainer.clientHeight;
-      //console.log("scrolling", isNearBottom, messagesContainer.scrollHeight - messagesContainer.scrollTop, messagesContainer.scrollHeight, messagesContainer.scrollTop, messagesContainer.clientHeight)
-      if (isNearBottom || messagesContainer.scrollTop >= lastScrollHeight) {
-        messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
-        setLastScrollHeight(messagesContainer.scrollTop);
-      }
+    const messageEnd = messagesEndRef.current;
+    if (messageEnd && autoScroll) {
+      messageEnd.scrollIntoView({ behavior: "instant" });
     }
-  }, [messages, assistantTyping]);
+  }, [messages, assistantTyping, messagesEndRef.current, autoScroll]);
 
   const { outgoingMessageStream, typingAggregationOutput } = conversation || {};
 
@@ -231,6 +229,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   }
 
   return (
+    // TODO: this thing's fade-in transition makes it really ugly to switch between conversations
     <Dialog fullScreen open onClose={onClose}>
       <Box
         sx={{
@@ -288,7 +287,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
         }
 
         <Box
-          ref={messagesContainerRef}
           sx={{
             flexGrow: 1,
             overflowY: 'auto',
@@ -370,8 +368,12 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
               >
                 {isTranscribing ? <MemoryIcon /> : isRecording ? <RecordVoiceOverIcon /> : <Mic />}
               </IconButton>
+              <Checkbox
+                checked={autoScroll}
+                onChange={(event) => setAutoScroll(!autoScroll)}
+                inputProps={{ 'aria-label': 'Toggle auto scroll' }}
+              />
             </Box>
-
             <Button
               sx={{
                 flexGrow: 1, // To allow the Send button to grow

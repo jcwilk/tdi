@@ -50,8 +50,6 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune
   let backgroundColor: string;
   let textColor: string;
 
-  console.log(message)
-
   switch (message.role) {
     case 'user':
       alignSelf = 'flex-end';

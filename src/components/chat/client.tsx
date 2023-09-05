@@ -13,7 +13,7 @@ import { FunctionOption } from '../../openai_api';
 const db = new ConversationDB();
 
 type NavigateState = {
-  activeConversations: string[]; // [uuid, ...]
+  activeConversation: string | null; // uuid
 };
 
 function pluckLast<T>(subject: ReplaySubject<T>): T | null {
@@ -37,23 +37,22 @@ const Client: React.FC = () => {
 
   const [runningConversations, setRunningConversations] = useState<Map<string, Conversation>>(new Map<string, Conversation>());
 
-  const stateConversations: string[] = location.state?.activeConversations ?? [];
+  const stateConversation: string | null = location.state?.activeConversation ?? null;
+  const activeConversation: Conversation | null = stateConversation ? runningConversations.get(stateConversation) ?? null : null;
 
-  const activeConversations: Conversation[] = stateConversations.map(uuid => runningConversations.get(uuid)).filter(result => result !== undefined) as Conversation[];
   const currentLeafHash = (() => {
     const paramLeafHash = params.get('ln');
-    if (activeConversations.length === 0) return paramLeafHash;
+    if (!activeConversation) return paramLeafHash;
 
-    const topConversation = activeConversations[activeConversations.length - 1];
-    const lastMessage = pluckLast(topConversation.outgoingMessageStream);
+    const lastMessage = pluckLast(activeConversation.outgoingMessageStream);
     if (lastMessage) return lastMessage.hash;
 
     return paramLeafHash;
   })()
 
-  console.log("activeConversations", activeConversations)
+  console.log("stateConversation", stateConversation)
+  console.log("activeConversation", activeConversation)
   console.log("runningConversations", runningConversations)
-  console.log("stateConversations", stateConversations)
 
   const handleLeafMessageSelect = async (leafMessage: MessageDB, uuid: string = "") => {
     const initialLeafHash = leafMessage.hash;
@@ -70,7 +69,7 @@ const Client: React.FC = () => {
     }
 
     const navigateState: NavigateState = {
-      activeConversations: [...activeConversations.map(({ id }) => id), uuid]
+      activeConversation: uuid
     };
     console.log("navigateState", navigateState)
 
@@ -78,7 +77,7 @@ const Client: React.FC = () => {
   };
 
   useEffect(() => {
-    if (currentLeafHash && activeConversations.length === 0) {
+    if (currentLeafHash && !activeConversation) {
       db.getMessageByHash(currentLeafHash).then(message => {
         navigate("?", {replace: true, state: {}})
 
@@ -135,7 +134,7 @@ const Client: React.FC = () => {
   }
 
 
-  if (!activeConversations.length) {
+  if (!activeConversation) {
     const runningLeafMessages: RunningConversationOption[] = [];
     for (const [uuid, conversation] of runningConversations) {
       // subscribe to the convo and add each last message to the runningLeafHashes, then immediately unsubscribe.
@@ -148,24 +147,16 @@ const Client: React.FC = () => {
   }
 
   return (
-    <>
-      { /* TODO: we could hypothetically render only the top convo - having them all rendered helps for transitions, but I removed them for now for simplicity */ }
-      { console.log("AC", activeConversations) }
-      {activeConversations.map((conversation, index) => {
-        return (
-          <ConversationModal
-            key={conversation.id}
-            conversation={conversation}
-            initialGptModel={"gpt-3.5-turbo"}
-            onNewHash={(hash) => { navigate(`?ln=${hash}`, {replace: true, state: { activeConversations: activeConversations.map(({ id }) => id) }}) }}
-            onClose={handleLeafMessageClose}
-            onOpenNewConversation={handleLeafMessageSelect}
-            onNewModel={model => handleModelChange(conversation, model)}
-            onFunctionsChange={handleFunctionsChange}
-          />
-        );
-      })}
-    </>
+    <ConversationModal
+      key={activeConversation.id}
+      conversation={activeConversation}
+      initialGptModel={"gpt-3.5-turbo"}
+      onNewHash={(hash) => { navigate(`?ln=${hash}`, {replace: true, state: { activeConversation: activeConversation.id }}) }}
+      onClose={handleLeafMessageClose}
+      onOpenNewConversation={handleLeafMessageSelect}
+      onNewModel={model => handleModelChange(activeConversation, model)}
+      onFunctionsChange={handleFunctionsChange}
+    />
   );
 };
 
