@@ -1,9 +1,9 @@
-import { BehaviorSubject, Observable, ReplaySubject, Subject, finalize, scan } from 'rxjs';
+import { BehaviorSubject, ReplaySubject, Subject, scan } from 'rxjs';
 import { Participant, createParticipant, sendMessage, teardownParticipant, typeMessage } from './participantSubjects';
 import { v4 as uuidv4 } from 'uuid';
 import { MessageDB } from './conversationDb';
 import { processMessagesWithHashing } from './messagePersistence';
-import { FunctionOption } from '../openai_api';
+import { FunctionCall, FunctionOption } from '../openai_api';
 import { subscribeUntilFinalized } from './rxjsUtilities';
 
 export type Message = {
@@ -117,4 +117,8 @@ export function teardownConversation(conversation: Conversation) {
 
 export function sendError(conversation: Conversation, error: Error) {
   conversation.outgoingMessageStream.error(error);
+}
+
+export function sendFunctionCall(conversation: Conversation, functionCall: FunctionCall, result: any): void {
+  sendSystemMessage(conversation, "Function call: " + JSON.stringify({...functionCall, result}));
 }

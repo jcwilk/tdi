@@ -17,8 +17,8 @@ import { FunctionManagement } from './functionManagement';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import SendIcon from '@mui/icons-material/Send';
 import MemoryIcon from '@mui/icons-material/Memory';
-import { TransitionProps } from '@mui/material/transitions';
 import { Checkbox } from '@mui/material';
+import { getAllFunctionOptions } from '../../chat/functionCalling';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -38,41 +38,6 @@ function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]):
   }
   return -1; // Return -1 if no match is found
 }
-
-const allFunctions: FunctionOption[] = [
-  {
-    name: "alert",
-    description: "Displays a browser alert with the provided message.",
-    parameters: {
-      type: "object",
-      properties: {
-        message: {
-          type: "string",
-          description: "The message to display in the alert.",
-        },
-      },
-      required: ["message"],
-    },
-  },
-  {
-    name: "prompt",
-    description: "Opens a prompt dialog asking the user to input some text.",
-    parameters: {
-      type: "object",
-      properties: {
-        message: {
-          type: "string",
-          description: "The message to display in the prompt.",
-        },
-        defaultValue: {
-          type: "string",
-          description: "The default value to prefill in the prompt input.",
-        },
-      },
-      required: ["message"],
-    },
-  },
-];
 
 export type ErrorMessage = {
   content: string;
@@ -279,7 +244,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
 
         {isFuncMgmtOpen &&
           <FunctionManagement
-            availableFunctions={allFunctions} // Replace with your array of available functions
+            availableFunctions={getAllFunctionOptions()} // Replace with your array of available functions
             selectedFunctions={selectedFunctions} // Replace with your current selected functions
             onUpdate={handleFunctionUpdate}
             onClose={() => setFuncMgmtOpen(false)}

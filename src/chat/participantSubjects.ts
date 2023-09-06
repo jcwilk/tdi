@@ -48,20 +48,6 @@ export function sendMessage(participant: Participant): void {
   });
 }
 
-export function callFunction(participant: Participant, functionCall: FunctionCall): void {
-  const code = `${functionCall.name}("${functionCall.parameters.message}")`;
-  console.log("eval!", code)
-
-  const result = eval(code);
-
-  participant.sendingStream.next({
-    content: "Function call: " + JSON.stringify({...functionCall, result}),
-    participantId: participant.id,
-    role: participant.role
-  });
-
-}
-
 export function teardownParticipant(participant: Participant): void {
   participant.typingStreamInput.complete();
   participant.incomingMessageStream.complete();

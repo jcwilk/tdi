@@ -296,7 +296,7 @@ function processChunk(data: string, aggregatedContents: string, functionName: st
         parameters: JSON.parse(aggregatedContents) as FunctionParameters
       });
     }
-    return "";  // Reset the aggregated contents after processing
+    return aggregatedContents;
   }
 
   // Extract the JSON object from the chunk
