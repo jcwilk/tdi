@@ -75,10 +75,35 @@ export function isActiveFunction(conversation: Conversation, functionCall: Funct
 export function callFunction(conversation: Conversation, functionCall: FunctionCall): void {
   if (!isActiveFunction(conversation, functionCall)) return;
 
-  const code = `${functionCall.name}("${functionCall.parameters.message}")`;
-  console.log("eval!", code)
+  try {
+    const code = generateCodeForFunctionCall(functionCall);
+    console.log("eval!", code);
 
-  const result = eval(code);
+    const result = eval(code);
 
-  sendFunctionCall(conversation, functionCall, result);
+    sendFunctionCall(conversation, functionCall, result);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+export function generateCodeForFunctionCall(functionCall: FunctionCall): string {
+  // Find the function spec for the called function
+  const funcSpec = functionSpecs.find(func => func.name === functionCall.name);
+  if (!funcSpec) {
+    throw new Error(`Function "${functionCall.name}" not found in specs.`);
+  }
+
+  // Construct the ordered arguments list
+  const args = funcSpec.parameters.map(param => {
+    if (param.name in functionCall.parameters) {
+      return JSON.stringify(functionCall.parameters[param.name]); // Ensuring strings are properly quoted
+    } else if (param.required) {
+      throw new Error(`Required parameter "${param.name}" missing in function call.`);
+    } else {
+      return undefined; // Default value for optional parameters not provided in the call
+    }
+  });
+
+  return `${functionCall.name}(${args.join(", ")})`;
 }

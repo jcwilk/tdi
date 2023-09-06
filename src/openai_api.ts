@@ -190,7 +190,7 @@ export async function getChatCompletion(
   if (!OPENAI_KEY) return;
 
   const payload: ChatCompletionPayload = {
-    messages,
+    messages: messages.map((message: ChatMessage) => message.role === "function" ? { ...message, name: "TODO" } : message ),
     model,
     max_tokens: maxTokens,
     temperature,
@@ -229,9 +229,15 @@ export async function getChatCompletion(
       aggregatedContents = processChunk(line, aggregatedContents, functionName, name => functionName = name, fc => functionCall = fc)
 
       // Just so that we're sending a last hypothetical chunk out prior to calling onFunctionCall
-      onChunk(aggregatedContents)
-      if (functionCall) {
-        onFunctionCall(functionCall)
+      if (functionName) {
+        onChunk(`Function call: ${functionName}\n\nArguments: ` + aggregatedContents)
+
+        if (functionCall) {
+          onFunctionCall(functionCall)
+        }
+      }
+      else {
+        onChunk(aggregatedContents)
       }
     })
 
@@ -304,7 +310,8 @@ function processChunk(data: string, aggregatedContents: string, functionName: st
 
   // Check for function call name
   if (jsonData.choices[0].delta.function_call && jsonData.choices[0].delta.function_call.name) {
-    onFunctionName(jsonData.choices[0].delta.function_call.name);
+    const name = jsonData.choices[0].delta.function_call.name;
+    onFunctionName(name);
     return jsonData.choices[0].delta.function_call.arguments || "";  // Start collecting function parameters
   }
 

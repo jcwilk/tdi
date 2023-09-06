@@ -5,6 +5,8 @@ import { MessageDB } from './conversationDb';
 import { processMessagesWithHashing } from './messagePersistence';
 import { FunctionCall, FunctionOption } from '../openai_api';
 import { subscribeUntilFinalized } from './rxjsUtilities';
+import { Message } from '@mui/icons-material';
+import { generateCodeForFunctionCall } from './functionCalling';
 
 export type Message = {
   content: string;
@@ -120,5 +122,12 @@ export function sendError(conversation: Conversation, error: Error) {
 }
 
 export function sendFunctionCall(conversation: Conversation, functionCall: FunctionCall, result: any): void {
-  sendSystemMessage(conversation, "Function call: " + JSON.stringify({...functionCall, result}));
+  // TODO: this is overstepping an abstraction or two, but it's something we can come back to
+  // as the function calling stuff firms up
+  conversation.newMessagesInput.next({
+    // TODO: name: generateCodeForFunctionCall(functionCall),
+    content: `returned value: ${JSON.stringify(result)}`,
+    participantId: conversation.systemParticipant.id,
+    role: "function"
+  });
 }

@@ -1,7 +1,6 @@
 import { BehaviorSubject, Subject, ReplaySubject, takeUntil, Observable, map, finalize } from 'rxjs';
 import { Message, TypingUpdate } from './conversation';
 import { v4 as uuidv4 } from 'uuid';
-import { FunctionCall } from '../openai_api';
 
 export type Participant = {
   id: string;
