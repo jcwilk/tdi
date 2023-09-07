@@ -110,6 +110,7 @@ export function sendSystemMessage(conversation: Conversation, message: string) {
 }
 
 export function teardownConversation(conversation: Conversation) {
+  console.log("TEARDOWN")
   conversation.participants.forEach((participant) => teardownParticipant(participant));
   teardownParticipant(conversation.systemParticipant);
 

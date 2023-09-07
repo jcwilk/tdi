@@ -94,7 +94,10 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   useEffect(() => {
     if (!outgoingMessageStream || !typingAggregationOutput) return;
 
+    console.log("establish subs")
+
     const typingSub = typingAggregationOutput.subscribe((typing: Map<string, string>) => {
+      console.log("typingSub", typing)
       setText(typing.get(user.id) || '');
       const messageInProgress = typing.get(assistant.id)
       if (messageInProgress) {
