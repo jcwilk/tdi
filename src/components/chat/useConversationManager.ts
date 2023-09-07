@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ReplaySubject, tap } from 'rxjs';
+import { useEffect, useCallback, useReducer, useMemo } from 'react';
+import { tap } from 'rxjs';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Conversation, addParticipant, createConversation, teardownConversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/ai_agent';
 import { createParticipant } from '../../chat/participantSubjects';
-import { pluckLast } from '../../chat/rxjsUtilities';
 
 const db = new ConversationDB();
 
@@ -12,30 +11,29 @@ function buildParticipatedConversation(messages: MessageDB[], model: string = "g
   return addAssistant(addParticipant(createConversation(messages), createParticipant('user')), model);
 }
 
-export function useConversationsManager(stateConversation: string | null, initialLeafHash: string | null, handleNewConversation: (newLeafHash: string, uuid: string) => void) {
-  const [runningConversations, setRunningConversations] = useState<Map<string, Conversation>>(new Map<string, Conversation>());
+type Action =
+  | { type: 'ADD_CONVERSATION'; payload: Conversation }
+  | { type: 'UPDATE_CONVERSATION'; payload: Conversation }
+  | { type: 'SET_CONVERSATIONS'; payload: Map<string, Conversation> }
+  ;
 
-  // Deduce the active conversation directly inside the hook
-  const activeConversation = stateConversation ? runningConversations.get(stateConversation) : null;
+function conversationReducer(state: Map<string, Conversation>, action: Action): Map<string, Conversation> {
+  switch (action.type) {
+    case 'ADD_CONVERSATION':
+      if (state.has(action.payload.id)) throw new Error(`Conversation with id ${action.payload.id} already exists!`);
+      return new Map(state).set(action.payload.id, action.payload);
+    case 'UPDATE_CONVERSATION':
+      if (!state.has(action.payload.id)) throw new Error(`Conversation with id ${action.payload.id} does not exist!`);
+      return new Map(state).set(action.payload.id, action.payload);
+    default:
+      throw new Error(`Unknown action: ${JSON.stringify(action)}`);
+  }
+}
 
-  const currentLeafHash = (() => {
-    if (!activeConversation) return initialLeafHash;
+export function useConversationsManager(navStateUUID: string | null, handleNewConversation: (newLeafHash: string, uuid: string) => void) {
+  const [runningConversations, dispatch] = useReducer(conversationReducer, new Map<string, Conversation>());
 
-    const lastMessage = pluckLast(activeConversation.outgoingMessageStream);
-    if (lastMessage) return lastMessage.hash;
-
-    return initialLeafHash;
-  })();
-
-  useEffect(() => {
-    if (!activeConversation && initialLeafHash) {
-      db.getMessageByHash(initialLeafHash).then(message => {
-        if (message) {
-          initiateConversation(message).then(uuid => handleNewConversation(initialLeafHash, uuid));
-        }
-      });
-    }
-  }, [initialLeafHash, activeConversation]);
+  const activeConversation = useMemo(() => navStateUUID ? runningConversations.get(navStateUUID) ?? null : null, [navStateUUID, runningConversations]);
 
   useEffect(() => {
     return () => {
@@ -48,12 +46,12 @@ export function useConversationsManager(stateConversation: string | null, initia
     if (!runningConversations.has(uuid)) {
       const conversationFromDb = await db.getConversationFromLeaf(leafMessage.hash);
       const conversation = buildParticipatedConversation(conversationFromDb);
-      setRunningConversations(prev => new Map(prev).set(conversation.id, conversation));
-      return conversation.id;
+      dispatch({ type: 'ADD_CONVERSATION', payload: conversation });
+      uuid = conversation.id;
     }
 
-    return uuid;
-  }, [runningConversations]);
+    handleNewConversation(leafMessage.hash, uuid);
+  }, [handleNewConversation]);
 
   const handleModelChange = useCallback((conversation: Conversation, model: string) => {
     const messages: MessageDB[] = [];
@@ -68,9 +66,9 @@ export function useConversationsManager(stateConversation: string | null, initia
 
     const newConversation = buildParticipatedConversation(messages, model);
     newConversation.id = conversation.id;
-    setRunningConversations(runningConversations => new Map(runningConversations).set(conversation.id, newConversation));
+    dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversation });
     teardownConversation(conversation);
-  }, [])
+  }, []);
 
   const handleFunctionsChange = useCallback((conversation: Conversation, updatedFunctions: any[]) => {
     const messages: MessageDB[] = [];
@@ -86,14 +84,15 @@ export function useConversationsManager(stateConversation: string | null, initia
     const conversationWithoutAssistant = addParticipant(createConversation(messages), createParticipant('user'));
     conversationWithoutAssistant.functions = updatedFunctions;
     const newConversation = addAssistant(conversationWithoutAssistant, 'gpt-3.5-turbo');
+
+    // TODO: this is a hack to be able to replace the conversation, rather than add a new one
     newConversation.id = conversation.id;
-    setRunningConversations(runningConversations => new Map(runningConversations).set(conversation.id, newConversation));
+    dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversation });
     teardownConversation(conversation);
-  }, [])
+  }, []);
 
   return {
     runningConversations,
-    currentLeafHash,
     activeConversation,
     initiateConversation,
     handleModelChange,
