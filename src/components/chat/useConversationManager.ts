@@ -21,9 +21,11 @@ function conversationReducer(state: Map<string, Conversation>, action: Action): 
   switch (action.type) {
     case 'ADD_CONVERSATION':
       if (state.has(action.payload.id)) throw new Error(`Conversation with id ${action.payload.id} already exists!`);
+
       return new Map(state).set(action.payload.id, action.payload);
     case 'UPDATE_CONVERSATION':
       if (!state.has(action.payload.id)) throw new Error(`Conversation with id ${action.payload.id} does not exist!`);
+
       return new Map(state).set(action.payload.id, action.payload);
     default:
       throw new Error(`Unknown action: ${JSON.stringify(action)}`);
@@ -65,8 +67,8 @@ export function useConversationsManager(navStateUUID: string | null, handleNewCo
       .unsubscribe();
 
     const newConversation = buildParticipatedConversation(messages, model);
-    newConversation.id = conversation.id;
-    dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversation });
+    const newConversationIdCorrected = { ...newConversation, id: conversation.id };
+    dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversationIdCorrected });
     teardownConversation(conversation);
   }, []);
 
@@ -86,8 +88,8 @@ export function useConversationsManager(navStateUUID: string | null, handleNewCo
     const newConversation = addAssistant(conversationWithoutAssistant, 'gpt-3.5-turbo');
 
     // TODO: this is a hack to be able to replace the conversation, rather than add a new one
-    newConversation.id = conversation.id;
-    dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversation });
+    const newConversationIdCorrected = { ...newConversation, id: conversation.id };
+    dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversationIdCorrected });
     teardownConversation(conversation);
   }, []);
 
