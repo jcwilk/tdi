@@ -1,17 +1,11 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import ConversationModal from './conversationModal';
 import LeafMessages, { RunningConversationOption } from './leafMessages';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { emojiSha } from '../../chat/emojiSha';
 import { useConversationsManager } from './useConversationManager';
 import { pluckLast } from '../../chat/rxjsUtilities';
 
 const db = new ConversationDB();
-
-type NavigateState = {
-  activeConversation: string | null; // uuid
-};
 
 // This is the main component for the chat client
 // A problem it suffers from is that the navigation is poorly coupled to the conversation manager hook
@@ -29,89 +23,61 @@ type NavigateState = {
 // Conversation manager state:
 // - runningConversations: Map<uuid, Conversation> - the list of conversations that are currently running, this always starts empty on page load
 // - activeConversation: Conversation | null - the conversation that is currently active, or null if there is no active conversation
-//   - this is derived from stateConversation and runningConversations
-//
 
 const Client: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const params = new URLSearchParams(location.search);
-
-  const stateConversation: string | null = location.state?.activeConversation ?? null;
-
-  const paramLeafHash = params.get('ln');
-
-  const handleNewConversation = useCallback((newLeafHash: string, uuid: string) => {
-    const navigateState: NavigateState = {
-      activeConversation: uuid
-    };
-
-    navigate(`?ln=${newLeafHash}`, { state: navigateState });
-    console.log("NAVIGATING", uuid, newLeafHash)
-  }, [navigate]);
-
   const {
-    runningConversations,
     activeConversation,
-    initiateConversation,
-    handleModelChange,
-    handleFunctionsChange,
-  } = useConversationsManager(stateConversation, handleNewConversation);
+    runningConversations,
+    goBack,
+    openConversation,
+    changeModel,
+    changeFunctions
+  } = useConversationsManager();
+
+  const [version, setVersion] = useState(0);
+  const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
 
   useEffect(() => {
-    let isMounted = true
+    const subscriptions = Array.from(runningConversations.values()).map(conversation =>
+      conversation.outgoingMessageStream.subscribe(() => {
+        setVersion(prevVersion => prevVersion + 1);
+      })
+    );
 
-    if (paramLeafHash) {
-      console.log("REDIRECTING")
-      navigate('?', { replace: true });
+    return () => {
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  }, [runningConversations]);
 
-      db.getMessageByHash(paramLeafHash).then(message => {
-        if (!message || !isMounted) {
-          console.log("message retrieval aborted!", message, isMounted)
-          return
-        }
-        console.log("found message!", message)
-
-        initiateConversation(message);
-      });
-    }
-
-    return () => { isMounted = false }
-  }, [])
-
-  const getCurrentNavState = useCallback((): NavigateState => {
-    return { activeConversation: activeConversation?.id ?? null };
-  }, [activeConversation]);
-
-  console.log("paramLeafHash", paramLeafHash)
-  console.log("stateConversation", stateConversation)
-  console.log("activeConversation", activeConversation)
-  console.log("runningConversations", runningConversations)
-
-  const handleLeafMessageClose = useCallback(() => {
-    navigate(-1); // Will revert to the previous URL
-  }, [navigate]);
-
-  const handleNewHash = useCallback((hash: string) => {
-    navigate(`?ln=${hash}`, {replace: true, state: getCurrentNavState()})
-  }, [navigate, getCurrentNavState]);
-
-  const handleLeafMessageSelect = useCallback(async (leafMessage: MessageDB, uuid: string = "") => {
-    const initialLeafHash = leafMessage.hash;
-
-    console.log("STARTING CONVO", emojiSha(initialLeafHash, 5), initialLeafHash, "|"+uuid+"|");
-
-    await initiateConversation(leafMessage, uuid);
-  }, [initiateConversation]);
-
-  if (!activeConversation) {
-    const runningLeafMessages: RunningConversationOption[] = [];
+  // Using useMemo to only recompute runningLeafMessages when necessary
+  const runningLeafMessages = useMemo(() => {
+    const messages: RunningConversationOption[] = [];
     for (const [uuid, conversation] of runningConversations) {
       const lastOne = pluckLast(conversation.outgoingMessageStream);
 
-      if(lastOne) runningLeafMessages.push({uuid, message: lastOne});
+      if(lastOne) messages.push({uuid, message: lastOne});
     };
-    return <LeafMessages db={db} runningLeafMessages={runningLeafMessages} onSelect={handleLeafMessageSelect} />;
+    return messages;
+  }, [runningConversations, version]);
+
+  useEffect(() => {
+    if (activeConversation) return;
+
+    let isMounted = true;
+
+    db.getLeafMessages().then(messages => {
+      if (!isMounted) return;
+
+      setLeafMessages(messages);
+    });
+
+    return () => {
+      isMounted = false;
+    }
+  }, [activeConversation, version, runningConversations]);
+
+  if (!activeConversation) {
+    return <LeafMessages db={db} runningLeafMessages={runningLeafMessages} leafMessages={leafMessages} onSelect={openConversation} />;
   }
 
   return (
@@ -119,11 +85,10 @@ const Client: React.FC = () => {
       key={activeConversation.id}
       conversation={activeConversation}
       initialGptModel={"gpt-3.5-turbo"}
-      onNewHash={handleNewHash}
-      onClose={handleLeafMessageClose}
-      onOpenNewConversation={handleLeafMessageSelect}
-      onNewModel={model => handleModelChange(activeConversation, model)}
-      onFunctionsChange={handleFunctionsChange}
+      onClose={goBack}
+      onOpenNewConversation={openConversation}
+      onNewModel={changeModel}
+      onFunctionsChange={changeFunctions}
     />
   );
 };

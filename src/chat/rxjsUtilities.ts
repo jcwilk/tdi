@@ -4,7 +4,7 @@ export function subscribeUntilFinalized(
   source: Observable<any>,
   subscriber: Subject<any>
 ) {
-  source.pipe(
+  return source.pipe(
     finalize(() => subscriber.complete())
   ).subscribe(subscriber);
 }

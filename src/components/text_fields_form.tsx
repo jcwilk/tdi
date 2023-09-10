@@ -19,13 +19,7 @@ export default function TextFieldsForm() {
   const [apiKey, setApiKey] = useState<boolean>(!!APIKeyFetcher());
   const [showSavedFunctionsDialog, setShowSavedFunctionsDialog] = useState<boolean>(false);
   const [showEditSpecificationsCodeDialog, setShowEditSpecificationsCodeDialog] = useState<boolean>(false); // New state for the new dialog
-  const [currentlyChatting, setCurrentlyChatting] = useState<boolean>(false); // TODO: set based on query param
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const chattingParam = params.get('ln');
-    setCurrentlyChatting(!!chattingParam);
-  }, []);
+  const [currentlyChatting, setCurrentlyChatting] = useState<boolean>(true); // TODO: set based on query param
 
   const loadStepManager = () => {
     if (apiKey === null) return;

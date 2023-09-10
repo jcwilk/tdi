@@ -30,22 +30,10 @@ You are an AI conversationalist. Your job is to converse with the user. Your pro
   participantId: "root"
 }
 
-const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningConversationOption[], onSelect: (leafMessage: MessageDB, uuid?: string) => void }> = ({ db, runningLeafMessages, onSelect }) => {
-  const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
-  console.log("runningLeafMessages", runningLeafMessages)
-
-  useEffect(() => {
-    const fetchLeafMessages = async () => {
-      const messages = await db.getLeafMessages();
-      console.log("Leaf messages: ", messages);
-      setLeafMessages(messages);
-    };
-    fetchLeafMessages();
-  }, []);
-
+const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningConversationOption[], leafMessages: MessageDB[], onSelect: (leafMessage: string, uuid?: string) => void }> = ({ db, runningLeafMessages, leafMessages, onSelect }) => {
   const handleNewConversation = async () => {
     const firstMessage = await firstValueFrom(processMessagesWithHashing(of(mainSystemMessage)));
-    onSelect(firstMessage);
+    onSelect(firstMessage.hash);
   }
 
   return (
@@ -57,7 +45,7 @@ const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningC
         </Typography>
         <List>
           {runningLeafMessages.map(({uuid, message}) => (
-            <StripedListItem key={uuid} onClick={() => onSelect(message, uuid)}>
+            <StripedListItem key={uuid} onClick={() => onSelect(message.hash, uuid)}>
               <ListItemText primary={emojiSha(message.hash, 5) + " " + message.content} primaryTypographyProps={{ noWrap: true }} />
             </StripedListItem>
           ))}
@@ -82,7 +70,7 @@ const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningC
         </Typography>
         <List>
           {leafMessages.map((message) => (
-            <StripedListItem key={message.hash} onClick={() => onSelect(message)}>
+            <StripedListItem key={message.hash} onClick={() => onSelect(message.hash)}>
               <ListItemText primary={emojiSha(message.hash, 5) + " " + message.content} primaryTypographyProps={{ noWrap: true }} />
             </StripedListItem>
           ))}

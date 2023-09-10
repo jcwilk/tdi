@@ -39,7 +39,6 @@ const processMessagesWithHashing = (
         parentHash: currentParentHashes[0],
         embedding: await getEmbedding(message.content)
       };
-      console.log("persisting...");
       const persistedMessage = await conversationDB.saveMessage(messageDB);
 
       // Update the lastProcessedHash after processing the current message
@@ -122,8 +121,6 @@ const pruneConversation = async (
 
   // Identify the messages for reprocessing starting from the first excluded message index
   const messagesForReprocessing = identifyMessagesForReprocessing(conversation, firstExcludedIndex + 1);
-
-  console.log("REPRO", messagesForReprocessing, parentHashes)
 
   if (messagesForReprocessing.length > 0) {
     // Convert the array of Messages to an Observable and process with hashing

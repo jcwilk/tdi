@@ -70,9 +70,6 @@ export function addAssistant(
   conversation: Conversation,
   model: string
 ): Conversation {
-  //sendSystemMessage(conversation, mainSystemMessage.content);
-  console.log("new convo!")
-
   const assistant = createParticipant("assistant");
 
   conversation = addParticipant(conversation, assistant);
@@ -137,7 +134,6 @@ function filterByIsSystemMessage(messagesAndTyping: Observable<[Message[], Typin
 function filterByIsUninterruptedUserMessage(messagesAndTyping: Observable<[Message[], TypingUpdate]>): Observable<[Message[], TypingUpdate]> {
   return messagesAndTyping.pipe(
     filter(([messages, typing]) => {
-      console.log("MESSTYPE", messages, typing)
       return messages.length > 0
       &&
       messages[messages.length - 1].role === "user"

@@ -31,7 +31,6 @@ export function createParticipant(role: string): Participant {
 }
 
 export function typeMessage(participant: Participant, content: string): void {
-  console.log("typing", content)
   participant.typingStreamInput.next(content);
 }
 

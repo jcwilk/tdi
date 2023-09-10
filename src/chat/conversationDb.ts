@@ -53,7 +53,6 @@ export class ConversationDB extends Dexie {
   }
 
   getMessageByHash(hash: string): Promise<MessageDB | undefined> {
-    console.log("getting", hash)
     return this.messages.get(hash);
   }
 
