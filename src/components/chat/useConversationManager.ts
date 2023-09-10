@@ -81,6 +81,25 @@ export function useConversationsManager() {
   console.log("activeConversation", activeConversation)
   console.log("runningConversations", runningConversations)
 
+  // these don't need to be memoized becaues they're only used internally and don't depend on anything
+  function navRoot(replace: boolean = false) {
+    navigate('?', { replace: replace, state: {} });
+  }
+
+  function navConversation(conversation: Conversation, replace: boolean = false) {
+    const lastMessage = pluckLast(conversation.outgoingMessageStream);
+    if (!lastMessage) {
+      console.error("Empty conversation!", conversation)
+      return
+    }
+
+    navConversationByUuidOrSha(conversation.id, lastMessage.hash, replace);
+  }
+
+  function navConversationByUuidOrSha(uuid: string | null, sha: string, replace: boolean = false) {
+    navigate(`?ln=${sha}`, { replace, state: { activeConversation: uuid } });
+  }
+
   useEffect(() => {
     return () => {
       console.log("manager teardown!")
@@ -113,26 +132,27 @@ export function useConversationsManager() {
     }
 
     function handlePushStateNavigation() {
-      const runningConversation = runningConversations.get(navStateUUID ?? '');
-      if (navStateUUID && runningConversation) {
-        dispatch({ type: 'SET_ACTIVE', payload: navStateUUID });
-        const lastMessage = pluckLast(runningConversation.outgoingMessageStream);
-        if (lastMessage && paramLeafHash !== lastMessage.hash) {
-          // TODO: DRY up all the navigations sprinkled around, a lot of these are idempotent and can be consolidated
-          navigate(`?ln=${lastMessage.hash}`, { replace: true, state: { activeConversation: runningConversation.id } });
+      if (!paramLeafHash) {
+        dispatch({ type: 'SET_INACTIVE' });
+        return
+      }
+
+      if (navStateUUID) {
+        const runningConversation = runningConversations.get(navStateUUID);
+        if (runningConversation) {
+          dispatch({ type: 'SET_ACTIVE', payload: runningConversation.id });
+          navConversation(runningConversation, true);
+
+          return
         }
       }
-      else if (paramLeafHash) {
-        handleLoadFromLeaf(paramLeafHash)
-          .then(conversation => {
-            if(!isMounted) return;
 
-            navigate(`?ln=${paramLeafHash}`, { replace: true, state: { activeConversation: conversation.id } });
-          });
-      }
-      else {
-        dispatch({ type: 'SET_INACTIVE' });
-      }
+      handleLoadFromLeaf(paramLeafHash)
+        .then(conversation => {
+          if(!isMounted) return;
+
+          navConversation(conversation, true);
+        });
     }
 
     if (navType === "POP") { // forward/back history actions or a new page load
@@ -143,14 +163,14 @@ export function useConversationsManager() {
           handleLoadFromLeaf(paramLeafHash).then(conversation => {
             if(!isMounted) return;
 
-            navigate('?', { replace: true, state: {} });
-            navigate(`?ln=${paramLeafHash}`, { state: { activeConversation: conversation.id } });
+            navRoot(true);
+            navConversation(conversation);
           })
           .catch(e => {
             console.error("message retrieval failed!", e)
             if(!isMounted) return;
 
-            navigate('?', { replace: true, state: {} });
+            navRoot(true);
           })
         }
         else {
@@ -190,7 +210,7 @@ export function useConversationsManager() {
         debounceTime(0), // only ever process the last message
         tap(message => {
           if (message.hash !== paramLeafHash) {
-            navigate(`?ln=${message.hash}`, { replace: true, state: { activeConversation: activeConversation.id } });
+            navConversation(activeConversation, true);
           }
         })
       )
@@ -207,11 +227,7 @@ export function useConversationsManager() {
   }, [navigate]);
 
   const openConversation = useCallback((newLeafHash: string, uuid: string | null = null) => {
-    const navigateState: NavigateState = {
-      activeConversation: uuid
-    };
-
-    navigate(`?ln=${newLeafHash}`, { state: navigateState });
+    navConversationByUuidOrSha(uuid, newLeafHash);
     console.log("NAVIGATING", uuid, newLeafHash)
   }, [navigate]);
 
@@ -232,7 +248,7 @@ export function useConversationsManager() {
     const newConversationIdCorrected = { ...newConversation, id: activeConversation.id };
     dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversationIdCorrected });
     teardownConversation(activeConversation);
-  }, []);
+  }, [activeConversation]);
 
   const changeFunctions = useCallback((updatedFunctions: FunctionOption[]) => {
     if (!activeConversation) return;
@@ -255,7 +271,7 @@ export function useConversationsManager() {
     const newConversationIdCorrected = { ...newConversation, id: activeConversation.id };
     dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversationIdCorrected });
     teardownConversation(activeConversation);
-  }, []);
+  }, [activeConversation]);
 
   return {
     activeConversation,
