@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Box, TextField, Button, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { sendMessage, typeMessage } from '../../chat/participantSubjects';
 import { Conversation } from '../../chat/conversation';
@@ -121,10 +121,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
     };
   }, [outgoingMessageStream, typingAggregationOutput]);
 
-  const handleFunctionUpdate = (updatedFunctions: FunctionOption[]) => {
-    onFunctionsChange(updatedFunctions);
-  };
-
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -176,11 +172,11 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
     onOpenNewConversation(newLeafMessage.hash);
   }
 
-  const handleModelChange = (event: React.MouseEvent<HTMLElement>, newModel: string | null) => {
+  const handleModelChange = useCallback((event: React.MouseEvent<HTMLElement>, newModel: string | null) => {
     if (newModel === null) return;
 
     onNewModel(newModel);
-  }
+  }, [onNewModel]);
 
   return (
     <Box
@@ -233,7 +229,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
         <FunctionManagement
           availableFunctions={getAllFunctionOptions()} // Replace with your array of available functions
           selectedFunctions={conversation.functions} // Replace with your current selected functions
-          onUpdate={handleFunctionUpdate}
+          onUpdate={onFunctionsChange}
           onClose={() => setFuncMgmtOpen(false)}
         />
       }

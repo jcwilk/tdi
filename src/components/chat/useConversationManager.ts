@@ -271,7 +271,7 @@ export function useConversationsManager() {
     if (updatedFunctions) newNavParams.set('functions', JSON.stringify(updatedFunctions.map(f => f.name)));
 
     navigate(`?${newNavParams.toString()}`, { state: {} as NavigateState });
-  }, [activeConversation]);
+  }, [activeConversation, navParams]);
 
   const goBack = useCallback(() => {
     navigate(-1);
