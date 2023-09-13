@@ -1,12 +1,12 @@
-import { useEffect, useCallback, useReducer, useMemo, useState, useRef } from 'react';
-import { Subject, debounceTime, tap } from 'rxjs';
+import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
+import { Subject, concatMap, debounceTime, filter, scan, tap } from 'rxjs';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Conversation, addParticipant, createConversation, teardownConversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/ai_agent';
 import { createParticipant } from '../../chat/participantSubjects';
-import { NavigationType, useLocation, useNavigate, useNavigationType, createBrowserRouter, NavigateFunction } from 'react-router-dom';
+import { useLocation, useNavigate, NavigateFunction } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
-import { pluckAll, pluckLast, subscribeUntilFinalized } from '../../chat/rxjsUtilities';
+import { pluckLast, subscribeUntilFinalized } from '../../chat/rxjsUtilities';
 import { Router, RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 
@@ -38,8 +38,6 @@ function pickSearchParams(keys: string[], searchParams: URLSearchParams): URLSea
 }
 
 type ConversationAction =
-  | { type: 'ADD_CONVERSATION'; payload: Conversation }
-  | { type: 'UPDATE_CONVERSATION'; payload: Conversation }
   | { type: 'SET_ACTIVE'; payload: Conversation } // uuid
   | { type: 'SET_INACTIVE' }
   ;
@@ -53,14 +51,6 @@ type ConversationState = {
 function conversationReducer(state: ConversationState, action: ConversationAction): ConversationState {
   console.log("dispatch!", action, state)
   switch (action.type) {
-    case 'ADD_CONVERSATION':
-      if (state.runningConversations.has(action.payload.id)) throw new Error(`Conversation with id ${action.payload.id} already exists!`);
-
-      return {...state, runningConversations: new Map(state.runningConversations).set(action.payload.id, action.payload)};
-    case 'UPDATE_CONVERSATION':
-      if (!state.runningConversations.has(action.payload.id)) throw new Error(`Conversation with id ${action.payload.id} does not exist!`);
-
-      return {...state, runningConversations: new Map(state.runningConversations).set(action.payload.id, action.payload)};
     case 'SET_ACTIVE':
       const tentativeConversation = state.runningConversations.get(action.payload.id) ?? null;
       if (tentativeConversation) {
@@ -105,27 +95,25 @@ export function useConversationsManager() {
   const params = new URLSearchParams(location.search);
 
   const paramLeafHash = params.get('ln');
-  const [{runningConversations, activeConversation}, dispatch] = useReducer(conversationReducer, {runningConversations: new Map<string, Conversation>(), activeConversation: null});
+  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
 
+  const [runningConversations, setRunningConversations] = useState<Map<string, Conversation>>(new Map<string, Conversation>());
+
+  // this is just for the cleanup function so it can tear them all down
   const runningConversationsRef = useRef(runningConversations);
-  useEffect(() => {
-    runningConversationsRef.current = runningConversations;
-  }, [runningConversations]);
 
   console.log("paramLeafHash", paramLeafHash)
   console.log("activeConversation", activeConversation)
   console.log("runningConversations", runningConversations)
 
   const [correctedHistory, setCorrectedHistory] = useState<boolean>(false);
-
   const navStream = useMemo(() => new Subject<RouterState>(), []);
-
   const navParams = useMemo(() => pickSearchParams(['ln', 'model', 'functions'], params), [location.search]);
 
   useEffect(() => {
     let isMounted = true
 
-    const navStreamSubscription = navStream.subscribe(async (event) => {
+    const handleNavEvent = async (event: RouterState, currentRunningConversations: Map<string, Conversation>): Promise<ConversationAction | undefined> => {
       const { historyAction, location: eventLocation } = event;
       const { search: eventSearch, state } = eventLocation;
       const eventConversationUuid = state?.activeConversation ?? null;
@@ -146,11 +134,9 @@ export function useConversationsManager() {
       }
 
       if (eventConversationUuid) {
-        const runningConversation = runningConversations.get(eventConversationUuid);
+        const runningConversation = currentRunningConversations.get(eventConversationUuid);
         if (runningConversation) {
-          dispatch({ type: 'SET_ACTIVE', payload: runningConversation });
-
-          return;
+          return { type: 'SET_ACTIVE', payload: runningConversation };
         }
       }
 
@@ -166,22 +152,43 @@ export function useConversationsManager() {
           const model = eventParams.get('model') ?? 'gpt-3.5-turbo';
 
           const conversation = buildParticipatedConversation(conversationFromDb, model, functionNames);
-          dispatch({ type: 'SET_ACTIVE', payload: conversation });
-          return;
+          return { type: 'SET_ACTIVE', payload: conversation };
         }
       }
 
-      dispatch({ type: 'SET_INACTIVE' });
-    })
+      return { type: 'SET_INACTIVE' };
+    }
+
+    // Step 1: Mapping to Actions
+    const actionsObservable = navStream.pipe(
+      concatMap(async event => {
+        return await handleNavEvent(event, runningConversationsRef.current);
+      }),
+      filter(action => action !== undefined)
+    );
+
+    // Step 2: State Reduction with Scan
+    const stateObservable = actionsObservable.pipe(
+      scan((currentState, action) => {
+        return conversationReducer(currentState, action as ConversationAction);
+      }, { runningConversations, activeConversation }) // so that we respect the initial state of the useState hooks
+    );
+
+    // Step 3: Subscription and Cleanup
+    const subscription = stateObservable.subscribe(finalState => {
+      if (!isMounted) return;
+
+      setRunningConversations(finalState.runningConversations);
+      runningConversationsRef.current = finalState.runningConversations;
+      setActiveConversation(finalState.activeConversation);
+    });
 
     return () => {
-      navStreamSubscription.unsubscribe();
+      subscription.unsubscribe();
 
       isMounted = false;
     }
-  }, [navStream, runningConversations])
-  // TODO: this still doesn't seem quite right, runningConversations may be able to get stale in rare cases of many navigations
-  // maybe I shouldn't be using useReducer? maybe I could use pipe operators to avoid needing to use the render cycle to update the state?
+  }, [navStream])
 
   useEffect(() => {
     const router: Router = (window as any).$app.router;
@@ -281,13 +288,6 @@ export function useConversationsManager() {
   const changeModel = useCallback((model: string) => {
     if (!activeConversation) return;
 
-    // TODO: implement navRemix - also adjust all navigations so that they include the model and functions
-    // ideally figure out a way to do this in such a way that it's not horrible to add more parameters in the future
-    // I keep going back and forth about whether this should be a normal function or useCallback... maybe it's not a
-    // good use of time to put so much effort into avoiding re-renders? would probably mean that we could simplify the
-    // code a lot since they could just manage their own dependencies and then each of these could list them as a dependency
-    // it'll be important to have the REPLACE actions include this as well. Maybe there could be a function which takes in
-    // a conversation and returns the non-standard parameters so we don't have to include default values in there?
     navRemix({model});
   }, [activeConversation, navRemix]);
 
@@ -301,25 +301,8 @@ export function useConversationsManager() {
     activeConversation,
     runningConversations,
     goBack,
-    openConversation, // sha, uuid
-    changeModel, // uuid, model
-    changeFunctions, // uuid, functions
+    openConversation,
+    changeModel,
+    changeFunctions,
   };
 }
-
-// const messages = pluckAll(activeConversation.outgoingMessageStream);
-// const newConversation = buildParticipatedConversation(messages, model);
-
-// const newConversationIdCorrected = { ...newConversation, id: activeConversation.id };
-// dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversationIdCorrected });
-// teardownConversation(activeConversation);
-
-// const messages = pluckAll(activeConversation.outgoingMessageStream);
-// const conversationWithoutAssistant = addParticipant(createConversation(messages), createParticipant('user'));
-// conversationWithoutAssistant.functions = updatedFunctions;
-// const newConversation = addAssistant(conversationWithoutAssistant, 'gpt-3.5-turbo');
-
-// // TODO: this is a hack to be able to replace the conversation, rather than add a new one
-// const newConversationIdCorrected = { ...newConversation, id: activeConversation.id };
-// dispatch({ type: 'UPDATE_CONVERSATION', payload: newConversationIdCorrected });
-// teardownConversation(activeConversation);
