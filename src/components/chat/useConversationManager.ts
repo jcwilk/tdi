@@ -2,7 +2,7 @@ import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { Subject, concatMap, debounceTime, filter, scan, tap } from 'rxjs';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Conversation, addParticipant, createConversation, teardownConversation } from '../../chat/conversation';
-import { addAssistant } from '../../chat/ai_agent';
+import { addAssistant } from '../../chat/aiAgent';
 import { createParticipant } from '../../chat/participantSubjects';
 import { useLocation, useNavigate, NavigateFunction } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';

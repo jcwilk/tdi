@@ -108,19 +108,15 @@ export function chatCompletionMetaStream(
 
   functionCallStream.subscribe((message) => {
     console.log("FUNCTION CALL", message)
-  })
+  });
 
-  const typingAndFunctionCallStream = concat(
+  return concat(
     typingStream.pipe(
-      map(text => ({ text } as GPTTextUpdate)),
+      map(text => ({ text } as GPTTextUpdate))
     ),
+    of({ stopReason: "stop" } as GPTStopReason), // TODO: implement actually checking the stop reason
     bufferedFunctionCallStream.pipe(
       filter((message): message is GPTFunctionCall => message !== null)
     )
-  );
-
-  return concat(
-    typingAndFunctionCallStream,
-    of({ stopReason: "stop" } as GPTStopReason) // TODO: implement actually checking the stop reason
   );
 }
