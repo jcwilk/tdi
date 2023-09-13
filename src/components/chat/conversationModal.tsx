@@ -20,7 +20,7 @@ import MemoryIcon from '@mui/icons-material/Memory';
 import { Checkbox } from '@mui/material';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 import { ReplaySubject, Subject } from 'rxjs';
-import { subscribeUntilFinalized } from '../../chat/rxjsUtilities';
+import { pluckAll, subscribeUntilFinalized } from '../../chat/rxjsUtilities';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -55,12 +55,6 @@ function isMessageDB(message: MessageDB | ErrorMessage): message is MessageDB {
   return !isErrorMessage(message);
 }
 
-function pluckAll<T>(replaySubject: ReplaySubject<T>): T[] {
-  const values: T[] = [];
-  replaySubject.subscribe((value: T) => values.push(value)).unsubscribe();
-  return values;
-}
-
 const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, initialGptModel, onClose, onOpenNewConversation, onNewModel, onFunctionsChange }) => {
   const user = conversation.participants.find((participant) => participant.role === 'user')!;
   const assistant = conversation.participants.find((participant) => participant.role === 'assistant')!;
@@ -72,10 +66,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [stopRecording, setStopRecording] = useState<(() => Promise<string>) | null>(null);
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
-  const [gptModel, setGptModel] = useState<string>(initialGptModel);
   const inputRef = useRef<any>(null);
   const [isFuncMgmtOpen, setFuncMgmtOpen] = useState(false);
-  const [selectedFunctions, setSelectedFunctions] = useState<FunctionOption[]>([]);
   const messagesWithoutErrors = useMemo(() => messages.filter(isMessageDB), [messages]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
@@ -130,8 +122,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   }, [outgoingMessageStream, typingAggregationOutput]);
 
   const handleFunctionUpdate = (updatedFunctions: FunctionOption[]) => {
-    setMessages([]); // TODO: there's got to be a better way to do this... without this it starts duplicating the conversation
-    setSelectedFunctions(updatedFunctions);
     onFunctionsChange(updatedFunctions);
   };
 
@@ -189,8 +179,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const handleModelChange = (event: React.MouseEvent<HTMLElement>, newModel: string | null) => {
     if (newModel === null) return;
 
-    setMessages([]); // TODO: there's got to be a better way to do this... without this it starts duplicating the conversation
-    setGptModel(newModel);
     onNewModel(newModel);
   }
 
@@ -230,7 +218,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
 
           <ToggleButtonGroup
             color="primary"
-            value={gptModel}
+            value={conversation.model}
             exclusive
             onChange={handleModelChange} // Assuming you have handleModelChange method
             aria-label="Platform"
@@ -244,7 +232,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
       {isFuncMgmtOpen &&
         <FunctionManagement
           availableFunctions={getAllFunctionOptions()} // Replace with your array of available functions
-          selectedFunctions={selectedFunctions} // Replace with your current selected functions
+          selectedFunctions={conversation.functions} // Replace with your current selected functions
           onUpdate={handleFunctionUpdate}
           onClose={() => setFuncMgmtOpen(false)}
         />

@@ -27,10 +27,11 @@ export type Conversation = {
   typingAggregationOutput: BehaviorSubject<Map<string, string>>;
   systemParticipant: Participant;
   functions: FunctionOption[];
+  model: string;
   id: string;
 };
 
-export function createConversation(loadedMessages: MessageDB[]): Conversation {
+export function createConversation(loadedMessages: MessageDB[], model: string = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Conversation {
   const systemParticipant = createParticipant("system");
 
   const conversation: Conversation = {
@@ -41,7 +42,8 @@ export function createConversation(loadedMessages: MessageDB[]): Conversation {
     typingAggregationOutput: new BehaviorSubject(new Map()),
     systemParticipant,
     id: uuidv4(),
-    functions: []
+    functions,
+    model
   }
 
   loadedMessages.forEach((message) => conversation.outgoingMessageStream.next(message));

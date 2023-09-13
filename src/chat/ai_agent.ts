@@ -67,8 +67,7 @@ function rateLimiter<T>(maxCalls: number, windowSize: number): (source: Observab
 }
 
 export function addAssistant(
-  conversation: Conversation,
-  model: string
+  conversation: Conversation
 ): Conversation {
   const assistant = createParticipant("assistant");
 
@@ -87,7 +86,7 @@ export function addAssistant(
     map(([messages, _typing]) => messages)
   );
 
-  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, assistant, model, conversation.functions);
+  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, assistant, conversation.model, conversation.functions);
 
   typingAndSending.subscribe({
     error: (err) => {

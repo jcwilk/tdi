@@ -17,3 +17,9 @@ export function pluckLast<T>(subject: ReplaySubject<T>): T | null {
   subscription.unsubscribe();
   return lastValue;
 }
+
+export function pluckAll<T>(replaySubject: ReplaySubject<T>): T[] {
+  const values: T[] = [];
+  replaySubject.subscribe((value: T) => values.push(value)).unsubscribe();
+  return values;
+}
