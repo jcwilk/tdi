@@ -88,7 +88,7 @@ export class ConversationDB extends Dexie {
   async searchEmbedding(embedding: number[], limit: number): Promise<string[]> {
     const messagesArray = await this.messages.toArray();
     const batchDurationMs = 50; // Adjust this value to control the max duration for each batch
-    let closestMessages: {hash: string, distance: number}[] = [];
+    let closestMessages: { hash: string, distance: number }[] = [];
 
     return new Promise<string[]>((resolve) => {
       const processBatch = (startIndex: number) => {
@@ -105,7 +105,7 @@ export class ConversationDB extends Dexie {
         if (startIndex < messagesArray.length) {
           setImmediate(() => processBatch(startIndex));
         } else {
-          closestMessages = closestMessages.sort((a, b) => a.distance - b.distance);
+          closestMessages = closestMessages.sort((a, b) => b.distance - a.distance);
           const result = closestMessages.slice(0, limit).map(message => message.hash);
           resolve(result);
         }
@@ -114,7 +114,6 @@ export class ConversationDB extends Dexie {
       processBatch(0); // Start the batch processing
     });
   }
-
 
   private cosineSimilarity(embedding1: number[], embedding2: number[]): number {
     if (embedding1.length !== embedding2.length) {
