@@ -103,7 +103,7 @@ export class ConversationDB extends Dexie {
         }
 
         if (startIndex < messagesArray.length) {
-          setImmediate(() => processBatch(startIndex));
+          setTimeout(() => processBatch(startIndex), 0);
         } else {
           closestMessages = closestMessages.sort((a, b) => b.distance - a.distance);
           const result = closestMessages.slice(0, limit).map(message => message.hash);

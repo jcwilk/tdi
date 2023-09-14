@@ -1,6 +1,7 @@
 import { FunctionCall, FunctionOption, getEmbedding } from "../openai_api";
 import { Conversation, sendFunctionCall } from "./conversation";
 import { ConversationDB, MessageDB } from "./conversationDb";
+import { v4 as uuidv4 } from "uuid";
 
 type FunctionParameter = {
   name: string;
@@ -127,9 +128,38 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
     const code = generateCodeForFunctionCall(functionCall);
     console.log("eval!", code);
 
-    const result = await code({db});
+    const result = code({db});
 
-    sendFunctionCall(conversation, functionCall, result);
+    const prettifiedCall = `\`${functionCall.name}(${Object.entries(functionCall.parameters).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join(", ")})\``;
+
+    if (typeof result === "string") {
+      const content = `
+Call: ${prettifiedCall}
+
+**Result:**
+\`\`\`
+${result}
+\`\`\`
+      `.trim();
+      sendFunctionCall(conversation, functionCall, content);
+    }
+    else {
+      const uuid = uuidv4();
+      const initialContent = `
+Call: ${prettifiedCall}
+
+Result: (pending: ${uuid})
+        `.trim();
+      sendFunctionCall(conversation, functionCall, initialContent);
+      const resultString = await result;
+      const finalContent = `
+Result (${uuid}):
+\`\`\`
+${resultString}
+\`\`\`
+        `.trim();
+      sendFunctionCall(conversation, functionCall, finalContent);
+    }
   } catch (error) {
     console.error(error);
   }

@@ -124,7 +124,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      sendMessage(user);
+      sendMessage(user, text);
     }
   };
 
@@ -134,8 +134,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
       setIsTranscribing(true);
       if (stopRecording) {
         const transcript = await stopRecording();
-        typeMessage(user, transcript);
-        sendMessage(user);
+        sendMessage(user, transcript);
         setStopRecording(null);
         setIsTranscribing(false);
       }
@@ -330,7 +329,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             variant="contained"
             color="primary"
             onClick={() => {
-              sendMessage(user);
+              sendMessage(user, text);
               inputRef.current.focus();
             }}
             disabled={text === ''}

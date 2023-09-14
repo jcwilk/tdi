@@ -185,6 +185,8 @@ export async function getChatCompletion(
   functions: FunctionOption[] = [],
   onChunk: (chunk: string) => void = () => {},
   onFunctionCall: (functionCall: FunctionCall) => void = () => {},
+  onSentMessage: (message: string) => void = () => {},
+  onCutoff: (message: string) => void = () => {}
 ): Promise<void> {
   const OPENAI_KEY = APIKeyFetcher();
   if (!OPENAI_KEY) return;
@@ -215,6 +217,7 @@ export async function getChatCompletion(
 
   let functionName: string | null = null;
   let aggregatedContents: string = '';
+  let aggregatedRawContents: string = '';
 
   while(true) {
     const { value, done } = await reader.read();
@@ -222,19 +225,23 @@ export async function getChatCompletion(
     const rawDelta = decoder.decode(value)
     //console.log("raw delta:", rawDelta)
 
+    aggregatedRawContents += rawDelta;
     const lines = splitDataLines(rawDelta)
 
     lines.forEach(line => {
-      let functionCall: FunctionCall | null = null;
-      aggregatedContents = processChunk(line, aggregatedContents, functionName, name => functionName = name, fc => functionCall = fc)
+      aggregatedContents = processChunk(
+        line,
+        aggregatedContents,
+        functionName,
+        name => functionName = name,
+        onFunctionCall,
+        onSentMessage,
+        onCutoff
+      )
 
       // Just so that we're sending a last hypothetical chunk out prior to calling onFunctionCall
       if (functionName) {
         onChunk(`Function call: ${functionName}\n\nArguments: ` + aggregatedContents)
-
-        if (functionCall) {
-          onFunctionCall(functionCall)
-        }
       }
       else {
         onChunk(aggregatedContents)
@@ -242,7 +249,8 @@ export async function getChatCompletion(
     })
 
     if (done) {
-      //console.log("full aggregate:", aggregatedContents)
+      console.log("full aggregate:", aggregatedContents)
+      console.log("full raw contents", aggregatedRawContents)
 
       return;
     }
@@ -257,52 +265,42 @@ function splitDataLines(input: string): string[] {
   return rawLines.map(line => line.trim()).filter(line => line.startsWith('data: '));
 }
 
-// Designed to be called iteratively with `data` being one line starting with "data: ". The `data` chunks can form either:
+// Designed to be called iteratively with `data` being one line starting with "data: ". The `data` chunks can form either (extra newline between items omitted for brevity, there are always two newlines between chunks):
 // Regular messages, which are passed to the onMessage callback, in this case as message="Hi"
 //
 // data: {"id":"chatcmpl-7vUN8047stwUYXPRiOgiRHpnk4Awi","object":"chat.completion.chunk","created":1693935802,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vUN8047stwUYXPRiOgiRHpnk4Awi","object":"chat.completion.chunk","created":1693935802,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vUN8047stwUYXPRiOgiRHpnk4Awi","object":"chat.completion.chunk","created":1693935802,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null}]}
-//
+// data: {"id":"chatcmpl-7vUN8047stwUYXPRiOgiRHpnk4Awi","object":"chat.completion.chunk","created":1693935802,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
 // data: [DONE]
 //
 // Or function calls, which are passed to the onFunction callback, in this case as name="get_user_name" and parameters={"user_id": "123"}
 //
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"role":"assistant","content":null,"function_call":{"name":"get_user_name","arguments":""}},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"{\n"}},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":" "}},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":" \""}},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"user_"}},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"id\":"}},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":" "}},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"123"}},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"}"}},"finish_reason":null}]}
-//
 // data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{},"finish_reason":"function_call"}]}
-//
 // data: [DONE]
 //
 // It will call `onFunctionName` if it finds a function name, with the expectation that the `functionName` will be passed in to subsequent calls.
-function processChunk(data: string, aggregatedContents: string, functionName: string | null, onFunctionName: (name: string) => void, onFunction: (functionCall: FunctionCall) => void): string {
+function processChunk(
+  data: string,
+  aggregatedContents: string,
+  functionName: string | null,
+  onFunctionName: (name: string) => void,
+  onFunction: (functionCall: FunctionCall) => void, // found a function call
+  onSendMessage: (message: string) => void, // found a complete sent message event
+  onCutoff: (message: string) => void // found a sent message event which was finished because it ran out of tokens
+): string {
   // Check for the DONE signal
   if (data.trim() === "data: [DONE]") {
-    if (functionName) {
-      onFunction({
-        name: functionName,
-        parameters: JSON.parse(aggregatedContents) as FunctionParameters
-      });
-    }
-    return aggregatedContents;
+    return aggregatedContents;  // We will handle the done signal in individual finish_reason checks now
   }
 
   // Extract the JSON object from the chunk
@@ -316,18 +314,35 @@ function processChunk(data: string, aggregatedContents: string, functionName: st
   }
 
   // If the chunk contains function call arguments, aggregate them
-  if (jsonData.choices[0].delta.function_call && jsonData.choices[0].delta.function_call.arguments) {
+  if (jsonData.choices[0].delta.function_call && jsonData.choices[0].delta.function_call.arguments !== undefined) {
     return aggregatedContents + jsonData.choices[0].delta.function_call.arguments;
   }
 
-  // If it's a regular message, call the onMessage callback
-  if (jsonData.choices[0].delta.content) {
+  // If it's a regular message, aggregate the contents
+  if (jsonData.choices[0].delta.content !== undefined) {
     return aggregatedContents + jsonData.choices[0].delta.content;
+  }
+
+  // Check the finish_reason to decide the action
+  const finishReason = jsonData.choices[0].finish_reason;
+  if (finishReason === 'stop') {
+    onSendMessage(aggregatedContents);
+    return ""; // Reset aggregated contents after sending the message
+  } else if (finishReason === 'function_call') {
+    onFunction({
+      name: functionName!,
+      parameters: JSON.parse(aggregatedContents) as FunctionParameters
+    });
+    return ""; // Reset aggregated contents after function call
+  } else if (finishReason === 'length') {
+    onCutoff(aggregatedContents);
+    return ""; // Reset aggregated contents after calling the onCutoff callback
   }
 
   console.log("Unknown chunk type:", jsonData)
   return aggregatedContents;  // If no other conditions met, just return the previous aggregated contents
 }
+
 
 const PAUSE_TIME_GRACE_PERIOD = 2; // in seconds
 

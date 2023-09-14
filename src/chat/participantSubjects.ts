@@ -34,9 +34,7 @@ export function typeMessage(participant: Participant, content: string): void {
   participant.typingStreamInput.next(content);
 }
 
-export function sendMessage(participant: Participant): void {
-  const { content } = participant.typingStream.value;
-
+export function sendMessage(participant: Participant, content: string): void {
   if(!content) return;
 
   participant.typingStreamInput.next('');

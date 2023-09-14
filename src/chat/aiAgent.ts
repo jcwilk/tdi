@@ -3,7 +3,7 @@
 import { BehaviorSubject, Observable, Subject, UnaryFunction, filter, map, merge, scan, share, switchMap, takeUntil, tap, withLatestFrom } from "rxjs";
 import { Conversation, Message, TypingUpdate, addParticipant, sendError, sendSystemMessage } from "./conversation";
 import { Participant, createParticipant, sendMessage, typeMessage } from "./participantSubjects";
-import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTStopReason } from "./chatStreams";
+import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTSentMessage } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
 import { subscribeUntilFinalized } from "./rxjsUtilities";
 import { callFunction } from "./functionCalling";
@@ -182,8 +182,8 @@ function handleGptMessages(assistant: Participant, conversation: Conversation, t
   ).subscribe();
 
   typingAndSending.pipe(
-    filter(isGPTStopReason),
-    tap(() => sendMessage(assistant)),
+    filter(isGPTSentMessage),
+    tap((message) => sendMessage(assistant, message.stopReason === "length" ? message.text + "[terminated due to length]" : message.text)),
   ).subscribe();
 }
 

@@ -107,8 +107,7 @@ export function getParticipant(conversation: Conversation, id: string): Particip
 export function sendSystemMessage(conversation: Conversation, message: string) {
   const systemParticipant = conversation.systemParticipant;
 
-  typeMessage(systemParticipant, message);
-  sendMessage(systemParticipant);
+  sendMessage(systemParticipant, message);
 }
 
 export function teardownConversation(conversation: Conversation) {
@@ -124,12 +123,11 @@ export function sendError(conversation: Conversation, error: Error) {
   conversation.outgoingMessageStream.error(error);
 }
 
-export function sendFunctionCall(conversation: Conversation, functionCall: FunctionCall, result: any): void {
+export function sendFunctionCall(conversation: Conversation, functionCall: FunctionCall, content: string): void {
   // TODO: this is overstepping an abstraction or two, but it's something we can come back to
   // as the function calling stuff firms up
   conversation.newMessagesInput.next({
-    // TODO: name: generateCodeForFunctionCall(functionCall),
-    content: `returned value:\n\n${typeof result === "string" ? result : JSON.stringify(result)}`,
+    content: content,
     participantId: conversation.systemParticipant.id,
     role: "function"
   });
