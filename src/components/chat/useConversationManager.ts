@@ -19,7 +19,8 @@ const db = new ConversationDB();
 function buildParticipatedConversation(messages: MessageDB[], model: string = "gpt-3.5-turbo", functions: string[] = []): Conversation {
   const functionOptions = getAllFunctionOptions().filter(f => functions.includes(f.name));
 
-  return addAssistant(addParticipant(createConversation(messages, model, functionOptions), createParticipant('user')));
+  const userParticipatedConvo = addParticipant(createConversation(messages, model, functionOptions), createParticipant('user'));
+  return addAssistant(userParticipatedConvo, db);
 }
 
 function pickSearchParams(keys: string[], searchParams: URLSearchParams): URLSearchParams {

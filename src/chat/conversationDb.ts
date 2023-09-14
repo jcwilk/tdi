@@ -84,4 +84,48 @@ export class ConversationDB extends Dexie {
     // Retrieve messages where their hash is not in the list of parent hashes
     return this.messages.where('hash').noneOf(parentHashes).toArray();
   }
+
+  async searchEmbedding(embedding: number[], limit: number): Promise<string[]> {
+    const messagesArray = await this.messages.toArray();
+    const batchDurationMs = 50; // Adjust this value to control the max duration for each batch
+    let closestMessages: {hash: string, distance: number}[] = [];
+
+    return new Promise<string[]>((resolve) => {
+      const processBatch = (startIndex: number) => {
+        const startTime = Date.now();
+
+        while (startIndex < messagesArray.length && Date.now() - startTime < batchDurationMs) {
+          closestMessages.push({
+            hash: messagesArray[startIndex].hash,
+            distance: this.cosineSimilarity(embedding, messagesArray[startIndex].embedding),
+          });
+          startIndex++;
+        }
+
+        if (startIndex < messagesArray.length) {
+          setImmediate(() => processBatch(startIndex));
+        } else {
+          closestMessages = closestMessages.sort((a, b) => a.distance - b.distance);
+          const result = closestMessages.slice(0, limit).map(message => message.hash);
+          resolve(result);
+        }
+      };
+
+      processBatch(0); // Start the batch processing
+    });
+  }
+
+
+  private cosineSimilarity(embedding1: number[], embedding2: number[]): number {
+    if (embedding1.length !== embedding2.length) {
+      throw new Error('Embeddings have different dimensions');
+    }
+
+    const embedding1Norm = Math.sqrt(embedding1.reduce((sum, value) => sum + value ** 2, 0));
+    const embedding2Norm = Math.sqrt(embedding2.reduce((sum, value) => sum + value ** 2, 0));
+
+    const dotProduct = embedding1.reduce((sum, value, index) => sum + value * embedding2[index], 0);
+
+    return dotProduct / (embedding1Norm * embedding2Norm);
+  }
 }

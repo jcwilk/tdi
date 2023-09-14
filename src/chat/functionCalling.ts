@@ -1,5 +1,6 @@
-import { FunctionCall, FunctionOption } from "../openai_api";
+import { FunctionCall, FunctionOption, getEmbedding } from "../openai_api";
 import { Conversation, sendFunctionCall } from "./conversation";
+import { ConversationDB, MessageDB } from "./conversationDb";
 
 type FunctionParameter = {
   name: string;
@@ -11,15 +12,62 @@ type FunctionParameter = {
 type FunctionSpec = {
   name: string;
   description: string;
-  implementation: (...args: any[]) => any;
+  implementation: (...args: any[]) => Promise<string> | string;
   parameters: FunctionParameter[];
 };
 
+type FunctionUntils = {
+  db: ConversationDB;
+}
+
+function concatWithEllipses(str: string, maxLength: number): string {
+  return str.length > maxLength ? str.substring(0, maxLength - 3) + "..." : str;
+}
+
 const functionSpecs: FunctionSpec[] = [
+  {
+    name: "embedding_search",
+    description: "Searches for the most similar embeddings to the provided query.",
+    implementation: async (utils = {db: ConversationDB}, query: string, limit: number) => {
+      const { db } = utils;
+      const embedding = await getEmbedding(query);
+      const shaResults: string[] = await db.searchEmbedding(embedding, limit); // TODO: stream of results instead?
+      if (shaResults.length === 0) {
+        return "No results found.";
+      }
+      else {
+        const results: MessageDB[] = [];
+        for (const sha of shaResults) {
+          const message = await db.getMessageByHash(sha);
+          if (message) {
+            results.push(message);
+          }
+        }
+        return results.map(message => `${message.hash}: ${concatWithEllipses(message.content.replace(/\n/g, ""), 30)}`).join("\n\n");
+      }
+    },
+    parameters: [
+      {
+name: "query",
+        type: "string",
+        description: "The query to search for.",
+        required: true
+      },
+      {
+        name: "limit",
+        type: "number",
+        description: "The maximum number of results to return.",
+        required: true
+      }
+    ]
+  },
   {
     name: "alert",
     description: "Displays a browser alert with the provided message.",
-    implementation: (message: string) => alert(message),
+    implementation: (_utils, message: string) => {
+      alert(message);
+      return "sent alert!"
+    },
     parameters: [
       {
         name: "message",
@@ -32,7 +80,7 @@ const functionSpecs: FunctionSpec[] = [
   {
     name: "prompt",
     description: "Opens a prompt dialog asking the user to input some text.",
-    implementation: (message: string, defaultValue?: string) => prompt(message, defaultValue),
+    implementation: (_utils, message: string, defaultValue?: string) => prompt(message, defaultValue) || "",
     parameters: [
       {
         name: "message",
@@ -72,14 +120,14 @@ export function isActiveFunction(conversation: Conversation, functionCall: Funct
     return conversation.functions.some((f) => f.name === functionCall.name);
 }
 
-export function callFunction(conversation: Conversation, functionCall: FunctionCall): void {
+export async function callFunction(conversation: Conversation, functionCall: FunctionCall, db: ConversationDB): Promise<void> {
   if (!isActiveFunction(conversation, functionCall)) return;
 
   try {
     const code = generateCodeForFunctionCall(functionCall);
     console.log("eval!", code);
 
-    const result = eval(code);
+    const result = await code({db});
 
     sendFunctionCall(conversation, functionCall, result);
   } catch (error) {
@@ -87,7 +135,7 @@ export function callFunction(conversation: Conversation, functionCall: FunctionC
   }
 }
 
-export function generateCodeForFunctionCall(functionCall: FunctionCall): string {
+export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils: FunctionUntils) => string | Promise<string> {
   // Find the function spec for the called function
   const funcSpec = functionSpecs.find(func => func.name === functionCall.name);
   if (!funcSpec) {
@@ -105,5 +153,13 @@ export function generateCodeForFunctionCall(functionCall: FunctionCall): string 
     }
   });
 
-  return `${functionCall.name}(${args.join(", ")})`;
+  // TODO: as-is this works only for functions that are defined in the global scope
+  // we need to figure out a way to give this access to trickier functions, like ones that require access to the db
+  // I'm thinking we can do this by making a special simplified function which already has all the prereq stuff loaded in
+  // so the interface that the agent needs to interact with is minimized
+  //return `${functionCall.name}(${args.join(", ")})`;
+
+  return (utils: FunctionUntils): string | Promise<string> => {
+    return funcSpec.implementation(utils, ...args);
+  };
 }

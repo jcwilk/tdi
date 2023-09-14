@@ -7,6 +7,7 @@ import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCal
 import { ChatMessage, FunctionOption } from "../openai_api";
 import { subscribeUntilFinalized } from "./rxjsUtilities";
 import { callFunction } from "./functionCalling";
+import { ConversationDB } from "./conversationDb";
 
 const interruptionFunctions: FunctionOption[] = [
   {
@@ -67,7 +68,8 @@ function rateLimiter<T>(maxCalls: number, windowSize: number): (source: Observab
 }
 
 export function addAssistant(
-  conversation: Conversation
+  conversation: Conversation,
+  db: ConversationDB
 ): Conversation {
   const assistant = createParticipant("assistant");
 
@@ -94,7 +96,7 @@ export function addAssistant(
     }
   })
 
-  handleGptMessages(assistant, conversation, typingAndSending);
+  handleGptMessages(assistant, conversation, typingAndSending, db);
 
   const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages, assistant);
 
@@ -168,7 +170,7 @@ function filterByIsInterruptingUserMessage(messagesAndTyping: Observable<[Messag
   )
 }
 
-function handleGptMessages(assistant: Participant, conversation: Conversation, typingAndSending: Observable<GPTMessage>) {
+function handleGptMessages(assistant: Participant, conversation: Conversation, typingAndSending: Observable<GPTMessage>, db: ConversationDB) {
   typingAndSending.pipe(
     filter(isGPTTextUpdate),
     tap(({ text }) => typeMessage(assistant, text))
@@ -176,7 +178,7 @@ function handleGptMessages(assistant: Participant, conversation: Conversation, t
 
   typingAndSending.pipe(
     filter(isGPTFunctionCall),
-    tap(({ functionCall }) => callFunction(conversation, functionCall))
+    tap(({ functionCall }) => callFunction(conversation, functionCall, db))
   ).subscribe();
 
   typingAndSending.pipe(

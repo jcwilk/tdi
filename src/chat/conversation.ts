@@ -129,7 +129,7 @@ export function sendFunctionCall(conversation: Conversation, functionCall: Funct
   // as the function calling stuff firms up
   conversation.newMessagesInput.next({
     // TODO: name: generateCodeForFunctionCall(functionCall),
-    content: `returned value: ${JSON.stringify(result)}`,
+    content: `returned value:\n\n${typeof result === "string" ? result : JSON.stringify(result)}`,
     participantId: conversation.systemParticipant.id,
     role: "function"
   });
