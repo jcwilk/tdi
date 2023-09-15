@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Box } from '@mui/material';
+import { Box, Button } from '@mui/material';
 import { Message } from '../../chat/conversation';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
@@ -7,16 +7,18 @@ import ForkButton from './forkButton';
 import PruneButton from './pruneButton';
 import EditButton from './editButton';
 import { ErrorMessage } from './conversationModal';
+import { emojiSha } from '../../chat/emojiSha';
 
 type MessageProps = {
   message: Message | ErrorMessage;
+  hash?: string;
   openConversation?: () => void;
   onPrune?: () => void;
   onEdit?: () => void;
-  openOtherHash: (hash: string) => void;
+  openOtherHash?: (hash: string) => void;
 };
 
-const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune, onEdit, openOtherHash }) => {
+const MessageBox: React.FC<MessageProps> = ({ message, hash, openConversation, onPrune, onEdit, openOtherHash }) => {
   let alignSelf: 'flex-end' | 'flex-start' | 'center';
   let backgroundColor: string;
   let textColor: string;
@@ -51,7 +53,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune
   return (
     <Box
       sx={{
-        position: 'relative',  // Make the Box position relative to place the absolute positioned CopyButton
+        position: 'relative',
         marginBottom: '10px',
         alignSelf: alignSelf,
         backgroundColor: backgroundColor,
@@ -72,11 +74,35 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune
       }}>
         {onPrune && <PruneButton onClick={onPrune} />}
         {onEdit && <EditButton onClick={onEdit} />}
-        {openConversation && <ForkButton onClick={openConversation} />}
         <CopyButton contentToCopy={message.content} />
       </div>
       <div className="markdown-content">
-        <MarkdownRenderer content={`\u200B${message.content}`} openOtherHash={openOtherHash} />
+        <MarkdownRenderer content={`\u200B${message.content}`} openOtherHash={openOtherHash ?? (() => {})} />
+      </div>
+      <div style={{
+        position: 'absolute',
+        left: '10px',
+        bottom: '-5px',
+        zIndex: 10,
+      }}>
+        {hash &&
+          <Button
+            variant="contained"
+            style={{
+              borderRadius: '18px',
+              backgroundColor: '#424242', // Darker background color for dark mode
+              color: '#E0E0E0', // Lighter text color for dark mode
+              padding: '4px 8px',
+              fontSize: '0.8rem',
+              lineHeight: '1',
+              minHeight: 'initial',
+            }}
+            onClick={() => openConversation && openConversation()}
+          >
+            {emojiSha(hash, 5)}
+          </Button>
+        }
+
       </div>
     </Box>
   );
