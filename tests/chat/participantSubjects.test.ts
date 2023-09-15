@@ -21,7 +21,7 @@ describe('Participant', () => {
       const participant = createParticipant('AI');
 
       cold('a-').subscribe(() => typeMessage(participant, 'Hello'));
-      cold('-a').subscribe(() => sendMessage(participant));
+      cold('-a').subscribe(() => sendMessage(participant, 'Hello'));
       expectObservable(participant.sendingStream).toBe('-a', {
         a: {
           content: 'Hello',
