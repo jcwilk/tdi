@@ -81,11 +81,11 @@ const MessageBox: React.FC<MessageProps> = ({ message, hash, openConversation, o
       </div>
       <div style={{
         position: 'absolute',
-        left: '10px',
+        right: '10px',
         bottom: '-5px',
         zIndex: 10,
       }}>
-        {hash &&
+        {hash && // TODO: clean up the styling, fucking mess
           <Button
             variant="contained"
             style={{
@@ -96,10 +96,14 @@ const MessageBox: React.FC<MessageProps> = ({ message, hash, openConversation, o
               fontSize: '0.8rem',
               lineHeight: '1',
               minHeight: 'initial',
+              maxWidth: '100%', // Allow it to take up to 100% of the container width
+              overflow: 'hidden', // Hide overflow
+              whiteSpace: 'nowrap', // Keep text in a single line
             }}
             onClick={() => openConversation && openConversation()}
           >
-            {emojiSha(hash, 5)}
+{emojiSha(hash, 5)}
+
           </Button>
         }
 

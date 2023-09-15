@@ -89,7 +89,10 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
     const typingSub = typingAggregationOutput.subscribe((typing: Map<string, string>) => {
       setText(typing.get(user.id) || '');
       const messageInProgress = typing.get(assistant.id)
-      if (messageInProgress) {
+      if (messageInProgress !== undefined) {
+        // TODO: this used to ignore when we tried to set it to blank, but that caused problems with the function calling stuff
+        // but the problem now is it disappears momentarily between when it's set to blank and when the next message comes in
+        // which means it'll be scrolling back and forth really annoyingly... we need to figure out how to avoid the flicker
         setAssistantTyping(messageInProgress);
       }
     });
@@ -109,7 +112,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
       },
       next: (message: MessageDB) => {
         setMessages((previousMessages) => [...previousMessages, message]);
-        setAssistantTyping('');
+        //setAssistantTyping('');
       }
     });
 

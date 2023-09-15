@@ -2,6 +2,7 @@ import { FunctionCall, FunctionOption, getEmbedding } from "../openai_api";
 import { Conversation, sendFunctionCall } from "./conversation";
 import { ConversationDB, MessageDB } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
+import { Participant, typeMessage } from "./participantSubjects";
 
 type FunctionParameter = {
   name: string;
@@ -44,7 +45,7 @@ const functionSpecs: FunctionSpec[] = [
             results.push(message);
           }
         }
-        return results.map(message => `${message.hash}: ${concatWithEllipses(message.content.replace(/\n/g, ""), 30)}`).join("\n\n");
+        return results.map(message => `${message.hash}: ${concatWithEllipses(message.content.replace(/\n/g, ""), 60)}`).join("\n\n");
       }
     },
     parameters: [
@@ -121,7 +122,7 @@ export function isActiveFunction(conversation: Conversation, functionCall: Funct
     return conversation.functions.some((f) => f.name === functionCall.name);
 }
 
-export async function callFunction(conversation: Conversation, functionCall: FunctionCall, db: ConversationDB): Promise<void> {
+export async function callFunction(conversation: Conversation, functionCall: FunctionCall, db: ConversationDB, assistant: Participant): Promise<void> {
   if (!isActiveFunction(conversation, functionCall)) return;
 
   try {
@@ -132,6 +133,8 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
 
     const prettifiedCall = `\`${functionCall.name}(${Object.entries(functionCall.parameters).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join(", ")})\``;
 
+    typeMessage(assistant, "")
+
     if (typeof result === "string") {
       const content = `
 Call: ${prettifiedCall}
@@ -141,6 +144,7 @@ Call: ${prettifiedCall}
 ${result}
 \`\`\`
       `.trim();
+
       sendFunctionCall(conversation, functionCall, content);
     }
     else {

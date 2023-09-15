@@ -170,7 +170,7 @@ function handleGptMessages(assistant: Participant, conversation: Conversation, t
 
   typingAndSending.pipe(
     filter(isGPTFunctionCall),
-    tap(({ functionCall }) => callFunction(conversation, functionCall, db))
+    tap(({ functionCall }) => callFunction(conversation, functionCall, db, assistant))
   ).subscribe();
 
   typingAndSending.pipe(
