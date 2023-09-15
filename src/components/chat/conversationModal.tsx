@@ -249,6 +249,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             openConversation={() => isMessageDB(message) && onOpenNewConversation(message.hash)}
             onPrune={() => isMessageDB(message) && handlePrune(message.hash)}
             onEdit={() => isMessageDB(message) && setEditingMessage(message)}
+            openOtherHash={(hash: string) => onOpenNewConversation(hash)}
           />
         ))}
         {assistantTyping && (

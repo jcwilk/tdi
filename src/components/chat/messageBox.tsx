@@ -1,6 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Box, Button, Tooltip } from '@mui/material';
-import FileCopyIcon from '@mui/icons-material/FileCopy';
+import { Box } from '@mui/material';
 import { Message } from '../../chat/conversation';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
@@ -14,38 +13,10 @@ type MessageProps = {
   openConversation?: () => void;
   onPrune?: () => void;
   onEdit?: () => void;
+  openOtherHash: (hash: string) => void;
 };
 
-interface CodeBlockProps {
-  node?: any; // Depending on the ReactMarkdown types, this can be more specific.
-  children: ReactNode | ReactNode[];
-}
-
-const CodeBlock: React.FC<CodeBlockProps> = ({ node, children, ...props }) => {
-  const handleCopy = () => {
-    const content = Array.isArray(children) ? children.join('') : children;
-    navigator.clipboard.writeText(content?.toString() ?? "");
-  };
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <Tooltip title="Copy to clipboard">
-        <Button
-          onClick={handleCopy}
-          style={{ position: 'absolute', top: 5, right: 5, zIndex: 10 }}
-          size="small"
-        >
-          <FileCopyIcon fontSize="small" />
-        </Button>
-      </Tooltip>
-      <pre>
-        <code {...props}>{children}</code>
-      </pre>
-    </div>
-  );
-};
-
-const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune, onEdit }) => {
+const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune, onEdit, openOtherHash }) => {
   let alignSelf: 'flex-end' | 'flex-start' | 'center';
   let backgroundColor: string;
   let textColor: string;
@@ -105,7 +76,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, openConversation, onPrune
         <CopyButton contentToCopy={message.content} />
       </div>
       <div className="markdown-content">
-        <MarkdownRenderer content={`\u200B${message.content}`} />
+        <MarkdownRenderer content={`\u200B${message.content}`} openOtherHash={openOtherHash} />
       </div>
     </Box>
   );

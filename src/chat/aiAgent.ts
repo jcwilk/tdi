@@ -37,13 +37,6 @@ function hotShare<T>(): UnaryFunction<Observable<T>, Observable<T>> {
   });
 }
 
-function hotShareUntil<T>(cancelStream: Observable<any>): UnaryFunction<Observable<T>, Observable<T>> {
-  return (source: Observable<T>) => source.pipe(
-    takeUntil(cancelStream),
-    hotShare()
-  );
-}
-
 function rateLimiter<T>(maxCalls: number, windowSize: number): (source: Observable<T>) => Observable<T> {
   return function(source: Observable<T>): Observable<T> {
       let timestamps: number[] = [];
@@ -88,7 +81,7 @@ export function addAssistant(
     map(([messages, _typing]) => messages)
   );
 
-  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, assistant, conversation.model, conversation.functions);
+  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, conversation.model, conversation.functions);
 
   typingAndSending.subscribe({
     error: (err) => {
@@ -106,7 +99,7 @@ export function addAssistant(
     }
   })
 
-  sendSystemMessagesForInterruptions(assistant, conversation, interruptingFunctionCalls);
+  sendSystemMessagesForInterruptions(conversation, interruptingFunctionCalls);
 
   return conversation;
 }
@@ -147,7 +140,6 @@ function filterByIsUninterruptedUserMessage(messagesAndTyping: Observable<[Messa
 
 function switchedOutputStreamsFromRespondableMessages(
   newRespondableMessages: Observable<Message[]>,
-  assistant: Participant,
   model: string,
   functions: FunctionOption[]
 ) {
@@ -213,7 +205,7 @@ The ONLY scenario where you should not call a function is if the latest user mes
   )
 }
 
-function sendSystemMessagesForInterruptions(assistant: Participant, conversation: Conversation, interruptingFunctionCalls: Observable<[GPTFunctionCall, TypingUpdate]>) {
+function sendSystemMessagesForInterruptions(conversation: Conversation, interruptingFunctionCalls: Observable<[GPTFunctionCall, TypingUpdate]>) {
   interruptingFunctionCalls.pipe(
     filter(([{ functionCall }, _typingUpdate]) => functionCall.name === "cancel"),
     tap(() => sendSystemMessage(conversation, "Assistant was interrupted by the user and the message in progress was discarded."))
