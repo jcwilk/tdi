@@ -149,7 +149,7 @@ function handleGptMessages(conversation: Conversation, typingAndSending: Observa
 
   typingAndSending.pipe(
     filter(isGPTTextUpdate),
-    tap(({ text }) => {typeMessage(conversation, "assistant", text); console.log("ai typing", JSON.stringify(text))})
+    tap(({ text }) => typeMessage(conversation, "assistant", text))
   ).subscribe();
 
   typingAndSending.pipe(

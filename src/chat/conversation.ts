@@ -1,4 +1,4 @@
-import { BehaviorSubject, Observable, Subject, concat, concatMap, distinctUntilChanged, filter, from, map, of, scan } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, concatMap, distinctUntilChanged, filter, from, map, of, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
 import { v4 as uuidv4 } from 'uuid';
 import { MessageDB } from './conversationDb';

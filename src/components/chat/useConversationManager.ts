@@ -214,8 +214,6 @@ export function useConversationsManager() {
   }, [])
 
   useEffect(() => {
-    console.log("active conversation changed!", activeConversation)
-
     if (activeConversation) {
       navConversation(navigate, activeConversation, true);
     }
@@ -276,7 +274,6 @@ export function useConversationsManager() {
     newNavParams.set('ln', newLeafHash);
 
     navConversationByUuidOrSha(navigate, uuid, newNavParams);
-    console.log("NAVIGATING", uuid, newNavParams)
   }, [navigate, navConversationByUuidOrSha, navParams]);
 
   const changeModel = useCallback((model: string) => {

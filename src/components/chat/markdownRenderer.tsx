@@ -19,7 +19,6 @@ function splitString(input: string): string[] {
 
 const parseContent = (content: string, openOtherHash: (hash: string) => void) => {
   const parts = splitString(content);
-  console.log("split!", content, parts)
 
   return parts.reduce<(string | JSX.Element)[]>((acc, part, index) => {
     if (shaRegex.test(part)) {

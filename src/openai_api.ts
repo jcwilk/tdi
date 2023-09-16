@@ -251,8 +251,8 @@ export async function getChatCompletion(
     })
 
     if (done) {
-      console.log("full aggregate:", aggregatedContents)
-      console.log("full raw contents", aggregatedRawContents)
+      //console.log("full aggregate:", aggregatedContents)
+      //console.log("full raw contents", aggregatedRawContents)
 
       return;
     }
@@ -344,9 +344,6 @@ function processChunk(
   console.log("Unknown chunk type:", jsonData)
   return aggregatedContents;  // If no other conditions met, just return the previous aggregated contents
 }
-
-
-const PAUSE_TIME_GRACE_PERIOD = 2; // in seconds
 
 async function saveAudioInput(): Promise<{ audioBlobPromise: Promise<Blob>, stopRecording: () => void }> {
   console.log("Please say something...");
