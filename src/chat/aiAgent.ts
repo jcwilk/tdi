@@ -1,11 +1,8 @@
-// a series of functions that will be used to create an AI agent
-
-import { BehaviorSubject, Observable, Subject, UnaryFunction, distinctUntilChanged, filter, map, merge, scan, share, switchMap, tap } from "rxjs";
+import { Observable, Subject, UnaryFunction, distinctUntilChanged, filter, map, merge, share, switchMap, tap } from "rxjs";
 import { Conversation, Message, TypingUpdate, sendError, sendSystemMessage } from "./conversation";
 import { sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTSentMessage } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
-import { subscribeUntilFinalized } from "./rxjsUtilities";
 import { callFunction } from "./functionCalling";
 import { ConversationDB } from "./conversationDb";
 
@@ -148,6 +145,8 @@ function filterByIsInterruptingUserMessage(messagesAndTyping: Observable<[Messag
 }
 
 function handleGptMessages(conversation: Conversation, typingAndSending: Observable<GPTMessage>, db: ConversationDB) {
+  // TODO: these should be in one pipeline together to ensure that the typing and sending is in sync, rather than branched out to three separate pipelines
+
   typingAndSending.pipe(
     filter(isGPTTextUpdate),
     tap(({ text }) => {typeMessage(conversation, "assistant", text); console.log("ai typing", JSON.stringify(text))})
