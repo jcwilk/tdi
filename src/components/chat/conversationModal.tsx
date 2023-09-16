@@ -68,8 +68,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
 
   const currentLeafHash = messagesWithoutErrors[messagesWithoutErrors.length - 1]?.hash; // no need for useMemo because it's a primitive
 
-  console.log("RENDER MODAL", messages, messagesWithoutErrors, currentLeafHash)
-
   useEffect(() => {
     const messageEnd = messagesEndRef.current;
     if (messageEnd && autoScroll) {

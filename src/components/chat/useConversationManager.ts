@@ -5,7 +5,6 @@ import { Conversation, createConversation, getLastMessage, observeNewMessages, t
 import { addAssistant } from '../../chat/aiAgent';
 import { useLocation, useNavigate, NavigateFunction } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
-import { subscribeUntilFinalized } from '../../chat/rxjsUtilities';
 import { Router, RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 
