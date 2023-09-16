@@ -1,8 +1,8 @@
-import { Observable, ReplaySubject, Subject, finalize } from "rxjs";
+import { Observable, ReplaySubject, Subject, concatMap, finalize, from, map } from "rxjs";
 
-export function subscribeUntilFinalized(
-  source: Observable<any>,
-  subscriber: Subject<any>
+export function subscribeUntilFinalized<T>(
+  source: Observable<T>,
+  subscriber: Subject<T>
 ) {
   return source.pipe(
     finalize(() => subscriber.complete())
@@ -23,3 +23,23 @@ export function pluckAll<T>(replaySubject: ReplaySubject<T>): T[] {
   replaySubject.subscribe((value: T) => values.push(value)).unsubscribe();
   return values;
 }
+
+export function scanAsync<T, R>(
+  accumulator: (acc: R, value: T, index: number) => Promise<R>,
+  seed: R
+) {
+  let index = 0;
+  let acc = seed;
+
+  return (source: Observable<T>) =>
+    source.pipe(
+      concatMap((value) =>
+        from(accumulator(acc, value, index++)).pipe(
+          map((newAcc) => {
+            acc = newAcc;
+            return newAcc;
+          })
+        )
+      )
+    );
+};

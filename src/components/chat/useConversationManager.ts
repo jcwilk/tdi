@@ -1,12 +1,11 @@
 import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { Subject, concatMap, debounceTime, filter, scan, tap } from 'rxjs';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
-import { Conversation, addParticipant, createConversation, teardownConversation } from '../../chat/conversation';
+import { Conversation, createConversation, getLastMessage, observeNewMessages, teardownConversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/aiAgent';
-import { createParticipant } from '../../chat/participantSubjects';
 import { useLocation, useNavigate, NavigateFunction } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
-import { pluckLast, subscribeUntilFinalized } from '../../chat/rxjsUtilities';
+import { subscribeUntilFinalized } from '../../chat/rxjsUtilities';
 import { Router, RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 
@@ -19,8 +18,7 @@ const db = new ConversationDB();
 function buildParticipatedConversation(messages: MessageDB[], model: string = "gpt-3.5-turbo", functions: string[] = []): Conversation {
   const functionOptions = getAllFunctionOptions().filter(f => functions.includes(f.name));
 
-  const userParticipatedConvo = addParticipant(createConversation(messages, model, functionOptions), createParticipant('user'));
-  return addAssistant(userParticipatedConvo, db);
+  return addAssistant(createConversation(messages, model, functionOptions), db);
 }
 
 function pickSearchParams(keys: string[], searchParams: URLSearchParams): URLSearchParams {
@@ -72,7 +70,7 @@ function navRoot(navigate: NavigateFunction, replace: boolean = false) {
 }
 
 function navConversation(navigate: NavigateFunction, conversation: Conversation, replace: boolean = false) {
-  const lastMessage = pluckLast(conversation.outgoingMessageStream);
+  const lastMessage = getLastMessage(conversation);
   if (!lastMessage) {
     console.error("Empty conversation!", conversation)
     return
@@ -241,11 +239,7 @@ export function useConversationsManager() {
   useEffect(() => {
     if (!activeConversation) return;
 
-    const newMessages = new Subject<MessageDB>();
-
-    const forwarderSubscription = subscribeUntilFinalized(activeConversation.outgoingMessageStream, newMessages);
-
-    const subscription = newMessages
+    const subscription = observeNewMessages(activeConversation, false)
       .pipe(
         debounceTime(0), // only ever process the last message
         tap(message => {
@@ -255,7 +249,6 @@ export function useConversationsManager() {
       .subscribe();
 
     return () => {
-      forwarderSubscription.unsubscribe();
       subscription.unsubscribe();
     };
   }, [activeConversation, navConversation, navigate]);

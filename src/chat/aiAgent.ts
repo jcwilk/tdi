@@ -1,8 +1,8 @@
 // a series of functions that will be used to create an AI agent
 
-import { BehaviorSubject, Observable, Subject, UnaryFunction, filter, map, merge, scan, share, switchMap, takeUntil, tap, withLatestFrom } from "rxjs";
-import { Conversation, Message, TypingUpdate, addParticipant, sendError, sendSystemMessage } from "./conversation";
-import { Participant, createParticipant, sendMessage, typeMessage } from "./participantSubjects";
+import { BehaviorSubject, Observable, Subject, UnaryFunction, distinctUntilChanged, filter, map, merge, scan, share, switchMap, tap } from "rxjs";
+import { Conversation, Message, TypingUpdate, sendError, sendSystemMessage } from "./conversation";
+import { sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTSentMessage } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
 import { subscribeUntilFinalized } from "./rxjsUtilities";
@@ -64,15 +64,11 @@ export function addAssistant(
   conversation: Conversation,
   db: ConversationDB
 ): Conversation {
-  const assistant = createParticipant("assistant");
-
-  conversation = addParticipant(conversation, assistant);
-
-  const messages = createMessageStream(conversation, assistant);
-
-  const messagesAndTyping = messages.pipe(
-    withLatestFrom(assistant.typingStream)
+  const messagesAndTyping = conversation.outgoingMessageStream.pipe(
+    map(({messages, typingStatus}) => [messages, {role: "assistant", content: typingStatus.get("assistant") ?? ""}] as [Message[], TypingUpdate]),
+    distinctUntilChanged(([messagesA, _typingA], [messagesB, _typingB]) => messagesA === messagesB)
   );
+
   const newSystemMessages = filterByIsSystemMessage(messagesAndTyping);
   const newUninterruptedUserMessages = filterByIsUninterruptedUserMessage(messagesAndTyping);
   const newInterruptingUserMessages = filterByIsInterruptingUserMessage(messagesAndTyping);
@@ -89,9 +85,9 @@ export function addAssistant(
     }
   })
 
-  handleGptMessages(assistant, conversation, typingAndSending, db);
+  handleGptMessages(conversation, typingAndSending, db);
 
-  const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages, assistant);
+  const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages);
 
   interruptingFunctionCalls.subscribe({
     error: (err) => {
@@ -102,17 +98,6 @@ export function addAssistant(
   sendSystemMessagesForInterruptions(conversation, interruptingFunctionCalls);
 
   return conversation;
-}
-
-function createMessageStream(conversation: Conversation, assistant: Participant) {
-  const messages = new BehaviorSubject<Message[]>([]);
-
-  subscribeUntilFinalized(conversation.outgoingMessageStream.pipe(
-    scan((allMessages: Message[], newMessage: Message) => [...allMessages, newMessage], []),
-    filter((allMessages) => allMessages[allMessages.length - 1].participantId !== assistant.id)
-  ), messages);
-
-  return messages;
 }
 
 function filterByIsSystemMessage(messagesAndTyping: Observable<[Message[], TypingUpdate]>): Observable<[Message[], TypingUpdate]> {
@@ -162,24 +147,24 @@ function filterByIsInterruptingUserMessage(messagesAndTyping: Observable<[Messag
   )
 }
 
-function handleGptMessages(assistant: Participant, conversation: Conversation, typingAndSending: Observable<GPTMessage>, db: ConversationDB) {
+function handleGptMessages(conversation: Conversation, typingAndSending: Observable<GPTMessage>, db: ConversationDB) {
   typingAndSending.pipe(
     filter(isGPTTextUpdate),
-    tap(({ text }) => typeMessage(assistant, text))
+    tap(({ text }) => {typeMessage(conversation, "assistant", text); console.log("ai typing", JSON.stringify(text))})
   ).subscribe();
 
   typingAndSending.pipe(
     filter(isGPTFunctionCall),
-    tap(({ functionCall }) => callFunction(conversation, functionCall, db, assistant))
+    tap(({ functionCall }) => callFunction(conversation, functionCall, db))
   ).subscribe();
 
   typingAndSending.pipe(
     filter(isGPTSentMessage),
-    tap((message) => sendMessage(assistant, message.stopReason === "length" ? message.text + "[terminated due to length]" : message.text)),
+    tap((message) => sendMessage(conversation, "assistant", message.stopReason === "length" ? message.text + "[terminated due to length]" : message.text)),
   ).subscribe();
 }
 
-function switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages: Observable<[Message[], TypingUpdate]>, assistant: Participant) {
+function switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages: Observable<[Message[], TypingUpdate]>) {
   return newInterruptingUserMessages.pipe(
     switchMap(([messages, typingUpdate]) => {
       const convertedMessages: ChatMessage[] = messages.filter(({ role }) => role !== "system").map(({ role, content }) => ({ role, content }));

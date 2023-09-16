@@ -2,7 +2,7 @@ import { FunctionCall, FunctionOption, getEmbedding } from "../openai_api";
 import { Conversation, sendFunctionCall } from "./conversation";
 import { ConversationDB, MessageDB } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
-import { Participant, typeMessage } from "./participantSubjects";
+import { typeMessage } from "./participantSubjects";
 
 type FunctionParameter = {
   name: string;
@@ -122,7 +122,7 @@ export function isActiveFunction(conversation: Conversation, functionCall: Funct
     return conversation.functions.some((f) => f.name === functionCall.name);
 }
 
-export async function callFunction(conversation: Conversation, functionCall: FunctionCall, db: ConversationDB, assistant: Participant): Promise<void> {
+export async function callFunction(conversation: Conversation, functionCall: FunctionCall, db: ConversationDB): Promise<void> {
   if (!isActiveFunction(conversation, functionCall)) return;
 
   try {
@@ -132,8 +132,6 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
     const result = code({db});
 
     const prettifiedCall = `\`${functionCall.name}(${Object.entries(functionCall.parameters).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join(", ")})\``;
-
-    typeMessage(assistant, "")
 
     if (typeof result === "string") {
       const content = `

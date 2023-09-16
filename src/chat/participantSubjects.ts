@@ -1,52 +1,30 @@
-import { BehaviorSubject, Subject, ReplaySubject, takeUntil, Observable, map, finalize } from 'rxjs';
-import { Message, TypingUpdate } from './conversation';
-import { v4 as uuidv4 } from 'uuid';
+import { Conversation, Message, NewMessageEvent, TypingUpdate, TypingUpdateEvent } from './conversation';
 
-export type Participant = {
-  id: string;
-  role: string;
-  typingStreamInput: Subject<string>;
-  typingStream: BehaviorSubject<TypingUpdate>;
-  sendingStream: Subject<Message>;
-  incomingMessageStream: ReplaySubject<Message>;
-};
+export type TyperRole = 'user' | 'assistant'; // we don't currently have support for typing events for system/function
+export type ParticipantRole = TyperRole | 'system' | 'function';
 
-export function createParticipant(role: string): Participant {
-  const id = uuidv4();
-  const participant: Participant = {
-    id,
-    role,
-    typingStreamInput: new Subject<string>(),
-    typingStream: new BehaviorSubject({ participantId: id, content: '' }),
-    sendingStream: new Subject(),
-    incomingMessageStream: new ReplaySubject(10000)
-  };
-
-  participant.typingStreamInput.pipe(
-    map((content) => ({ participantId: id, content })),
-    finalize(() => participant.typingStream.complete())
-  ).subscribe(participant.typingStream);
-
-  return participant;
+export function isTyperRole(role: ParticipantRole): role is TyperRole {
+  return role === 'user' || role === 'assistant';
 }
 
-export function typeMessage(participant: Participant, content: string): void {
-  console.log("typeMessage", JSON.stringify(content))
-  participant.typingStreamInput.next(content);
+export function typeMessage(conversation: Conversation, role: TyperRole, content: string): void {
+  conversation.newMessagesInput.next({
+    type: 'typingUpdate',
+    payload: {
+      role,
+      content
+    } as TypingUpdate
+  } as TypingUpdateEvent);
 }
 
-export function sendMessage(participant: Participant, content: string): void {
+export function sendMessage(conversation: Conversation, role: ParticipantRole, content: string): void {
   if(!content) return;
 
-  participant.typingStreamInput.next('');
-  participant.sendingStream.next({
-    content,
-    participantId: participant.id,
-    role: participant.role
-  });
-}
-
-export function teardownParticipant(participant: Participant): void {
-  participant.typingStreamInput.complete();
-  participant.incomingMessageStream.complete();
+  conversation.newMessagesInput.next({
+    type: 'newMessage',
+    payload: {
+      content,
+      role
+    } as Message
+  } as NewMessageEvent);
 }

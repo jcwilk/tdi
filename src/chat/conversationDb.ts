@@ -1,10 +1,9 @@
 import Dexie from 'dexie';
-import { getEmbedding } from '../openai_api';
+import { ParticipantRole } from './participantSubjects';
 
 export interface MessageDB {
   content: string;
-  participantId: string;
-  role: string;
+  role: ParticipantRole;
   hash: string;
   timestamp: number;
   parentHash: string | null;
@@ -17,11 +16,18 @@ export class ConversationDB extends Dexie {
   constructor() {
     super('ConversationDatabase');
 
-    // Define the version 3 schema
     this.version(4).stores({
       messages: '&hash,timestamp,parentHash,embedding'
     }).upgrade(trans => {
       return trans.table('messages').clear();  // Clear out all old messages
+    });
+
+    this.version(5).stores({
+      messages: '&hash,timestamp,parentHash,embedding,role,content', // participantId removed from schema
+    }).upgrade(trans => {
+      return trans.table('messages').toCollection().modify(msg => {
+        delete msg.participantId; // remove participantId from each record
+      });
     });
 
     // Define tables

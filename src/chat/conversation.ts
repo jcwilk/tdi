@@ -1,122 +1,129 @@
-import { BehaviorSubject, ReplaySubject, Subject, scan } from 'rxjs';
-import { Participant, createParticipant, sendMessage, teardownParticipant, typeMessage } from './participantSubjects';
+import { BehaviorSubject, Observable, Subject, concat, concatMap, distinctUntilChanged, filter, from, map, of, scan } from 'rxjs';
+import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
 import { v4 as uuidv4 } from 'uuid';
 import { MessageDB } from './conversationDb';
 import { processMessagesWithHashing } from './messagePersistence';
 import { FunctionCall, FunctionOption } from '../openai_api';
-import { subscribeUntilFinalized } from './rxjsUtilities';
-import { Message } from '@mui/icons-material';
-import { generateCodeForFunctionCall } from './functionCalling';
+import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
 
 export type Message = {
+  role: ParticipantRole;
   content: string;
-  participantId: string;
-  role: string;
 };
 
 export type TypingUpdate = {
-  participantId: string;
+  role: TyperRole;
   content: string;
 }
 
+export type NewMessageEvent = {
+  type: 'newMessage';
+  payload: Message;
+};
+
+export type ProcessedMessageEvent = {
+  type: 'processedMessage';
+  payload: MessageDB; // assuming MessageDB is the type for processed messages
+};
+
+export type TypingUpdateEvent = {
+  type: 'typingUpdate';
+  payload: TypingUpdate;
+};
+
+export type ConversationEvent = TypingUpdateEvent | NewMessageEvent | ProcessedMessageEvent;
+
+function isNewMessageEvent(event: ConversationEvent): event is NewMessageEvent {
+  return event.type === 'newMessage';
+}
+
+export type ConversationState = {
+  messages: MessageDB[];
+  typingStatus: Map<TyperRole, string>;
+};
+
 export type Conversation = {
-  participants: Participant[];
-  newMessagesInput: Subject<Message>;
-  outgoingMessageStream: ReplaySubject<MessageDB>;
-  typingStreamInput: Subject<TypingUpdate>;
-  typingAggregationOutput: BehaviorSubject<Map<string, string>>;
-  systemParticipant: Participant;
+  newMessagesInput: Subject<ConversationEvent>;
+  outgoingMessageStream: BehaviorSubject<ConversationState>;
   functions: FunctionOption[];
   model: string;
   id: string;
 };
 
-export function createConversation(loadedMessages: MessageDB[], model: string = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Conversation {
-  const systemParticipant = createParticipant("system");
+interface ScanState {
+  lastProcessedHash: string | null;
+  event: TypingUpdateEvent | ProcessedMessageEvent | null;
+}
 
+export function createConversation(loadedMessages: MessageDB[], model: string = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Conversation {
   const conversation: Conversation = {
-    participants: [],
-    newMessagesInput: new Subject<Message>(),
-    outgoingMessageStream: new ReplaySubject<MessageDB>(10000),
-    typingStreamInput: new Subject<TypingUpdate>(),
-    typingAggregationOutput: new BehaviorSubject(new Map()),
-    systemParticipant,
+    newMessagesInput: new Subject<ConversationEvent>(),
+    outgoingMessageStream: new BehaviorSubject({ messages: loadedMessages, typingStatus: new Map() }),
     id: uuidv4(),
     functions,
     model
   }
 
-  loadedMessages.forEach((message) => conversation.outgoingMessageStream.next(message));
-
-  subscribeUntilFinalized(systemParticipant.sendingStream, conversation.newMessagesInput);
-
   const lastMessage = loadedMessages[loadedMessages.length - 1];
-  const lastLoadedMessageHashes = lastMessage?.hash ? [lastMessage.hash] : [];
 
-  // TODO: break this out of conversation, or at least out of its initialization - it's an undesirable coupling
-  const persistedMessages = processMessagesWithHashing(conversation.newMessagesInput, lastLoadedMessageHashes);
+  const aggregatedOutput = conversation.newMessagesInput.pipe(
+    scanAsync<ConversationEvent, ScanState>(async (acc: ScanState, event: ConversationEvent) => {
+      if (isNewMessageEvent(event)) {
+        const currentParentHashes = acc.lastProcessedHash ? [acc.lastProcessedHash] : [];
 
-  subscribeUntilFinalized(persistedMessages, conversation.outgoingMessageStream);
+        const persistedMessage = await processMessagesWithHashing(event.payload, currentParentHashes);
 
-  subscribeUntilFinalized(conversation.typingStreamInput.pipe(
-    scan((typingMap: Map<string, string>, typingUpdate: TypingUpdate) => {
-      const newTypingValues = new Map(typingMap);
-      newTypingValues.set(typingUpdate.participantId, typingUpdate.content);
-      return newTypingValues;
-    }, new Map())
-  ), conversation.typingAggregationOutput);
+        return {
+          lastProcessedHash: persistedMessage.hash,
+          event: { type: 'processedMessage', payload: persistedMessage } as ProcessedMessageEvent,
+        };
+      }
+      else {
+        return { ...acc, event };
+      }
+    }, { lastProcessedHash: lastMessage?.hash ?? null, event: null }),
+    map((state) => state.event),
+    filter<ConversationEvent | null, ConversationEvent>((event): event is ConversationEvent => event !== null),
+    scan(
+      (state: ConversationState, event: ConversationEvent) => {
+        if (event.type === 'processedMessage') {
+          const newMessages = [...state.messages, event.payload];
+          const role = event.payload.role;
+          if (isTyperRole(role) && state.typingStatus.get(role)) {
+            return { ...state, messages: newMessages, typingStatus: new Map(state.typingStatus).set(role, '') };
+          }
+
+          if (role === 'function') {
+            return { ...state, messages: newMessages, typingStatus: new Map(state.typingStatus).set("assistant", '') };
+          }
+
+          return { ...state, messages: newMessages };
+        }
+        else if (event.type === 'typingUpdate') {
+          const newTypingStatus = new Map(state.typingStatus);
+          newTypingStatus.set(event.payload.role, event.payload.content);
+          return { ...state, typingStatus: newTypingStatus };
+        }
+        else {
+          return state;
+        }
+      },
+      conversation.outgoingMessageStream.value //shortcut for reusing the initial state of the output stream
+    )
+  )
+
+  subscribeUntilFinalized(aggregatedOutput, conversation.outgoingMessageStream);
 
   return conversation;
 }
 
-export function addParticipant(
-  conversation: Conversation,
-  participant: Participant
-): Conversation {
-  subscribeUntilFinalized(conversation.outgoingMessageStream, participant.incomingMessageStream);
-
-  // We don't necessarily want to complete the conversation just because the subscriber completed
-  participant.sendingStream.subscribe(conversation.newMessagesInput);
-  participant.typingStream.subscribe(conversation.typingStreamInput);
-
-  const newParticipants = [...conversation.participants, participant];
-
-  return {
-    ...conversation,
-    participants: newParticipants
-  }
-}
-
-export function removeParticipant(conversation: Conversation, id: string): Conversation {
-  const participant = getParticipant(conversation, id);
-  if (!participant) return conversation;
-
-  teardownParticipant(participant)
-  const newParticipants = conversation.participants.filter(participant => participant.id !== id);
-
-  return {
-    ...conversation,
-    participants: newParticipants
-  };
-}
-
-export function getParticipant(conversation: Conversation, id: string): Participant | undefined {
-  return conversation.participants.find(participant => participant.id === id);
-}
-
 export function sendSystemMessage(conversation: Conversation, message: string) {
-  const systemParticipant = conversation.systemParticipant;
-
-  sendMessage(systemParticipant, message);
+  sendMessage(conversation, 'system', message);
 }
 
 export function teardownConversation(conversation: Conversation) {
-  console.log("TEARDOWN")
-  conversation.participants.forEach((participant) => teardownParticipant(participant));
-  teardownParticipant(conversation.systemParticipant);
-
+  console.log("TEARDOWN");
   conversation.newMessagesInput.complete();
-  conversation.typingStreamInput.complete();
 }
 
 export function sendError(conversation: Conversation, error: Error) {
@@ -124,11 +131,54 @@ export function sendError(conversation: Conversation, error: Error) {
 }
 
 export function sendFunctionCall(conversation: Conversation, functionCall: FunctionCall, content: string): void {
-  // TODO: this is overstepping an abstraction or two, but it's something we can come back to
-  // as the function calling stuff firms up
   conversation.newMessagesInput.next({
-    content: content,
-    participantId: conversation.systemParticipant.id,
-    role: "function"
-  });
+    type: 'newMessage',
+    payload: {
+      content: content,
+      role: "function"
+    }
+  } as NewMessageEvent);
+}
+
+export function getLastMessage(conversation: Conversation): MessageDB | undefined {
+  const messages = conversation.outgoingMessageStream.value.messages;
+  return messages[messages.length - 1];
+}
+
+export function getAllMessages(conversation: Conversation): MessageDB[] {
+  return conversation.outgoingMessageStream.value.messages;
+}
+
+export function getTypingStatus(conversation: Conversation, role: TyperRole): string {
+  return conversation.outgoingMessageStream.value.typingStatus.get(role) ?? "";
+}
+
+export function observeNewMessagesWithLatestTypingMap(conversation: Conversation, includeExisting = false): Observable<[MessageDB, Map<TyperRole, string>]> {
+  const indexToStartAt = includeExisting ? 0 : getAllMessages(conversation).length;
+
+  return conversation.outgoingMessageStream.pipe(
+    map(({messages, typingStatus}) => [messages, typingStatus] as [MessageDB[], Map<TyperRole, string>]),
+    distinctUntilChanged(([messagesA, _typingStatusA], [messagesB, _typingStatusB]) => messagesA === messagesB),
+    scan<[MessageDB[], Map<TyperRole, string>], [MessageDB[], number, Map<TyperRole, string>]>(([_lastMessages, index, _lastTypingStatus], [messages, typingStatus]) => {
+      const newMessages = messages.slice(index);
+      return [newMessages, index + newMessages.length, typingStatus];
+    }, [[], indexToStartAt, new Map<TyperRole, string>()] as [MessageDB[], number, Map<TyperRole, string>]),
+    concatMap(([messages, _index, typingStatus]) => {
+      const messageUpdates = messages.map(message => { return [message, typingStatus] as [MessageDB, Map<TyperRole, string>]})
+      return from(messageUpdates);
+    }),
+  );
+}
+
+export function observeNewMessages(conversation: Conversation, includeExisting = false): Observable<MessageDB> {
+  return observeNewMessagesWithLatestTypingMap(conversation, includeExisting).pipe(
+    map(([message, _typingStatus]) => message)
+  );
+}
+
+export function observeTypingUpdates(conversation: Conversation, role: TyperRole): Observable<string> {
+  return conversation.outgoingMessageStream.pipe(
+    map(state => state.typingStatus.get(role) || ''),
+    distinctUntilChanged()
+  );
 }

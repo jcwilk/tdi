@@ -4,6 +4,7 @@ import ConversationModal from './conversationModal';
 import LeafMessages, { RunningConversationOption } from './leafMessages';
 import { useConversationsManager } from './useConversationManager';
 import { pluckLast } from '../../chat/rxjsUtilities';
+import { getLastMessage } from '../../chat/conversation';
 
 const db = new ConversationDB();
 
@@ -53,7 +54,7 @@ const Client: React.FC = () => {
   const runningLeafMessages = useMemo(() => {
     const messages: RunningConversationOption[] = [];
     for (const [uuid, conversation] of runningConversations) {
-      const lastOne = pluckLast(conversation.outgoingMessageStream);
+      const lastOne = getLastMessage(conversation);
 
       if(lastOne) messages.push({uuid, message: lastOne});
     };
@@ -84,7 +85,6 @@ const Client: React.FC = () => {
     <ConversationModal
       key={activeConversation.id}
       conversation={activeConversation}
-      initialGptModel={"gpt-3.5-turbo"}
       onClose={goBack}
       onOpenNewConversation={openConversation}
       onNewModel={changeModel}

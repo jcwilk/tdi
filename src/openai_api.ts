@@ -239,12 +239,14 @@ export async function getChatCompletion(
         onCutoff
       )
 
-      // Just so that we're sending a last hypothetical chunk out prior to calling onFunctionCall
-      if (functionName) {
-        onChunk(`Function call: ${functionName}\n\nArguments: ` + aggregatedContents)
-      }
-      else {
-        onChunk(aggregatedContents)
+      if (aggregatedContents !== "") {
+        // Just so that we're sending a last hypothetical chunk out prior to calling onFunctionCall
+        if (functionName) {
+          onChunk(`Function call: ${functionName}\n\nArguments: ` + aggregatedContents)
+        }
+        else {
+          onChunk(aggregatedContents)
+        }
       }
     })
 

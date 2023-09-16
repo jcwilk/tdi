@@ -26,13 +26,12 @@ const mainSystemMessage: Message = {
   role: "system",
   content: `
 You are an AI conversationalist. Your job is to converse with the user. Your prose, grammar, spelling, typing, etc should all be consistent with typical instant messaging discourse within the constraints of needing to put your entire response into one message to send each time. Use natural grammar rather than perfect grammar.
-  `,
-  participantId: "root"
+  `.trim(),
 }
 
 const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningConversationOption[], leafMessages: MessageDB[], onSelect: (leafMessage: string, uuid?: string) => void }> = ({ db, runningLeafMessages, leafMessages, onSelect }) => {
   const handleNewConversation = async () => {
-    const firstMessage = await firstValueFrom(processMessagesWithHashing(of(mainSystemMessage)));
+    const firstMessage = await processMessagesWithHashing(mainSystemMessage);
     onSelect(firstMessage.hash);
   }
 

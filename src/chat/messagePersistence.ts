@@ -1,5 +1,3 @@
-import { Observable, from, lastValueFrom, pipe } from 'rxjs';
-import { concatMap, map, mergeMap, scan } from 'rxjs/operators';
 import { ConversationDB, MessageDB } from './conversationDb';
 import { Message } from './conversation';
 import { getEmbedding } from '../openai_api';
@@ -20,48 +18,46 @@ const hashFunction = async (message: Message, parentHashes: string[]): Promise<s
   return hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
 };
 
-const processMessagesWithHashing = (
-  source$: Observable<Message>,
-  initialParentHashes: string[] = []
-): Observable<MessageDB> => {
+export async function processMessagesWithHashing(
+  message: Message,
+  currentParentHashes: string[] = []
+): Promise<MessageDB> {
   const conversationDB = new ConversationDB();
-
-  let lastProcessedHash: string | null = null;
-
-  return source$.pipe(
-    concatMap(async (message: Message, index): Promise<MessageDB> => {
-      const currentParentHashes = index === 0 ? initialParentHashes : (lastProcessedHash ? [lastProcessedHash] : []);
-
-      const messageDB: MessageDB = {
-        ...message,
-        timestamp: Date.now(),
-        hash: await hashFunction(message, currentParentHashes),
-        parentHash: currentParentHashes[0],
-        embedding: await getEmbedding(message.content)
-      };
-      const persistedMessage = await conversationDB.saveMessage(messageDB);
-
-      // Update the lastProcessedHash after processing the current message
-      lastProcessedHash = persistedMessage.hash;
-
-      return persistedMessage;
-    })
-  );
+  const messageDB: MessageDB = {
+    ...message,
+    timestamp: Date.now(),
+    hash: await hashFunction(message, currentParentHashes),
+    parentHash: currentParentHashes[0],
+    embedding: await getEmbedding(message.content)
+  };
+  return await conversationDB.saveMessage(messageDB);
 };
 
 const identifyMessagesForReprocessing = (conversation: MessageDB[], startIndex: number): Message[] => {
   return conversation.slice(startIndex).map(message => ({
     content: message.content,
-    participantId: message.participantId,
     role: message.role
   }));
 };
 
-const editConversation = async (
+async function reprocessMessagesStartingFrom(messagesForReprocessing: Message[], parentMessage: MessageDB | null): Promise<MessageDB> {
+  if (messagesForReprocessing.length === 0) {
+    throw new Error("No messages to reprocess");
+  }
+
+  if (!parentMessage) {
+    parentMessage = await processMessagesWithHashing(messagesForReprocessing[0]);
+    messagesForReprocessing = messagesForReprocessing.slice(1);
+  }
+
+  return messagesForReprocessing.reduce<Promise<MessageDB>>((acc, message) => acc.then(accMessage => processMessagesWithHashing(message, accMessage ? [accMessage.hash] : [])), Promise.resolve(parentMessage));
+}
+
+export async function editConversation(
   leafMessage: MessageDB,
   index: number,
   newMessage: Message
-): Promise<MessageDB> => {
+): Promise<MessageDB> {
   const conversationDB = new ConversationDB();
 
   // Fetch the full conversation from the leaf to the root
@@ -74,27 +70,20 @@ const editConversation = async (
   // The messages before the index remain untouched.
   const precedingMessages = conversation.slice(0, index);
 
-  // The parent hash for the newMessage would be the hash of the message before the given index.
-  const parentHashes = index === 0 ? [] : [precedingMessages[precedingMessages.length - 1].hash];
+  // Starting the reprocessing from the last preceding message
+  const parentMessage: MessageDB | null = precedingMessages[precedingMessages.length - 1] ?? null;
 
   // We'll need to reprocess the message at the given index and any subsequent messages.
   const messagesForReprocessing = identifyMessagesForReprocessing(conversation, index);
   messagesForReprocessing[0] = newMessage;  // Replace the message at the given index with the new message
 
-  // Convert the array of Messages to an Observable and process with hashing
-  const source$ = from(messagesForReprocessing);
-  const newMessages$ = processMessagesWithHashing(source$, parentHashes);
-
-  // Convert Observable to Promise and wait for completion
-  const newLeafMessage = await lastValueFrom(newMessages$);
-
-  return newLeafMessage;
+  return reprocessMessagesStartingFrom(messagesForReprocessing, parentMessage);
 };
 
-const pruneConversation = async (
+export async function pruneConversation(
   leafMessage: MessageDB,
   excludedHashes: string[]
-): Promise<MessageDB> => {
+): Promise<MessageDB> {
   const conversationDB = new ConversationDB();
 
   // Fetch the full conversation from the leaf to the root
@@ -117,21 +106,14 @@ const pruneConversation = async (
   }
 
   // The parent hash for the next reprocessed message would be the hash of the message before the first excluded one.
-  const parentHashes = firstExcludedIndex === 0 ? [] : [precedingMessages[precedingMessages.length - 1].hash];
+  const parentMessage = firstExcludedIndex === 0 ? null : precedingMessages[precedingMessages.length - 1];
 
   // Identify the messages for reprocessing starting from the first excluded message index
   const messagesForReprocessing = identifyMessagesForReprocessing(conversation, firstExcludedIndex + 1);
 
   if (messagesForReprocessing.length > 0) {
-    // Convert the array of Messages to an Observable and process with hashing
-    const source$ = from(messagesForReprocessing);
-    const newMessages$ = processMessagesWithHashing(source$, parentHashes);
-
-    // Convert Observable to Promise and wait for completion
-    return await lastValueFrom(newMessages$);
+    return reprocessMessagesStartingFrom(messagesForReprocessing, parentMessage);
   }
 
   return precedingMessages[precedingMessages.length - 1];
 };
-
-export { processMessagesWithHashing, editConversation, pruneConversation };

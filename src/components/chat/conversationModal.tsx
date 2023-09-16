@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Box, TextField, Button, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { sendMessage, typeMessage } from '../../chat/participantSubjects';
-import { Conversation } from '../../chat/conversation';
+import { Conversation, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
 import { MessageDB } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
@@ -19,12 +19,9 @@ import SendIcon from '@mui/icons-material/Send';
 import MemoryIcon from '@mui/icons-material/Memory';
 import { Checkbox } from '@mui/material';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
-import { ReplaySubject, Subject } from 'rxjs';
-import { pluckAll, subscribeUntilFinalized } from '../../chat/rxjsUtilities';
 
 type ConversationModalProps = {
   conversation: Conversation;
-  initialGptModel: string;
   onClose: () => void;
   onOpenNewConversation: (leafMessage: string) => void; // Callback for opening a new conversation on top
   onNewModel: (model: string) => void;
@@ -55,13 +52,10 @@ function isMessageDB(message: MessageDB | ErrorMessage): message is MessageDB {
   return !isErrorMessage(message);
 }
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, initialGptModel, onClose, onOpenNewConversation, onNewModel, onFunctionsChange }) => {
-  const user = conversation.participants.find((participant) => participant.role === 'user')!;
-  const assistant = conversation.participants.find((participant) => participant.role === 'assistant')!;
-
-  const [text, setText] = useState(conversation.typingAggregationOutput.getValue().get(user.id) || '');
-  const [messages, setMessages] = useState<(MessageDB | ErrorMessage)[]>(pluckAll(conversation.outgoingMessageStream));
-  const [assistantTyping, setAssistantTyping] = useState(conversation.typingAggregationOutput.getValue().get(assistant.id) || '');
+const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, onOpenNewConversation, onNewModel, onFunctionsChange }) => {
+  const [text, setText] = useState(getTypingStatus(conversation, "user"));
+  const [messages, setMessages] = useState<(MessageDB | ErrorMessage)[]>(getAllMessages(conversation));
+  const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [stopRecording, setStopRecording] = useState<(() => Promise<string>) | null>(null);
@@ -74,6 +68,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
 
   const currentLeafHash = messagesWithoutErrors[messagesWithoutErrors.length - 1]?.hash; // no need for useMemo because it's a primitive
 
+  console.log("RENDER MODAL", messages, messagesWithoutErrors, currentLeafHash)
+
   useEffect(() => {
     const messageEnd = messagesEndRef.current;
     if (messageEnd && autoScroll) {
@@ -81,53 +77,38 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
     }
   }, [messages, assistantTyping, messagesEndRef.current, autoScroll]);
 
-  const { outgoingMessageStream, typingAggregationOutput } = conversation || {};
-
   useEffect(() => {
-    if (!outgoingMessageStream || !typingAggregationOutput) return;
-
-    const typingSub = typingAggregationOutput.subscribe((typing: Map<string, string>) => {
-      setText(typing.get(user.id) || '');
-      const messageInProgress = typing.get(assistant.id)
-      if (messageInProgress !== undefined) {
-        // TODO: this used to ignore when we tried to set it to blank, but that caused problems with the function calling stuff
-        // but the problem now is it disappears momentarily between when it's set to blank and when the next message comes in
-        // which means it'll be scrolling back and forth really annoyingly... we need to figure out how to avoid the flicker
-        setAssistantTyping(messageInProgress);
-      }
-    });
-
-    const newMessages = new Subject<MessageDB>();
-
-    const forwarderSubscription = subscribeUntilFinalized(outgoingMessageStream, newMessages);
-
-    const msgSub = newMessages.subscribe({
-      error: (err) => {
-        const errorMessage: ErrorMessage = {
-          content: err.message,
-          role: 'error',
-          hash: "fffffffff", // TODO!
+    console.log("SETUP MODAL")
+    const subscriptions = [
+      observeTypingUpdates(conversation, "user").subscribe(setText),
+      observeTypingUpdates(conversation, "assistant").subscribe(setAssistantTyping),
+      observeNewMessages(conversation, false).subscribe({
+        error: (err) => {
+          const errorMessage: ErrorMessage = {
+            content: err.message,
+            role: 'error',
+            hash: "fffffffff", // TODO!
+          }
+          setMessages((previousMessages) => [...previousMessages, errorMessage]);
+        },
+        next: (message: MessageDB) => {
+          console.log("NEW MESSAGE", message)
+          setMessages((previousMessages) => [...previousMessages, message]);
         }
-        setMessages((previousMessages) => [...previousMessages, errorMessage]);
-      },
-      next: (message: MessageDB) => {
-        setMessages((previousMessages) => [...previousMessages, message]);
-        //setAssistantTyping('');
-      }
-    });
+      })
+    ];
 
     return () => {
-      typingSub.unsubscribe();
-      msgSub.unsubscribe();
-      forwarderSubscription.unsubscribe();
+      subscriptions.forEach((subscription) => subscription.unsubscribe());
       console.log("TEARDOWN MODAL")
     };
-  }, [outgoingMessageStream, typingAggregationOutput]);
+  }, [conversation]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      sendMessage(user, text);
+      sendMessage(conversation, "user", text);
+      setText('');
     }
   };
 
@@ -137,7 +118,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
       setIsTranscribing(true);
       if (stopRecording) {
         const transcript = await stopRecording();
-        sendMessage(user, transcript);
+        sendMessage(conversation, "user", transcript);
+        setText('');
         setStopRecording(null);
         setIsTranscribing(false);
       }
@@ -168,7 +150,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
 
     const index = findIndexByProperty(messagesWithoutErrors, "hash", message.hash);
 
-    const newLeafMessage = await editConversation(lastMessage, index, {role: message.role, participantId: message.participantId, content: newContent});
+    const newLeafMessage = await editConversation(lastMessage, index, {role: message.role, content: newContent});
     if(newLeafMessage.hash == lastMessage.hash) return;
 
     onOpenNewConversation(newLeafMessage.hash);
@@ -257,7 +239,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
           />
         ))}
         {assistantTyping && (
-          <MessageBox key="assistant-typing" message={{ participantId: 'TODO', role: 'assistant', content: assistantTyping }} />
+          <MessageBox key="assistant-typing" message={{ role: 'assistant', content: assistantTyping }} />
         )}
         <div ref={messagesEndRef} />
       </Box>
@@ -292,7 +274,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
           minRows={2}
           maxRows={10}
           value={text}
-          onChange={(e) => typeMessage(user, e.target.value)}
+          onChange={(e) => typeMessage(conversation, "user", e.target.value)}
           onKeyDown={handleKeyDown}
           inputRef={inputRef}
         />
@@ -334,7 +316,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, ini
             variant="contained"
             color="primary"
             onClick={() => {
-              sendMessage(user, text);
+              sendMessage(conversation, "user", text);
+              setText('');
               inputRef.current.focus();
             }}
             disabled={text === ''}
