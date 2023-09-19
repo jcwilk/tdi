@@ -1,6 +1,5 @@
-import { BehaviorSubject, Observable, ReplaySubject, Subject, concat, concatMap, filter, from, map, merge, of } from "rxjs";
+import { BehaviorSubject, Observable, Subject, concat, filter, map } from "rxjs";
 import { ChatMessage, FunctionCall, FunctionOption, getChatCompletion } from "../openai_api";
-import { subscribeUntilFinalized } from "./rxjsUtilities";
 
 export type chatCompletionStream = {
   typingStream: Subject<string>,

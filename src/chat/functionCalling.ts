@@ -2,7 +2,6 @@ import { FunctionCall, FunctionOption, getEmbedding } from "../openai_api";
 import { Conversation, sendFunctionCall } from "./conversation";
 import { ConversationDB, MessageDB } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
-import { typeMessage } from "./participantSubjects";
 
 type FunctionParameter = {
   name: string;
@@ -50,7 +49,7 @@ const functionSpecs: FunctionSpec[] = [
     },
     parameters: [
       {
-name: "query",
+        name: "query",
         type: "string",
         description: "The query to search for.",
         required: true
@@ -163,7 +162,8 @@ ${resultString}
       sendFunctionCall(conversation, functionCall, finalContent);
     }
   } catch (error) {
-    console.error(error);
+    console.error("caught error in callFunction", error);
+    throw error;
   }
 }
 
@@ -184,12 +184,6 @@ export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils:
       return undefined; // Default value for optional parameters not provided in the call
     }
   });
-
-  // TODO: as-is this works only for functions that are defined in the global scope
-  // we need to figure out a way to give this access to trickier functions, like ones that require access to the db
-  // I'm thinking we can do this by making a special simplified function which already has all the prereq stuff loaded in
-  // so the interface that the agent needs to interact with is minimized
-  //return `${functionCall.name}(${args.join(", ")})`;
 
   return (utils: FunctionUntils): string | Promise<string> => {
     return funcSpec.implementation(utils, ...args);

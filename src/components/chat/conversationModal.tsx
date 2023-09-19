@@ -80,19 +80,9 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
     const subscriptions = [
       observeTypingUpdates(conversation, "user").subscribe(setText),
       observeTypingUpdates(conversation, "assistant").subscribe(setAssistantTyping),
-      observeNewMessages(conversation, false).subscribe({
-        error: (err) => {
-          const errorMessage: ErrorMessage = {
-            content: err.message,
-            role: 'error',
-            hash: "fffffffff", // TODO!
-          }
-          setMessages((previousMessages) => [...previousMessages, errorMessage]);
-        },
-        next: (message: MessageDB) => {
-          console.log("NEW MESSAGE", message)
-          setMessages((previousMessages) => [...previousMessages, message]);
-        }
+      observeNewMessages(conversation, false).subscribe((message: MessageDB) => {
+        console.log("NEW MESSAGE", message)
+        setMessages((previousMessages) => [...previousMessages, message]);
       })
     ];
 

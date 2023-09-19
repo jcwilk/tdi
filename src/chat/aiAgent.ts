@@ -1,4 +1,4 @@
-import { Observable, Subject, UnaryFunction, distinctUntilChanged, filter, map, merge, share, switchMap, tap } from "rxjs";
+import { EMPTY, Observable, Subject, UnaryFunction, catchError, concatMap, distinctUntilChanged, filter, from, map, merge, share, switchMap, tap, throwError } from "rxjs";
 import { Conversation, Message, TypingUpdate, sendError, sendSystemMessage } from "./conversation";
 import { sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTSentMessage } from "./chatStreams";
@@ -145,23 +145,48 @@ function filterByIsInterruptingUserMessage(messagesAndTyping: Observable<[Messag
 }
 
 function handleGptMessages(conversation: Conversation, typingAndSending: Observable<GPTMessage>, db: ConversationDB) {
-  // TODO: these should be in one pipeline together to ensure that the typing and sending is in sync, rather than branched out to three separate pipelines
+  // TODO: The behavior here seems fine, but I would like to try to reorganize the agent code to be more of a pipeline
+  // which terminates with every event being fed into the conversation input, rather than arbitrarily mixing in calls to
+  // sendMessage, typeMessage, sendError, etc. It may make sense to try to change the behavior of those functions to
+  // return events, rather than send events to the conversation directly from within the function, which is pretty side-effecty.
+  // Side effects which begin and end as new messages to a stream are forgiveable for now though.
 
   typingAndSending.pipe(
-    filter(isGPTTextUpdate),
-    tap(({ text }) => typeMessage(conversation, "assistant", text))
-  ).subscribe();
+    concatMap((message) => {
+      try {
+        if (isGPTTextUpdate(message)) {
+          typeMessage(conversation, "assistant", message.text);
+          return EMPTY;
+        }
 
-  typingAndSending.pipe(
-    filter(isGPTFunctionCall),
-    tap(({ functionCall }) => callFunction(conversation, functionCall, db))
-  ).subscribe();
+        if (isGPTSentMessage(message)) {
+          sendMessage(
+            conversation,
+            "assistant",
+            message.stopReason === "length" ? message.text + "[terminated due to length]" : message.text,
+          );
+          return EMPTY;
+        }
 
-  typingAndSending.pipe(
-    filter(isGPTSentMessage),
-    tap((message) => sendMessage(conversation, "assistant", message.stopReason === "length" ? message.text + "[terminated due to length]" : message.text)),
+        if (isGPTFunctionCall(message)) {
+          return from(callFunction(conversation, message.functionCall, db));
+        }
+
+        console.warn("Unknown message type", message);
+        return EMPTY;
+      } catch (err) {
+        console.error("Error during handleGptMessages", err);
+        return throwError(() => err);
+      }
+    }),
+    catchError(err => {
+      console.log("Error from handleGptMessages catchError!", err);
+      sendError(conversation, err);
+      return EMPTY;
+    })
   ).subscribe();
 }
+
 
 function switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages: Observable<[Message[], TypingUpdate]>) {
   return newInterruptingUserMessages.pipe(

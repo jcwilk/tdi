@@ -16,6 +16,11 @@ export type TypingUpdate = {
   content: string;
 }
 
+export type ErrorMessageEvent = {
+  type: 'errorMessage';
+  payload: Message;
+};
+
 export type NewMessageEvent = {
   type: 'newMessage';
   payload: Message;
@@ -31,7 +36,11 @@ export type TypingUpdateEvent = {
   payload: TypingUpdate;
 };
 
-export type ConversationEvent = TypingUpdateEvent | NewMessageEvent | ProcessedMessageEvent;
+export type ConversationEvent = ErrorMessageEvent | TypingUpdateEvent | NewMessageEvent | ProcessedMessageEvent;
+
+function isErrorMessageEvent(event: ConversationEvent): event is ErrorMessageEvent {
+  return event.type === 'errorMessage';
+}
 
 function isNewMessageEvent(event: ConversationEvent): event is NewMessageEvent {
   return event.type === 'newMessage';
@@ -68,7 +77,7 @@ export function createConversation(loadedMessages: MessageDB[], model: string = 
 
   const aggregatedOutput = conversation.newMessagesInput.pipe(
     scanAsync<ConversationEvent, ScanState>(async (acc: ScanState, event: ConversationEvent) => {
-      if (isNewMessageEvent(event)) {
+      if (isNewMessageEvent(event) || isErrorMessageEvent(event)) {
         const currentParentHashes = acc.lastProcessedHash ? [acc.lastProcessedHash] : [];
 
         const persistedMessage = await processMessagesWithHashing(event.payload, currentParentHashes);
@@ -127,7 +136,13 @@ export function teardownConversation(conversation: Conversation) {
 }
 
 export function sendError(conversation: Conversation, error: Error) {
-  conversation.outgoingMessageStream.error(error);
+  conversation.newMessagesInput.next({
+    type: 'errorMessage',
+    payload: {
+      content: `Error(${error.name}): ${error.message}`.trim(),
+      role: 'system'
+    }
+  })
 }
 
 export function sendFunctionCall(conversation: Conversation, functionCall: FunctionCall, content: string): void {
