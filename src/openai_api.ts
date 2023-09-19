@@ -251,8 +251,8 @@ export async function getChatCompletion(
     })
 
     if (done) {
-      //console.log("full aggregate:", aggregatedContents)
-      //console.log("full raw contents", aggregatedRawContents)
+      // console.log("full aggregate:", aggregatedContents)
+      // console.log("full raw contents", aggregatedRawContents)
 
       return;
     }

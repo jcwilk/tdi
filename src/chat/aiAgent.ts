@@ -74,23 +74,25 @@ export function addAssistant(
     map(([messages, _typing]) => messages)
   );
 
-  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, conversation.model, conversation.functions);
-
-  typingAndSending.subscribe({
-    error: (err) => {
-      sendError(conversation, err);
-    }
-  })
+  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, conversation.model, conversation.functions)
+    .pipe(
+      catchError(err => {
+        console.log("Error from before handleGptMessages!", err);
+        sendError(conversation, err);
+        return EMPTY;
+      })
+    );
 
   handleGptMessages(conversation, typingAndSending, db);
 
-  const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages);
-
-  interruptingFunctionCalls.subscribe({
-    error: (err) => {
-      sendError(conversation, err);
-    }
-  })
+  const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages)
+    .pipe(
+      catchError(err => {
+        console.log("Error from before sendSystemMessagesForInterruptions!", err);
+        sendError(conversation, err);
+        return EMPTY;
+      })
+    );
 
   sendSystemMessagesForInterruptions(conversation, interruptingFunctionCalls);
 
