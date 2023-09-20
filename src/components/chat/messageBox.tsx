@@ -1,20 +1,19 @@
-import React, { ReactNode } from 'react';
+import React from 'react';
 import { Box, Button } from '@mui/material';
 import { Message } from '../../chat/conversation';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
-import ForkButton from './forkButton';
 import PruneButton from './pruneButton';
 import EditButton from './editButton';
-import { ErrorMessage } from './conversationModal';
 import { emojiSha } from '../../chat/emojiSha';
+import { MessageDB, isMessageDB } from '../../chat/conversationDb';
 
 type MessageProps = {
-  message: Message | ErrorMessage;
+  message: Message | MessageDB;
   hash?: string;
-  openConversation?: () => void;
-  onPrune?: () => void;
-  onEdit?: () => void;
+  openConversation?: (hash: string) => void;
+  onPrune?: (hash: string) => void;
+  onEdit?: (message: MessageDB) => void;
   openOtherHash?: (hash: string) => void;
 };
 
@@ -22,6 +21,8 @@ const MessageBox: React.FC<MessageProps> = ({ message, hash, openConversation, o
   let alignSelf: 'flex-end' | 'flex-start' | 'center';
   let backgroundColor: string;
   let textColor: string;
+
+  console.log("MessageBox render!", message, hash, openConversation, onPrune, onEdit, openOtherHash)
 
   switch (message.role) {
     case 'user':
@@ -38,11 +39,6 @@ const MessageBox: React.FC<MessageProps> = ({ message, hash, openConversation, o
       alignSelf = 'center';
       backgroundColor = '#000'; // Black background for system messages
       textColor = '#E0E0E0';  // Light gray text color
-      break;
-    case 'error':
-      alignSelf = 'center';
-      backgroundColor = '#111';
-      textColor = '#c00';
       break;
     default:
       alignSelf = 'center';
@@ -72,8 +68,8 @@ const MessageBox: React.FC<MessageProps> = ({ message, hash, openConversation, o
         display: 'flex',
         zIndex: 10,
       }}>
-        {onPrune && <PruneButton onClick={onPrune} />}
-        {onEdit && <EditButton onClick={onEdit} />}
+        {onPrune && hash && <PruneButton onClick={() => onPrune(hash)} />}
+        {onEdit && isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
         <CopyButton contentToCopy={message.content} />
       </div>
       <div className="markdown-content">
@@ -100,7 +96,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, hash, openConversation, o
               overflow: 'hidden', // Hide overflow
               whiteSpace: 'nowrap', // Keep text in a single line
             }}
-            onClick={() => openConversation && openConversation()}
+            onClick={() => openConversation && openConversation(hash)}
           >
 {emojiSha(hash, 5)}
 
@@ -112,4 +108,26 @@ const MessageBox: React.FC<MessageProps> = ({ message, hash, openConversation, o
   );
 };
 
-export default MessageBox;
+function shallowEqual(object1: any, object2: any) {
+  if (object1 === object2) {
+    console.log("comp equal true!")
+    return true;
+  }
+
+  const keys1 = Object.keys(object1);
+  const keys2 = Object.keys(object2);
+
+  if (keys1.length !== keys2.length) {
+    console.log("comp length mismatch!")
+    return false;
+  }
+
+  const everyMatch = keys1.every(key => {
+    console.log("comp everyMatch key", key, object1[key], object2[key], object1[key] === object2[key])
+    return object2.hasOwnProperty(key) && object1[key] === object2[key];
+  });
+  console.log("comp everyMatch", everyMatch, object1, object2)
+  return everyMatch;
+}
+
+export default React.memo(MessageBox, shallowEqual);

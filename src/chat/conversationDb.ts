@@ -1,5 +1,6 @@
 import Dexie from 'dexie';
 import { ParticipantRole } from './participantSubjects';
+import { Message } from './conversation';
 
 export interface MessageDB {
   content: string;
@@ -8,6 +9,10 @@ export interface MessageDB {
   timestamp: number;
   parentHash: string | null;
   embedding: number[];
+}
+
+export function isMessageDB(message: Message | MessageDB): message is MessageDB {
+  return (message as MessageDB).hash !== undefined;
 }
 
 export class ConversationDB extends Dexie {

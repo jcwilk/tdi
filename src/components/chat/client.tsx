@@ -1,10 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import ConversationModal from './conversationModal';
 import LeafMessages, { RunningConversationOption } from './leafMessages';
 import { useConversationsManager } from './useConversationManager';
-import { pluckLast } from '../../chat/rxjsUtilities';
-import { getLastMessage } from '../../chat/conversation';
+import { getLastMessage, observeNewMessages } from '../../chat/conversation';
 
 const db = new ConversationDB();
 
@@ -40,7 +39,9 @@ const Client: React.FC = () => {
 
   useEffect(() => {
     const subscriptions = Array.from(runningConversations.values()).map(conversation =>
-      conversation.outgoingMessageStream.subscribe(() => {
+      observeNewMessages(conversation).subscribe(() => {
+        // TODO: This causes everything to get repainted on every new message, but it should only cause the leafMessages interface to get repainted
+        // instead, we should find a way to shunt all this subscription stuff into the leafMessages component, perhaps by passing runningConversations in?
         setVersion(prevVersion => prevVersion + 1);
       })
     );
