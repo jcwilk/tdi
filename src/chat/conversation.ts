@@ -135,14 +135,26 @@ export function teardownConversation(conversation: Conversation) {
   conversation.newMessagesInput.complete();
 }
 
-export function sendError(conversation: Conversation, error: Error) {
+export function sendError(conversation: Conversation, error: unknown) {
+  let errorMessage = 'An unexpected error occurred';
+
+  if (error instanceof Error) {
+    errorMessage = `Error(${error.name}): ${error.message}`.trim();
+  } else if (typeof error === 'string') {
+    errorMessage = error;
+  } else if (typeof error === 'number') {
+    errorMessage = `Error code: ${error}`;
+  } else if (typeof error === 'object' && error !== null) {
+    errorMessage = JSON.stringify(error);
+  }
+
   conversation.newMessagesInput.next({
     type: 'errorMessage',
     payload: {
-      content: `Error(${error.name}): ${error.message}`.trim(),
+      content: errorMessage,
       role: 'system'
     }
-  })
+  });
 }
 
 export function sendFunctionCall(conversation: Conversation, functionCall: FunctionCall, content: string): void {

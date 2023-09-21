@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Box, TextField, Button, IconButton } from '@mui/material';
 import { sendMessage, typeMessage } from '../../chat/participantSubjects';
-import { Conversation, observeTypingUpdates } from '../../chat/conversation';
+import { Conversation, observeTypingUpdates, sendError } from '../../chat/conversation';
 import { Mic } from '@mui/icons-material';
 import { getTranscription } from '../../openai_api';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
@@ -40,24 +40,28 @@ const MessageEntry: React.FC<MessageEntryProps> = ({ conversation, autoScroll, o
   };
 
   const toggleRecording = async () => {
-    if (isRecording) {
-      setIsRecording(false);
-      setIsTranscribing(true);
-      if (stopRecording) {
-        const transcript = await stopRecording();
-        sendMessage(conversation, "user", transcript);
-        setText('');
-        setStopRecording(null);
-        setIsTranscribing(false);
+    try {
+      if (isRecording) {
+        setIsRecording(false);
+        setIsTranscribing(true);
+        if (stopRecording) {
+          const transcript = await stopRecording();
+          sendMessage(conversation, "user", transcript);
+          setText('');
+          setStopRecording(null);
+          setIsTranscribing(false);
+        }
+      } else if (!isTranscribing) {
+        const { getTranscript } = await getTranscription();
+
+        setStopRecording(() => getTranscript);
+        setIsRecording(true);
       }
-    } else if (!isTranscribing) {
-      const { getTranscript } = await getTranscription();
-
-      setStopRecording(() => async () => {
-        return await getTranscript();
-      });
-
-      setIsRecording(true);
+    } catch (error) {
+      setIsRecording(false);
+      setIsTranscribing(false);
+      setStopRecording(null);
+      sendError(conversation, error);
     }
   };
 
