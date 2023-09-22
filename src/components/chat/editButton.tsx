@@ -10,7 +10,7 @@ const EditButton: React.FC<EditButtonProps> = ({ onClick }) => {
   return (
     <CornerButton
       onClick={onClick}
-      icon={<EditIcon fontSize='small' />}
+      icon={<EditIcon fontSize='inherit' />}
     />
   );
 };

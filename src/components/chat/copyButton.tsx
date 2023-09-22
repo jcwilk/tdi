@@ -23,8 +23,8 @@ const CopyButton: React.FC<CopyButtonProps> = ({ contentToCopy }) => {
       onClick={handleCopyClick}
       icon={
         isCopied
-          ? <CheckCircleOutlineIcon fontSize='small' />
-          : <ContentCopyIcon fontSize='small' />
+          ? <CheckCircleOutlineIcon fontSize='inherit' />
+          : <ContentCopyIcon fontSize='inherit' />
       }
     />
   );

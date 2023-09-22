@@ -157,7 +157,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           flexGrow: 1,
           overflowY: 'auto',
           display: 'flex',
-          padding: '20px',
           flexDirection: 'column',
         }}
       >

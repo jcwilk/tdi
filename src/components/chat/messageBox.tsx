@@ -1,12 +1,16 @@
 import React from 'react';
-import { Box, Button } from '@mui/material';
+import { Box } from '@mui/material';
 import { Message } from '../../chat/conversation';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import PruneButton from './pruneButton';
 import EditButton from './editButton';
-import { emojiSha } from '../../chat/emojiSha';
 import { MessageDB, isMessageDB } from '../../chat/conversationDb';
+import AssistantIcon from '@mui/icons-material/PrecisionManufacturing';
+import UserIcon from '@mui/icons-material/Person';
+import SystemIcon from '@mui/icons-material/Dns';
+import FunctionIcon from '@mui/icons-material/Functions';
+import EmojiShaButton from './emojiShaButton';
 
 type MessageProps = {
   message: Message | MessageDB;
@@ -17,117 +21,92 @@ type MessageProps = {
   openOtherHash?: (hash: string) => void;
 };
 
-const MessageBox: React.FC<MessageProps> = ({ message, hash, openConversation, onPrune, onEdit, openOtherHash }) => {
-  let alignSelf: 'flex-end' | 'flex-start' | 'center';
-  let backgroundColor: string;
-  let textColor: string;
+const MessageBox: React.FC<MessageProps> = (props) => {
+  // Extracting props for better readability
+  const { message, hash, openConversation, onPrune, onEdit, openOtherHash } = props;
 
-  console.log("MessageBox render!", message, hash, openConversation, onPrune, onEdit, openOtherHash)
+  // Define styles
+  let backgroundColor: string;
+  let icon: JSX.Element; // You would define your icons here based on message role
+  let textColor: string;
 
   switch (message.role) {
     case 'user':
-      alignSelf = 'flex-end';
-      backgroundColor = '#1976d2';
+      backgroundColor = '#313c46';
       textColor = '#fff';
+      icon = <UserIcon />; // Replace with the actual icon component
       break;
     case 'assistant':
-      alignSelf = 'flex-start';
-      backgroundColor = '#616161';
+      backgroundColor = '#495968';
       textColor = '#f5f5f5';
+      icon = <AssistantIcon />; // Replace with the actual icon component
       break;
     case 'system':
-      alignSelf = 'center';
-      backgroundColor = '#000'; // Black background for system messages
+      backgroundColor = '#000';
       textColor = '#E0E0E0';  // Light gray text color
+      icon = <SystemIcon />; // Replace with the actual icon component
+      break;
+    case 'function':
+      backgroundColor = '#21282f';
+      textColor = '#e1e1e1';
+      icon = <FunctionIcon />; // Replace with the actual icon component
       break;
     default:
-      alignSelf = 'center';
-      backgroundColor = '#4b4b4b';
-      textColor = '#f5f5f5';
+      throw new Error(`Unknown message role: ${message.role}`);
   }
 
   return (
     <Box
       sx={{
-        position: 'relative',
-        marginBottom: '10px',
-        alignSelf: alignSelf,
-        backgroundColor: backgroundColor,
-        borderRadius: '10px',
-        padding: '0px 20px',
-        maxWidth: '70%',
-        wordWrap: 'break-word',
+        backgroundColor,
         color: textColor,
-        whiteSpace: 'pre-wrap',
+        padding: '10px',
+        position: 'relative',
       }}
     >
-      <div style={{
-        position: 'absolute',
-        right: '-10px',
-        top: '-5px',
-        display: 'flex',
-        zIndex: 10,
-      }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-start',
+        }}
+      >
+        <Box
+          component="span"
+          sx={{
+            marginBlockStart: '1em',
+            marginRight: '10px',
+            // Additional styles for the icon
+          }}
+        >
+          {icon}
+        </Box>
+        <Box
+          component="span"
+          sx={{
+            flex: '1',
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          <MarkdownRenderer content={`\u200B${message.content}`} openOtherHash={openOtherHash ?? (() => {})} />
+        </Box>
+      </Box>
+      <Box
+        sx={{
+          position: 'absolute',
+          right: '10px',
+          bottom: '-1px',
+          zIndex: 10,
+          display: 'flex',
+          gap: '5px',
+        }}
+      >
         {onPrune && hash && <PruneButton onClick={() => onPrune(hash)} />}
         {onEdit && isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
+        {hash && openConversation && <EmojiShaButton hash={hash} openConversation={openConversation} />}
         <CopyButton contentToCopy={message.content} />
-      </div>
-      <div className="markdown-content">
-        <MarkdownRenderer content={`\u200B${message.content}`} openOtherHash={openOtherHash ?? (() => {})} />
-      </div>
-      <div style={{
-        position: 'absolute',
-        right: '10px',
-        bottom: '-5px',
-        zIndex: 10,
-      }}>
-        {hash && // TODO: clean up the styling, fucking mess
-          <Button
-            variant="contained"
-            style={{
-              borderRadius: '18px',
-              backgroundColor: '#424242', // Darker background color for dark mode
-              color: '#E0E0E0', // Lighter text color for dark mode
-              padding: '4px 8px',
-              fontSize: '0.8rem',
-              lineHeight: '1',
-              minHeight: 'initial',
-              maxWidth: '100%', // Allow it to take up to 100% of the container width
-              overflow: 'hidden', // Hide overflow
-              whiteSpace: 'nowrap', // Keep text in a single line
-            }}
-            onClick={() => openConversation && openConversation(hash)}
-          >
-{emojiSha(hash, 5)}
-
-          </Button>
-        }
-
-      </div>
+      </Box>
     </Box>
   );
 };
 
-function shallowEqual(object1: any, object2: any) {
-  if (object1 === object2) {
-    console.log("comp equal true!")
-    return true;
-  }
-
-  const keys1 = Object.keys(object1);
-  const keys2 = Object.keys(object2);
-
-  if (keys1.length !== keys2.length) {
-    console.log("comp length mismatch!")
-    return false;
-  }
-
-  const everyMatch = keys1.every(key => {
-    console.log("comp everyMatch key", key, object1[key], object2[key], object1[key] === object2[key])
-    return object2.hasOwnProperty(key) && object1[key] === object2[key];
-  });
-  console.log("comp everyMatch", everyMatch, object1, object2)
-  return everyMatch;
-}
-
-export default React.memo(MessageBox, shallowEqual);
+export default React.memo(MessageBox);

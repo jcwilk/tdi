@@ -10,7 +10,7 @@ const ForkButton: React.FC<ForkButtonProps> = ({ onClick }) => {
   return (
     <CornerButton
       onClick={onClick}
-      icon={<ForkRightIcon fontSize='small' />}
+      icon={<ForkRightIcon fontSize='inherit' />}
     />
   );
 };

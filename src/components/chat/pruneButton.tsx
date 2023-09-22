@@ -10,7 +10,7 @@ const PruneButton: React.FC<PruneButtonProps> = ({ onClick }) => {
   return (
     <CornerButton
       onClick={onClick}
-      icon={<BackspaceIcon fontSize='small' />}
+      icon={<BackspaceIcon fontSize='inherit' />}
     />
   );
 };

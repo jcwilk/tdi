@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Message } from '../../chat/conversation';
-import { firstValueFrom, of } from 'rxjs';
 import { processMessagesWithHashing } from '../../chat/messagePersistence';
-import { Box, Button, List, ListItem, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
+import { Box, Button, List, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { emojiSha } from '../../chat/emojiSha';
 
