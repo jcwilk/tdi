@@ -5,8 +5,6 @@ import LeafMessages, { RunningConversationOption } from './leafMessages';
 import { useConversationsManager } from './useConversationManager';
 import { getLastMessage, observeNewMessages } from '../../chat/conversation';
 
-const db = new ConversationDB();
-
 // This is the main component for the chat client
 // A problem it suffers from is that the navigation is poorly coupled to the conversation manager hook
 // To amerliorate this, we'll make sure that each item of state has exactly one source of truth
@@ -25,6 +23,8 @@ const db = new ConversationDB();
 // - activeConversation: Conversation | null - the conversation that is currently active, or null if there is no active conversation
 
 const Client: React.FC = () => {
+  const db = useMemo(() => new ConversationDB(), []);
+
   const {
     activeConversation,
     runningConversations,
@@ -32,7 +32,7 @@ const Client: React.FC = () => {
     openConversation,
     changeModel,
     changeFunctions
-  } = useConversationsManager();
+  } = useConversationsManager(db);
 
   const [version, setVersion] = useState(0);
   const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);

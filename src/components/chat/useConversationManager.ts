@@ -5,16 +5,14 @@ import { Conversation, createConversation, getLastMessage, observeNewMessages, t
 import { addAssistant } from '../../chat/aiAgent';
 import { useLocation, useNavigate, NavigateFunction } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
-import { Router, RouterState } from '@remix-run/router';
+import { RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 
 type NavigateState = {
   activeConversation: string | null; // uuid
 };
 
-const db = new ConversationDB();
-
-function buildParticipatedConversation(messages: MessageDB[], model: string = "gpt-3.5-turbo", functions: string[] = []): Conversation {
+function buildParticipatedConversation(db: ConversationDB, messages: MessageDB[], model: string = "gpt-3.5-turbo", functions: string[] = []): Conversation {
   const functionOptions = getAllFunctionOptions().filter(f => functions.includes(f.name));
 
   return addAssistant(createConversation(messages, model, functionOptions), db);
@@ -87,7 +85,56 @@ function navConversationByUuidOrSha(navigate: NavigateFunction, uuid: string | n
   navigate(`?${params.toString()}`, { replace, state: { activeConversation: uuid } as NavigateState });
 }
 
-export function useConversationsManager() {
+// NB: Hoisted this out of the useEffect and ditched the isMounted check for simplicity
+async function handleNavEvent(db: ConversationDB, event: RouterState, currentRunningConversations: Map<string, Conversation>): Promise<ConversationAction | undefined> {
+  const { historyAction, location: eventLocation } = event;
+  const { search: eventSearch, state } = eventLocation;
+  const eventConversationUuid = state?.activeConversation ?? null;
+  const eventParams = new URLSearchParams(eventSearch);
+  const eventLeafNodeHash = eventParams.get('ln') ?? null;
+
+  if (state === null) {
+    // from my testing and understanding, this can never be detected because we set up the listener after we get to the page
+    // so if we detect it, something about my understanding is wrong so might be worth investigating
+    // Also, we immediately replace their entry url with a stateful one, so this should never happen even from back navigating
+    console.error("Unexpected new page navigation detection!", event)
+    return;
+  }
+
+  if (historyAction === "REPLACE") {
+    // no-op, this was just done to align the URL
+    return;
+  }
+
+  if (eventConversationUuid) {
+    const runningConversation = currentRunningConversations.get(eventConversationUuid);
+    if (runningConversation) {
+      return { type: 'SET_ACTIVE', payload: runningConversation };
+    }
+  }
+
+  if (eventLeafNodeHash) {
+    const message = await db.getMessageByHash(eventLeafNodeHash);
+    // NB: Everything happening here is read-only, so we don't need to worry about the component unmounting
+    //if (!isMounted) return;
+
+    if (message) {
+      const conversationFromDb = await db.getConversationFromLeaf(message.hash);
+      // NB: Everything happening here is read-only, so we don't need to worry about the component unmounting
+      //if (!isMounted) return;
+
+      const functionNames = JSON.parse(eventParams.get('functions') ?? '[]');
+      const model = eventParams.get('model') ?? 'gpt-3.5-turbo';
+
+      const conversation = buildParticipatedConversation(db, conversationFromDb, model, functionNames);
+      return { type: 'SET_ACTIVE', payload: conversation };
+    }
+  }
+
+  return { type: 'SET_INACTIVE' };
+}
+
+export function useConversationsManager(db: ConversationDB) {
   const navigate = useNavigate();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -105,105 +152,41 @@ export function useConversationsManager() {
   console.log("runningConversations", runningConversations)
 
   const [correctedHistory, setCorrectedHistory] = useState<boolean>(false);
-  const navStream = useMemo(() => new Subject<RouterState>(), []);
   const navParams = useMemo(() => pickSearchParams(['ln', 'model', 'functions'], params), [location.search]);
 
   useEffect(() => {
     let isMounted = true
 
-    const handleNavEvent = async (event: RouterState, currentRunningConversations: Map<string, Conversation>): Promise<ConversationAction | undefined> => {
-      const { historyAction, location: eventLocation } = event;
-      const { search: eventSearch, state } = eventLocation;
-      const eventConversationUuid = state?.activeConversation ?? null;
-      const eventParams = new URLSearchParams(eventSearch);
-      const eventLeafNodeHash = eventParams.get('ln') ?? null;
+    const routerStream: Subject<RouterState> = (window as any).$app.routerStream;
 
-      if (state === null) {
-        // from my testing and understanding, this can never be detected because we set up the listener after we get to the page
-        // so if we detect it, something about my understanding is wrong so might be worth investigating
-        // Also, we immediately replace their entry url with a stateful one, so this should never happen even from back navigating
-        console.error("Unexpected new page navigation detection!", event)
-        return;
-      }
-
-      if (historyAction === "REPLACE") {
-        // no-op, this was just done to align the URL
-        return;
-      }
-
-      if (eventConversationUuid) {
-        const runningConversation = currentRunningConversations.get(eventConversationUuid);
-        if (runningConversation) {
-          return { type: 'SET_ACTIVE', payload: runningConversation };
-        }
-      }
-
-      if (eventLeafNodeHash) {
-        const message = await db.getMessageByHash(eventLeafNodeHash);
-        if (!isMounted) return;
-
-        if (message) {
-          const conversationFromDb = await db.getConversationFromLeaf(message.hash);
-          if (!isMounted) return;
-
-          const functionNames = JSON.parse(eventParams.get('functions') ?? '[]');
-          const model = eventParams.get('model') ?? 'gpt-3.5-turbo';
-
-          const conversation = buildParticipatedConversation(conversationFromDb, model, functionNames);
-          return { type: 'SET_ACTIVE', payload: conversation };
-        }
-      }
-
-      return { type: 'SET_INACTIVE' };
-    }
-
-    // Step 1: Mapping to Actions
-    const actionsObservable = navStream.pipe(
+    const subscription = routerStream.pipe(
+      // Step 1: Mapping and filtering nav events to actions
       concatMap(async event => {
-        return await handleNavEvent(event, runningConversationsRef.current);
+        return await handleNavEvent(db, event, runningConversationsRef.current);
       }),
-      filter(action => action !== undefined)
-    );
+      filter(action => action !== undefined),
 
-    // Step 2: State Reduction with Scan
-    const stateObservable = actionsObservable.pipe(
+      // Step 2: State Reduction with Scan
       scan((currentState, action) => {
         return conversationReducer(currentState, action as ConversationAction);
-      }, { runningConversations, activeConversation }) // so that we respect the initial state of the useState hooks
-    );
+      }, { runningConversations, activeConversation }), // so that we respect the initial state of the useState hooks
 
-    // Step 3: Subscription and Cleanup
-    const subscription = stateObservable.subscribe(finalState => {
-      if (!isMounted) return;
+      // Step 3: Side effects
+      tap(finalState => {
+        if (!isMounted) return;
 
-      setRunningConversations(finalState.runningConversations);
-      runningConversationsRef.current = finalState.runningConversations;
-      setActiveConversation(finalState.activeConversation);
-    });
+        setRunningConversations(finalState.runningConversations);
+        runningConversationsRef.current = finalState.runningConversations;
+        setActiveConversation(finalState.activeConversation);
+      })
+    ).subscribe();
 
     return () => {
       subscription.unsubscribe();
 
       isMounted = false;
     }
-  }, [navStream])
-
-  useEffect(() => {
-    const router: Router = (window as any).$app.router;
-    let isMounted = true
-
-    router.subscribe((event) => {
-      if(!isMounted) return;
-
-      console.log("new nav event!", event);
-
-      navStream.next(event);
-    })
-
-    return () => {
-      isMounted = false;
-    }
-  }, [navStream])
+  }, [db])
 
   useEffect(() => {
     return () => {

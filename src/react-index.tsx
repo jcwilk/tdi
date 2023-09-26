@@ -2,6 +2,8 @@ import React from 'react';
 import { createRoot } from 'react-dom/client'
 import TextFieldsForm from './components/text_fields_form';
 import { createBrowserRouter, RouterProvider } from "react-router-dom"
+import { RouterState } from '@remix-run/router';
+import { Subject } from 'rxjs';
 
 const App = () => {
   return (
@@ -14,7 +16,11 @@ const router = createBrowserRouter([
   { path: "*", element: <App /> }
 ]);
 
-(window as any).$app = { router }; // hack to make the router trivially available for listening to events
+const routerStream = new Subject<RouterState>();
+
+router.subscribe(routerState => routerStream.next(routerState));
+
+(window as any).$app = { routerStream }; // hack to make the router trivially available for listening to events
 
 const init = () => {
   const container = document.getElementById('react-root');
