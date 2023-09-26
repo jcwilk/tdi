@@ -73,7 +73,6 @@ const MessageBox: React.FC<MessageProps> = (props) => {
         <Box
           component="span"
           sx={{
-            marginBlockStart: '1em',
             marginRight: '10px',
             // Additional styles for the icon
           }}
@@ -87,7 +86,7 @@ const MessageBox: React.FC<MessageProps> = (props) => {
             whiteSpace: 'pre-wrap',
           }}
         >
-          <MarkdownRenderer content={`\u200B${message.content}`} openOtherHash={openOtherHash ?? (() => {})} />
+          <MarkdownRenderer content={message.content} openOtherHash={openOtherHash ?? (() => {})} />
         </Box>
       </Box>
       <Box

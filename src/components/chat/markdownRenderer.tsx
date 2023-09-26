@@ -49,28 +49,34 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
     <ReactMarkdown
       children={content}
       components={{
+        p({ node, children, ...props }) {
+          console.log("p", node, children, props);
+          children = children.map((child) => {
+            if (typeof(child) === "string") {
+              return parseContent(child, openOtherHash)
+            }
+            return child;
+          });
+          return <p {...props} style={{ marginBlockStart: '0', marginBlockEnd: '0' }} children={children} />;
+        },
         code({ node, inline, className, children, ...props }) {
           const match = /language-(\w+)/.exec(className || '');
 
           if (inline) {
             return (
               <code {...props} className={className}>
-                {children}
+                {parseContent(String(children), openOtherHash)}
               </code>
             )
           }
 
           return match ? (
-            <div style={{ position: 'relative' }}>
-              <CopyButton contentToCopy={String(children).replace(/\n$/, '')} />
-              <SyntaxHighlighter
-                {...props}
-                children={String(children).replace(/\n$/, '')}
-                language={match[1]}
-                PreTag="div"
-                style={dracula}
-              />
-            </div>
+            <SyntaxHighlighter
+              {...props}
+              children={String(children).trim()}
+              language={match[1]}
+              style={dracula}
+            />
           ) : (
             <code {...props} className={className}>
               {parseContent(String(children), openOtherHash)}
