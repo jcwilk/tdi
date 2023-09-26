@@ -18,7 +18,7 @@ function splitString(input: string): string[] {
 }
 
 const parseContent = (content: string, openOtherHash: (hash: string) => void) => {
-  const parts = splitString(content);
+  const parts = splitString(content.trim());
 
   return parts.reduce<(string | JSX.Element)[]>((acc, part, index) => {
     if (shaRegex.test(part)) {
@@ -57,7 +57,7 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
           );
         },
         p({ node, children, ...props }) {
-          console.log("p", node, children, props);
+          //console.log("p", node, children, props);
           children = children.map((child) => {
             if (typeof(child) === "string") {
               return parseContent(child, openOtherHash)
@@ -65,6 +65,32 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
             return child;
           });
           return <p {...props} style={{ marginBlockStart: '0', marginBlockEnd: '0' }} children={children} />;
+        },
+        li({ node, children, ...props }) {
+          //console.log("li", node, children, props);
+          children = children.map((child) => {
+            if (!child || typeof(child) === "number" || typeof(child) === "boolean") {
+              return child;
+            }
+
+            if (typeof(child) === "string") {
+              return parseContent(child, openOtherHash)
+            }
+
+            if (React.isValidElement(child)) {
+              const props = child.props;
+
+              if (props && props.node?.tagName === "p") {
+                return child.props.children
+              }
+            }
+            return child;
+          });
+          return <li {...props} children={children} />;
+        },
+        ol({ node, children, ...props }) {
+          //console.log("ol", node, children, props);
+          return <ol {...props} style={{ marginBlockStart: '0', marginBlockEnd: '0' }} children={children} />;
         },
         code({ node, inline, className, children, ...props }) {
           const match = /language-(\w+)/.exec(className || '');
