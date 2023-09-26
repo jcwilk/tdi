@@ -49,6 +49,13 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
     <ReactMarkdown
       children={content}
       components={{
+        pre({ node, children, ...props }) {
+          return (
+            <pre {...props} style={{ whiteSpace: 'pre-wrap' }}>
+              {children}
+            </pre>
+          );
+        },
         p({ node, children, ...props }) {
           console.log("p", node, children, props);
           children = children.map((child) => {
@@ -64,7 +71,7 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
 
           if (inline) {
             return (
-              <code {...props} className={className}>
+              <code {...props} className={className} style={{ whiteSpace: 'pre-wrap' }}>
                 {parseContent(String(children), openOtherHash)}
               </code>
             )
@@ -76,9 +83,10 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
               children={String(children).trim()}
               language={match[1]}
               style={dracula}
+              wrapLongLines={true}
             />
           ) : (
-            <code {...props} className={className}>
+            <code {...props} className={className} style={{ whiteSpace: 'pre-wrap' }}>
               {parseContent(String(children), openOtherHash)}
             </code>
           );

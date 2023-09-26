@@ -61,6 +61,7 @@ const MessageBox: React.FC<MessageProps> = (props) => {
         backgroundColor,
         color: textColor,
         padding: '10px',
+        paddingBottom: '20px',
         position: 'relative',
       }}
     >
