@@ -1,6 +1,7 @@
 import Dexie from 'dexie';
 import { ParticipantRole } from './participantSubjects';
 import { Message } from './conversation';
+import { Observable } from 'rxjs';
 
 export interface MessageDB {
   content: string;
@@ -82,18 +83,34 @@ export class ConversationDB extends Dexie {
     return conversation.reverse();
   }
 
-  async getLeafMessages(): Promise<MessageDB[]> {
-    const messagesArray = await this.messages.toArray();
+  getLeafMessages(): Observable<MessageDB> {
+    return new Observable(subscriber => {
 
-    // Get all unique parentHash values (excluding null and undefined)
-    const parentHashes = [...new Set(
-      messagesArray
-        .map(message => message.parentHash)
-        .filter(hash => hash !== null && typeof hash === 'string') as string[]
-    )];
+      const dfs = async (message: MessageDB) => {
+        // Find child messages of the current message
+        const children = await this.messages.where('parentHash').equals(message.hash).reverse().sortBy('timestamp');
 
-    // Retrieve messages where their hash is not in the list of parent hashes
-    return this.messages.where('hash').noneOf(parentHashes).toArray();
+        if (children.length === 0) {
+          // If the current message has no children, broadcast it
+          subscriber.next(message);
+        } else {
+          // Otherwise, continue the DFS with the child messages
+          for (const child of children) {
+            await dfs(child);
+          }
+        }
+      };
+
+      // Start the DFS from the root messages
+      this.messages.filter(message => message.parentHash == null).reverse().sortBy('timestamp').then(async rootMessages => {
+        for (const root of rootMessages) {
+          await dfs(root);
+        }
+        subscriber.complete();
+      }).catch(err => {
+        subscriber.error(err);
+      });
+    });
   }
 
   async searchEmbedding(embedding: number[], limit: number): Promise<string[]> {

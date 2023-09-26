@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ConversationDB, MessageDB } from '../../chat/conversationDb';
+import React, { useMemo } from 'react';
+import { ConversationDB } from '../../chat/conversationDb';
 import ConversationModal from './conversationModal';
-import LeafMessages, { RunningConversationOption } from './leafMessages';
+import LeafMessages from './leafMessages';
 import { useConversationsManager } from './useConversationManager';
-import { getLastMessage, observeNewMessages } from '../../chat/conversation';
 
 // This is the main component for the chat client
 // A problem it suffers from is that the navigation is poorly coupled to the conversation manager hook
@@ -34,52 +33,10 @@ const Client: React.FC = () => {
     changeFunctions
   } = useConversationsManager(db);
 
-  const [version, setVersion] = useState(0);
-  const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
-
-  useEffect(() => {
-    const subscriptions = Array.from(runningConversations.values()).map(conversation =>
-      observeNewMessages(conversation).subscribe(() => {
-        // TODO: This causes everything to get repainted on every new message, but it should only cause the leafMessages interface to get repainted
-        // instead, we should find a way to shunt all this subscription stuff into the leafMessages component, perhaps by passing runningConversations in?
-        setVersion(prevVersion => prevVersion + 1);
-      })
-    );
-
-    return () => {
-      subscriptions.forEach(sub => sub.unsubscribe());
-    };
-  }, [runningConversations]);
-
-  // Using useMemo to only recompute runningLeafMessages when necessary
-  const runningLeafMessages = useMemo(() => {
-    const messages: RunningConversationOption[] = [];
-    for (const [uuid, conversation] of runningConversations) {
-      const lastOne = getLastMessage(conversation);
-
-      if(lastOne) messages.push({uuid, message: lastOne});
-    };
-    return messages;
-  }, [runningConversations, version]);
-
-  useEffect(() => {
-    if (activeConversation) return;
-
-    let isMounted = true;
-
-    db.getLeafMessages().then(messages => {
-      if (!isMounted) return;
-
-      setLeafMessages(messages);
-    });
-
-    return () => {
-      isMounted = false;
-    }
-  }, [activeConversation, version, runningConversations]);
+  const runningConversationsArray = useMemo(() => Array.from(runningConversations.values()), [runningConversations]);
 
   if (!activeConversation) {
-    return <LeafMessages db={db} runningLeafMessages={runningLeafMessages} leafMessages={leafMessages} onSelect={openConversation} />;
+    return <LeafMessages db={db} runningConversations={runningConversationsArray} onSelect={openConversation} />;
   }
 
   return (

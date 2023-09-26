@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
-import { Message } from '../../chat/conversation';
+import { Conversation, Message, getLastMessage, observeNewMessages } from '../../chat/conversation';
 import { processMessagesWithHashing } from '../../chat/messagePersistence';
 import { Box, Button, List, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { emojiSha } from '../../chat/emojiSha';
+import { debounceTime, scan, tap } from 'rxjs';
 
 // Define the striped styling
 const StripedListItem = styled(ListItemButton)`
@@ -28,11 +29,70 @@ You are an AI conversationalist. Your job is to converse with the user. Your pro
   `.trim(),
 }
 
-const LeafMessages: React.FC<{ db: ConversationDB, runningLeafMessages: RunningConversationOption[], leafMessages: MessageDB[], onSelect: (leafMessage: string, uuid?: string) => void }> = ({ db, runningLeafMessages, leafMessages, onSelect }) => {
-  const handleNewConversation = async () => {
+function insertSortedByTimestamp(messages: MessageDB[], message: MessageDB): MessageDB[] {
+  // Find the index where the message should be inserted
+  const index = messages.findIndex(msg => msg.timestamp < message.timestamp);
+
+  if (index === -1) {
+    // If no such index is found, the message is the latest and is added to the end of the array
+    return [...messages, message];
+  } else {
+    // Otherwise, insert the message at the correct index to maintain the sorted order
+    return [...messages.slice(0, index), message, ...messages.slice(index)];
+  }
+}
+
+const LeafMessages: React.FC<{ db: ConversationDB, runningConversations: Conversation[], onSelect: (leafMessage: string, uuid?: string) => void }> = ({ db, runningConversations, onSelect }) => {
+  const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const subscriptions = runningConversations.map(conversation =>
+      observeNewMessages(conversation).subscribe(() => {
+        // TODO: This causes everything to get repainted on every new message, but it should only cause the leafMessages interface to get repainted
+        // instead, we should find a way to shunt all this subscription stuff into the leafMessages component, perhaps by passing runningConversations in?
+        setVersion(prevVersion => prevVersion + 1);
+      })
+    );
+
+    return () => {
+      subscriptions.forEach(sub => sub.unsubscribe());
+    };
+  }, [runningConversations]);
+
+  const runningLeafMessages = useMemo(() => {
+    const messages: RunningConversationOption[] = [];
+    runningConversations.forEach(conversation => {
+      const lastOne = getLastMessage(conversation);
+
+      if(lastOne) messages.push({uuid: conversation.id, message: lastOne});
+    });
+    return messages;
+  }, [runningConversations, version]);
+
+  useEffect(() => {
+    const subscription = db.getLeafMessages()
+    .pipe(
+      // Aggregate messages into an ever-growing array
+      scan((acc, message) => insertSortedByTimestamp(acc, message), [] as MessageDB[]),
+      // Debounce the aggregated message array emission
+      debounceTime(10), // Adjust the debounce time as needed
+      tap(aggregatedMessages => {
+        console.log("aggregating", aggregatedMessages.length)
+        setLeafMessages(aggregatedMessages);
+      })
+    ).subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [version, runningConversations]);
+
+
+  const handleNewConversation = useCallback(async () => {
     const firstMessage = await processMessagesWithHashing(mainSystemMessage);
     onSelect(firstMessage.hash);
-  }
+  }, [onSelect]);
 
   return (
     <Box
