@@ -19,6 +19,8 @@ export type GPTSentMessage = {
   stopReason: "stop" | "length"
 }
 
+export type SupportedModels = "gpt-3.5-turbo" | "gpt-4" | "gpt-3.5-turbo-0613" | "gpt-4-0613";
+
 export function isGPTFunctionCall(message: GPTMessage): message is GPTFunctionCall {
   return "functionCall" in message;
 }
@@ -34,7 +36,7 @@ export function isGPTSentMessage(message: GPTMessage): message is GPTSentMessage
 export type GPTMessage = GPTTextUpdate | GPTFunctionCall | GPTSentMessage;
 
 // Adjust the model based on the functions array length
-function adjustModel(model: string, functions: FunctionOption[]): string {
+function adjustModel(model: SupportedModels, functions: FunctionOption[]): SupportedModels {
   if (functions.length > 0) {
     if (model === "gpt-4") return "gpt-4-0613";
     if (model === "gpt-3.5-turbo") return "gpt-3.5-turbo-0613";
@@ -45,7 +47,7 @@ function adjustModel(model: string, functions: FunctionOption[]): string {
 export function chatCompletionMetaStream(
   messages: ChatMessage[],
   temperature: number,
-  model: string = "gpt-4",
+  model: SupportedModels = "gpt-4",
   maxTokens: number,
   functions: FunctionOption[] = []
 ): Observable<GPTMessage> {

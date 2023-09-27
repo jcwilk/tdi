@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { Subject, concatMap, debounceTime, filter, scan, tap } from 'rxjs';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
-import { Conversation, createConversation, getLastMessage, observeNewMessages, teardownConversation } from '../../chat/conversation';
+import { Conversation, ConversationMode, createConversation, getLastMessage, isConversationMode, observeNewMessages, teardownConversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/aiAgent';
 import { useLocation, useNavigate, NavigateFunction } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
@@ -12,7 +12,7 @@ type NavigateState = {
   activeConversation: string | null; // uuid
 };
 
-function buildParticipatedConversation(db: ConversationDB, messages: MessageDB[], model: string = "gpt-3.5-turbo", functions: string[] = []): Conversation {
+function buildParticipatedConversation(db: ConversationDB, messages: MessageDB[], model: ConversationMode = "gpt-3.5-turbo", functions: string[] = []): Conversation {
   const functionOptions = getAllFunctionOptions().filter(f => functions.includes(f.name));
 
   return addAssistant(createConversation(messages, model, functionOptions), db);
@@ -124,7 +124,8 @@ async function handleNavEvent(db: ConversationDB, event: RouterState, currentRun
       //if (!isMounted) return;
 
       const functionNames = JSON.parse(eventParams.get('functions') ?? '[]');
-      const model = eventParams.get('model') ?? 'gpt-3.5-turbo';
+      const rawModel: string = eventParams.get('model') ?? "";
+      const model: ConversationMode = isConversationMode(rawModel) ? rawModel : 'gpt-3.5-turbo';
 
       const conversation = buildParticipatedConversation(db, conversationFromDb, model, functionNames);
       return { type: 'SET_ACTIVE', payload: conversation };

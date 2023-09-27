@@ -1,7 +1,7 @@
 import { EMPTY, Observable, Subject, UnaryFunction, catchError, concatMap, distinctUntilChanged, filter, from, map, merge, share, switchMap, tap, throwError } from "rxjs";
 import { Conversation, Message, TypingUpdate, sendError, sendSystemMessage } from "./conversation";
 import { sendMessage, typeMessage } from "./participantSubjects";
-import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTSentMessage } from "./chatStreams";
+import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTSentMessage, SupportedModels } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
 import { callFunction } from "./functionCalling";
 import { ConversationDB } from "./conversationDb";
@@ -61,6 +61,8 @@ export function addAssistant(
   conversation: Conversation,
   db: ConversationDB
 ): Conversation {
+  if (conversation.model === "paused") return conversation;
+
   const messagesAndTyping = conversation.outgoingMessageStream.pipe(
     map(({messages, typingStatus}) => [messages, {role: "assistant", content: typingStatus.get("assistant") ?? ""}] as [Message[], TypingUpdate]),
     distinctUntilChanged(([messagesA, _typingA], [messagesB, _typingB]) => messagesA === messagesB)
@@ -124,8 +126,8 @@ function filterByIsUninterruptedUserMessage(messagesAndTyping: Observable<[Messa
 
 function switchedOutputStreamsFromRespondableMessages(
   newRespondableMessages: Observable<Message[]>,
-  model: string,
-  functions: FunctionOption[]
+  model?: SupportedModels,
+  functions?: FunctionOption[]
 ) {
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),

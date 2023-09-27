@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Box, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material';
-import { Conversation, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates } from '../../chat/conversation';
+import { Conversation, ConversationMode, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
 import { MessageDB } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
@@ -14,6 +14,7 @@ import FunctionsIcon from '@mui/icons-material/Functions';
 import { FunctionManagement } from './functionManagement';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 import MessageEntry from './messageEntry';
+import PauseIcon from '@mui/icons-material/Pause';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -90,7 +91,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
     onOpenNewConversation(newLeafMessage.hash);
   }
 
-  const handleModelChange = useCallback((event: React.MouseEvent<HTMLElement>, newModel: string | null) => {
+  const handleModelChange = useCallback((event: React.MouseEvent<HTMLElement>, newModel: ConversationMode | null) => {
     if (newModel === null) return;
 
     onNewModel(newModel);
@@ -137,6 +138,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             onChange={handleModelChange} // Assuming you have handleModelChange method
             aria-label="Platform"
           >
+            <ToggleButton value="paused"><PauseIcon /></ToggleButton>
             <ToggleButton value="gpt-3.5-turbo"><DirectionsRunIcon /></ToggleButton>
             <ToggleButton value="gpt-4"><DirectionsWalkIcon /></ToggleButton>
           </ToggleButtonGroup>

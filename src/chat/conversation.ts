@@ -5,6 +5,7 @@ import { MessageDB } from './conversationDb';
 import { processMessagesWithHashing } from './messagePersistence';
 import { FunctionCall, FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
+import { SupportedModels } from './chatStreams';
 
 export type Message = {
   role: ParticipantRole;
@@ -51,11 +52,19 @@ export type ConversationState = {
   typingStatus: Map<TyperRole, string>;
 };
 
+export type ConversationModel = SupportedModels & ("gpt-3.5-turbo" | "gpt-4")
+
+export type ConversationMode = ConversationModel | "paused";
+
+export function isConversationMode(mode: string): mode is ConversationModel {
+  return ["gpt-3.5-turbo", "gpt-4", "gpt-3.5-turbo-0613", "gpt-4-0613", "paused"].includes(mode);
+}
+
 export type Conversation = {
   newMessagesInput: Subject<ConversationEvent>;
   outgoingMessageStream: BehaviorSubject<ConversationState>;
   functions: FunctionOption[];
-  model: string;
+  model: ConversationMode;
   id: string;
 };
 
@@ -64,7 +73,7 @@ interface ScanState {
   event: TypingUpdateEvent | ProcessedMessageEvent | null;
 }
 
-export function createConversation(loadedMessages: MessageDB[], model: string = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Conversation {
+export function createConversation(loadedMessages: MessageDB[], model: ConversationMode = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Conversation {
   const conversation: Conversation = {
     newMessagesInput: new Subject<ConversationEvent>(),
     outgoingMessageStream: new BehaviorSubject({ messages: loadedMessages, typingStatus: new Map() }),
