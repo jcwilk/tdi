@@ -7,6 +7,7 @@ import { useLocation, useNavigate, NavigateFunction } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
 import { RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
+import { v4 as uuidv4 } from 'uuid';
 
 type NavigateState = {
   activeConversation: string | null; // uuid
@@ -34,29 +35,32 @@ function pickSearchParams(keys: string[], searchParams: URLSearchParams): URLSea
 }
 
 type ConversationAction =
-  | { type: 'SET_ACTIVE'; payload: Conversation } // uuid
+  | { type: 'SET_ACTIVE'; payload: RunningConversation }
+  | { type: 'ADD_ACTIVE'; payload: Conversation }
   | { type: 'SET_INACTIVE' }
   ;
 
 type ConversationState = {
-  runningConversations: Map<string, Conversation>,
-  activeConversation: Conversation | null
+  runningConversationMap: Map<string, RunningConversation>,
+  activeRunningConversation: RunningConversation | null
 };
+
+export type RunningConversation = {
+  conversation: Conversation,
+  id: string
+}
 
 // TODO: remove unused actions after we're done sorting out model/function changes
 function conversationReducer(state: ConversationState, action: ConversationAction): ConversationState {
   console.log("dispatch!", action, state)
   switch (action.type) {
     case 'SET_ACTIVE':
-      const tentativeConversation = state.runningConversations.get(action.payload.id) ?? null;
-      if (tentativeConversation) {
-        return {...state, activeConversation: tentativeConversation};
-      }
-      else {
-        return {...state, activeConversation: action.payload, runningConversations: new Map(state.runningConversations).set(action.payload.id, action.payload)};
-      }
+      return {...state, activeRunningConversation: action.payload, runningConversationMap: new Map(state.runningConversationMap).set(action.payload.id, action.payload)};
+    case 'ADD_ACTIVE':
+      const newRunningConversation = {conversation: action.payload, id: uuidv4()};
+      return {...state, activeRunningConversation: newRunningConversation, runningConversationMap: new Map(state.runningConversationMap).set(newRunningConversation.id, newRunningConversation)};
     case 'SET_INACTIVE':
-      return {...state, activeConversation: null};
+      return {...state, activeRunningConversation: null};
     default:
       throw new Error(`Unknown action: ${JSON.stringify(action)}`);
   }
@@ -66,19 +70,15 @@ function navRoot(navigate: NavigateFunction, replace: boolean = false) {
   navigate('?', { replace: replace, state: {} as NavigateState });
 }
 
-function navConversation(navigate: NavigateFunction, conversation: Conversation, replace: boolean = false) {
-  const lastMessage = getLastMessage(conversation);
-  if (!lastMessage) {
-    console.error("Empty conversation!", conversation)
-    return
-  }
-
+// Something feels off about expecting the caller to pass in the message, but it also doesn't feel quite right to have this function
+// independently pluck the most recent message out of the BehaviorSubject.
+function navConversation(navigate: NavigateFunction, runningConversation: RunningConversation, message: MessageDB, replace: boolean = false) {
   const params = new URLSearchParams();
-  params.append("ln", lastMessage.hash);
-  params.append("model", conversation.model);
-  params.append("functions", JSON.stringify(conversation.functions.map(f => f.name)));
+  params.append("ln", message.hash);
+  params.append("model", runningConversation.conversation.model);
+  params.append("functions", JSON.stringify(runningConversation.conversation.functions.map(f => f.name)));
 
-  navConversationByUuidOrSha(navigate, conversation.id, params, replace);
+  navConversationByUuidOrSha(navigate, runningConversation.id, params, replace);
 }
 
 function navConversationByUuidOrSha(navigate: NavigateFunction, uuid: string | null, params: URLSearchParams, replace: boolean = false) {
@@ -86,7 +86,7 @@ function navConversationByUuidOrSha(navigate: NavigateFunction, uuid: string | n
 }
 
 // NB: Hoisted this out of the useEffect and ditched the isMounted check for simplicity
-async function handleNavEvent(db: ConversationDB, event: RouterState, currentRunningConversations: Map<string, Conversation>): Promise<ConversationAction | undefined> {
+async function handleNavEvent(db: ConversationDB, event: RouterState, currentRunningConversations: Map<string, RunningConversation>): Promise<ConversationAction | undefined> {
   const { historyAction, location: eventLocation } = event;
   const { search: eventSearch, state } = eventLocation;
   const eventConversationUuid = state?.activeConversation ?? null;
@@ -128,7 +128,7 @@ async function handleNavEvent(db: ConversationDB, event: RouterState, currentRun
       const model: ConversationMode = isConversationMode(rawModel) ? rawModel : 'gpt-3.5-turbo';
 
       const conversation = buildParticipatedConversation(db, conversationFromDb, model, functionNames);
-      return { type: 'SET_ACTIVE', payload: conversation };
+      return { type: 'ADD_ACTIVE', payload: conversation };
     }
   }
 
@@ -141,16 +141,20 @@ export function useConversationsManager(db: ConversationDB) {
   const params = new URLSearchParams(location.search);
 
   const paramLeafHash = params.get('ln');
-  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
+  const [activeRunningConversation, setActiveRunningConversation] = useState<RunningConversation | null>(null);
 
-  const [runningConversations, setRunningConversations] = useState<Map<string, Conversation>>(new Map<string, Conversation>());
+  const [runningConversationMap, setRunningConversationMap] = useState<Map<string, RunningConversation>>(new Map<string, RunningConversation>());
+
+  const runningConversations = useMemo(() => {
+    return Array.from(runningConversationMap.values());
+  }, [runningConversationMap]);
 
   // this is just for the cleanup function so it can tear them all down
-  const runningConversationsRef = useRef(runningConversations);
+  const runningConversationsRef = useRef(runningConversationMap);
 
   console.log("paramLeafHash", paramLeafHash)
-  console.log("activeConversation", activeConversation)
-  console.log("runningConversations", runningConversations)
+  console.log("activeRunningConversation", activeRunningConversation)
+  console.log("runningConversationMap", runningConversationMap)
 
   const [correctedHistory, setCorrectedHistory] = useState<boolean>(false);
   const navParams = useMemo(() => pickSearchParams(['ln', 'model', 'functions'], params), [location.search]);
@@ -170,15 +174,15 @@ export function useConversationsManager(db: ConversationDB) {
       // Step 2: State Reduction with Scan
       scan((currentState, action) => {
         return conversationReducer(currentState, action as ConversationAction);
-      }, { runningConversations, activeConversation }), // so that we respect the initial state of the useState hooks
+      }, { runningConversationMap, activeRunningConversation }), // so that we respect the initial state of the useState hooks
 
       // Step 3: Side effects
       tap(finalState => {
         if (!isMounted) return;
 
-        setRunningConversations(finalState.runningConversations);
-        runningConversationsRef.current = finalState.runningConversations;
-        setActiveConversation(finalState.activeConversation);
+        setRunningConversationMap(finalState.runningConversationMap);
+        runningConversationsRef.current = finalState.runningConversationMap;
+        setActiveRunningConversation(finalState.activeRunningConversation);
       })
     ).subscribe();
 
@@ -192,18 +196,25 @@ export function useConversationsManager(db: ConversationDB) {
   useEffect(() => {
     return () => {
       console.log("manager teardown!", runningConversationsRef.current)
-      runningConversationsRef.current.forEach(conversation => teardownConversation(conversation))
+      runningConversationsRef.current.forEach(({conversation}) => teardownConversation(conversation))
     }
   }, [])
 
   useEffect(() => {
-    if (activeConversation) {
-      navConversation(navigate, activeConversation, true);
-    }
-    else {
+    if (!activeRunningConversation) {
       navRoot(navigate, true);
+      return;
     }
-  }, [activeConversation, navConversation, navRoot, navigate])
+
+    const message = getLastMessage(activeRunningConversation.conversation);
+
+    if (!message) {
+      navRoot(navigate, true);
+      return;
+    }
+
+    navConversation(navigate, activeRunningConversation, message, true);
+  }, [activeRunningConversation, navConversation, navRoot, navigate])
 
   useEffect(() => {
     if (correctedHistory) return;
@@ -218,13 +229,13 @@ export function useConversationsManager(db: ConversationDB) {
   }, [correctedHistory, setCorrectedHistory, navigate, navRoot, navConversationByUuidOrSha, paramLeafHash]);
 
   useEffect(() => {
-    if (!activeConversation) return;
+    if (!activeRunningConversation) return;
 
-    const subscription = observeNewMessages(activeConversation, false)
+    const subscription = observeNewMessages(activeRunningConversation.conversation, false)
       .pipe(
         debounceTime(0), // only ever process the last message
         tap(message => {
-          navConversation(navigate, activeConversation, true);
+          navConversation(navigate, activeRunningConversation, message, true);
         })
       )
       .subscribe();
@@ -232,10 +243,10 @@ export function useConversationsManager(db: ConversationDB) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [activeConversation, navConversation, navigate]);
+  }, [activeRunningConversation, navConversation, navigate]);
 
   const navRemix = useCallback((remixParams: {model?: string, updatedFunctions?: FunctionOption[]}) => {
-    if (!activeConversation) return;
+    if (!activeRunningConversation) return;
 
     const {model, updatedFunctions} = remixParams;
 
@@ -246,36 +257,55 @@ export function useConversationsManager(db: ConversationDB) {
     if (updatedFunctions) newNavParams.set('functions', JSON.stringify(updatedFunctions.map(f => f.name)));
 
     navigate(`?${newNavParams.toString()}`, { state: {} as NavigateState });
-  }, [activeConversation, navParams]);
+  }, [activeRunningConversation, navParams]);
 
   const goBack = useCallback(() => {
     navigate(-1);
   }, [navigate]);
 
-  const openConversation = useCallback((newLeafHash: string, uuid: string | null = null) => {
+  const openMessage = useCallback((message: MessageDB) => {
     const newNavParams = new URLSearchParams(navParams);
-    newNavParams.set('ln', newLeafHash);
+    newNavParams.set('ln', message.hash);
 
-    navConversationByUuidOrSha(navigate, uuid, newNavParams);
+    navConversationByUuidOrSha(navigate, null, newNavParams);
+  }, [navigate, navConversationByUuidOrSha, navParams]);
+
+  const openSha = useCallback(async (sha: string) => {
+    const message = await db.getMessageByHash(sha);
+    if (!message) return;
+
+    openMessage(message);
+  }, [db, openMessage]);
+
+  const switchToConversation = useCallback((runningConversation: RunningConversation) => {
+    const message = getLastMessage(runningConversation.conversation);
+    if (!message) return; // TODO: bit of an edge case of when a conversation is empty, just skipping over it for now
+
+    const newNavParams = new URLSearchParams(navParams);
+    newNavParams.set('ln', message.hash);
+
+    navConversationByUuidOrSha(navigate, runningConversation.id, newNavParams);
   }, [navigate, navConversationByUuidOrSha, navParams]);
 
   const changeModel = useCallback((model: string) => {
-    if (!activeConversation) return;
+    if (!activeRunningConversation) return;
 
     navRemix({model});
-  }, [activeConversation, navRemix]);
+  }, [activeRunningConversation, navRemix]);
 
   const changeFunctions = useCallback((updatedFunctions: FunctionOption[]) => {
-    if (!activeConversation) return;
+    if (!activeRunningConversation) return;
 
     navRemix({updatedFunctions});
-  }, [activeConversation, navRemix]);
+  }, [activeRunningConversation, navRemix]);
 
   return {
-    activeConversation,
+    activeRunningConversation,
     runningConversations,
     goBack,
-    openConversation,
+    openMessage,
+    openSha,
+    switchToConversation,
     changeModel,
     changeFunctions,
   };

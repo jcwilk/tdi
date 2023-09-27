@@ -12,7 +12,9 @@ export interface MessageDB {
   embedding: number[];
 }
 
-export function isMessageDB(message: Message | MessageDB): message is MessageDB {
+export type MaybePersistedMessage = Message | MessageDB;
+
+export function isMessageDB(message: MaybePersistedMessage): message is MessageDB {
   return (message as MessageDB).hash !== undefined;
 }
 

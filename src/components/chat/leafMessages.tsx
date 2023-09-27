@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
-import { Conversation, Message, getLastMessage, observeNewMessages } from '../../chat/conversation';
+import { Message, getLastMessage, observeNewMessages } from '../../chat/conversation';
 import { processMessagesWithHashing } from '../../chat/messagePersistence';
 import { Box, Button, List, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { emojiSha } from '../../chat/emojiSha';
 import { debounceTime, scan, tap } from 'rxjs';
+import { RunningConversation } from './useConversationManager';
 
 // Define the striped styling
 const StripedListItem = styled(ListItemButton)`
@@ -18,7 +19,7 @@ const StripedListItem = styled(ListItemButton)`
 `;
 
 export type RunningConversationOption = {
-  uuid: string;
+  runningConversation: RunningConversation;
   message: MessageDB;
 }
 
@@ -42,12 +43,17 @@ function insertSortedByTimestamp(messages: MessageDB[], message: MessageDB): Mes
   }
 }
 
-const LeafMessages: React.FC<{ db: ConversationDB, runningConversations: Conversation[], onSelect: (leafMessage: string, uuid?: string) => void }> = ({ db, runningConversations, onSelect }) => {
+const LeafMessages: React.FC<{
+  db: ConversationDB,
+  runningConversations: RunningConversation[],
+  openMessage: (message: MessageDB) => void,
+  switchToConversation: (runningConversation: RunningConversation) => void
+}> = ({ db, runningConversations, openMessage, switchToConversation }) => {
   const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
-    const subscriptions = runningConversations.map(conversation =>
+    const subscriptions = runningConversations.map(({conversation}) =>
       observeNewMessages(conversation).subscribe(() => {
         // TODO: This causes everything to get repainted on every new message, but it should only cause the leafMessages interface to get repainted
         // instead, we should find a way to shunt all this subscription stuff into the leafMessages component, perhaps by passing runningConversations in?
@@ -62,10 +68,10 @@ const LeafMessages: React.FC<{ db: ConversationDB, runningConversations: Convers
 
   const runningLeafMessages = useMemo(() => {
     const messages: RunningConversationOption[] = [];
-    runningConversations.forEach(conversation => {
-      const lastOne = getLastMessage(conversation);
+    runningConversations.forEach(runningConversation => {
+      const lastOne = getLastMessage(runningConversation.conversation);
 
-      if(lastOne) messages.push({uuid: conversation.id, message: lastOne});
+      if(lastOne) messages.push({runningConversation, message: lastOne});
     });
     return messages;
   }, [runningConversations, version]);
@@ -88,11 +94,10 @@ const LeafMessages: React.FC<{ db: ConversationDB, runningConversations: Convers
     };
   }, [version, runningConversations]);
 
-
   const handleNewConversation = useCallback(async () => {
     const firstMessage = await processMessagesWithHashing(mainSystemMessage);
-    onSelect(firstMessage.hash);
-  }, [onSelect]);
+    openMessage(firstMessage);
+  }, [openMessage]);
 
   return (
     <Box
@@ -102,8 +107,8 @@ const LeafMessages: React.FC<{ db: ConversationDB, runningConversations: Convers
           Running Conversations
         </Typography>
         <List>
-          {runningLeafMessages.map(({uuid, message}) => (
-            <StripedListItem key={uuid} onClick={() => onSelect(message.hash, uuid)}>
+          {runningLeafMessages.map(({runningConversation, message}) => (
+            <StripedListItem key={runningConversation.id} onClick={() => switchToConversation(runningConversation)}>
               <ListItemText primary={emojiSha(message.hash, 5) + " " + message.content} primaryTypographyProps={{ noWrap: true }} />
             </StripedListItem>
           ))}
@@ -128,7 +133,7 @@ const LeafMessages: React.FC<{ db: ConversationDB, runningConversations: Convers
         </Typography>
         <List>
           {leafMessages.map((message) => (
-            <StripedListItem key={message.hash} onClick={() => onSelect(message.hash)}>
+            <StripedListItem key={message.hash} onClick={() => openMessage(message)}>
               <ListItemText primary={emojiSha(message.hash, 5) + " " + message.content} primaryTypographyProps={{ noWrap: true }} />
             </StripedListItem>
           ))}

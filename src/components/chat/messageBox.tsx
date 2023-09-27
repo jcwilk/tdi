@@ -1,11 +1,10 @@
 import React from 'react';
 import { Box } from '@mui/material';
-import { Message } from '../../chat/conversation';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import PruneButton from './pruneButton';
 import EditButton from './editButton';
-import { MessageDB, isMessageDB } from '../../chat/conversationDb';
+import { MaybePersistedMessage, MessageDB, isMessageDB } from '../../chat/conversationDb';
 import AssistantIcon from '@mui/icons-material/PrecisionManufacturing';
 import UserIcon from '@mui/icons-material/Person';
 import SystemIcon from '@mui/icons-material/Dns';
@@ -13,18 +12,14 @@ import FunctionIcon from '@mui/icons-material/Functions';
 import EmojiShaButton from './emojiShaButton';
 
 type MessageProps = {
-  message: Message | MessageDB;
-  hash?: string;
-  openConversation?: (hash: string) => void;
-  onPrune?: (hash: string) => void;
-  onEdit?: (message: MessageDB) => void;
-  openOtherHash?: (hash: string) => void;
+  message: MaybePersistedMessage;
+  onPrune: (hash: string) => void;
+  onEdit: (message: MessageDB) => void;
+  openOtherHash: (hash: string) => void;
+  openMessage: (message: MessageDB) => void;
 };
 
-const MessageBox: React.FC<MessageProps> = (props) => {
-  // Extracting props for better readability
-  const { message, hash, openConversation, onPrune, onEdit, openOtherHash } = props;
-
+const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage }) => {
   // Define styles
   let backgroundColor: string;
   let icon: JSX.Element; // You would define your icons here based on message role
@@ -100,9 +95,9 @@ const MessageBox: React.FC<MessageProps> = (props) => {
           gap: '5px',
         }}
       >
-        {onPrune && hash && <PruneButton onClick={() => onPrune(hash)} />}
-        {onEdit && isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
-        {hash && openConversation && <EmojiShaButton hash={hash} openConversation={openConversation} />}
+        {isMessageDB(message) && <PruneButton onClick={() => onPrune(message.hash)} />}
+        {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
+        {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} />}
         <CopyButton contentToCopy={message.content} />
       </Box>
     </Box>

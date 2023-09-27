@@ -19,7 +19,8 @@ import PauseIcon from '@mui/icons-material/Pause';
 type ConversationModalProps = {
   conversation: Conversation;
   onClose: () => void;
-  onOpenNewConversation: (leafMessage: string) => void; // Callback for opening a new conversation on top
+  openSha: (leafMessage: string) => void; // Callback for attempting to open a message by sha
+  openMessage: (message: MessageDB) => void; // Callback for opening a message in the editor
   onNewModel: (model: string) => void;
   onFunctionsChange: (updatedFunctions: FunctionOption[]) => void;
 };
@@ -33,7 +34,7 @@ function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]):
   return -1; // Return -1 if no match is found
 }
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, onOpenNewConversation, onNewModel, onFunctionsChange }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, openSha, openMessage, onNewModel, onFunctionsChange }) => {
   const [messages, setMessages] = useState<(MessageDB)[]>(getAllMessages(conversation));
   const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
@@ -76,8 +77,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
     const newLeafMessage = await pruneConversation(lastMessage, [hash]);
     if(newLeafMessage.hash == lastMessage.hash) return;
 
-    onOpenNewConversation(newLeafMessage.hash);
-  }, [messages, onOpenNewConversation, pruneConversation]);
+    openMessage(newLeafMessage);
+  }, [messages, openSha, pruneConversation]);
 
   const handleEdit = async (message: MessageDB, newContent: string) => {
     if(messages.length === 0) return;
@@ -88,7 +89,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
     const newLeafMessage = await editConversation(lastMessage, index, {role: message.role, content: newContent});
     if(newLeafMessage.hash == lastMessage.hash) return;
 
-    onOpenNewConversation(newLeafMessage.hash);
+    openMessage(newLeafMessage);
   }
 
   const handleModelChange = useCallback((event: React.MouseEvent<HTMLElement>, newModel: ConversationMode | null) => {
@@ -166,15 +167,21 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           <MessageBox
             key={message.hash}
             message={message}
-            hash={message.hash}
-            openConversation={onOpenNewConversation}
             onPrune={handlePrune}
             onEdit={setEditingMessage}
-            openOtherHash={onOpenNewConversation}
+            openOtherHash={openSha}
+            openMessage={openMessage}
           />
         ))}
         {assistantTyping && (
-          <MessageBox key="assistant-typing" message={{ role: 'assistant', content: assistantTyping }} />
+          <MessageBox
+            key="assistant-typing"
+            message={{ role: 'assistant', content: assistantTyping }}
+            onPrune={handlePrune}
+            onEdit={setEditingMessage}
+            openOtherHash={openSha}
+            openMessage={openMessage}
+          />
         )}
         <div ref={messagesEndRef} />
       </Box>

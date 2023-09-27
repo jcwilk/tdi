@@ -1,6 +1,5 @@
 import { BehaviorSubject, Observable, Subject, concatMap, distinctUntilChanged, filter, from, map, of, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
-import { v4 as uuidv4 } from 'uuid';
 import { MessageDB } from './conversationDb';
 import { processMessagesWithHashing } from './messagePersistence';
 import { FunctionCall, FunctionOption } from '../openai_api';
@@ -65,7 +64,6 @@ export type Conversation = {
   outgoingMessageStream: BehaviorSubject<ConversationState>;
   functions: FunctionOption[];
   model: ConversationMode;
-  id: string;
 };
 
 interface ScanState {
@@ -77,7 +75,6 @@ export function createConversation(loadedMessages: MessageDB[], model: Conversat
   const conversation: Conversation = {
     newMessagesInput: new Subject<ConversationEvent>(),
     outgoingMessageStream: new BehaviorSubject({ messages: loadedMessages, typingStatus: new Map() }),
-    id: uuidv4(),
     functions,
     model
   }
