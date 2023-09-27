@@ -18,7 +18,7 @@ function splitString(input: string): string[] {
 }
 
 const parseContent = (content: string, openOtherHash: (hash: string) => void) => {
-  const parts = splitString(content.trim());
+  const parts = splitString(content);
 
   return parts.reduce<(string | JSX.Element)[]>((acc, part, index) => {
     if (shaRegex.test(part)) {
@@ -81,7 +81,7 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
             }
 
             if (typeof(child) === "string") {
-              return parseContent(child, openOtherHash)
+              return parseContent(child.trim(), openOtherHash)
             }
 
             if (React.isValidElement(child)) {
@@ -98,6 +98,10 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
         ol({ node, children, ...props }) {
           //console.log("ol", node, children, props);
           return <ol {...props} style={{ marginBlockStart: '0', marginBlockEnd: '0' }} children={children} />;
+        },
+        ul({ node, children, ...props }) {
+          //console.log("ul", node, children, props);
+          return <ul {...props} style={{ marginBlockStart: '0', marginBlockEnd: '0' }} children={children} />;
         },
         code({ node, inline, className, children, ...props }) {
           const match = /language-(\w+)/.exec(className || '');
