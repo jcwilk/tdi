@@ -87,6 +87,8 @@ export function addAssistant(
 
   handleGptMessages(conversation, typingAndSending, db);
 
+  // TODO: The way that I'm using naming to constrain which stream contains what data seems wrong. It'd be worth exploring
+  // whether there's a way to leverage the type system to make this less brittle.
   const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages)
     .pipe(
       catchError(err => {
@@ -132,7 +134,7 @@ function switchedOutputStreamsFromRespondableMessages(
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
     switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, model, 1000, functions)),
-    hotShare()
+    hotShare() // TODO: come back to whether this is the right way to do this
   )
 }
 
