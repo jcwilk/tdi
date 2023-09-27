@@ -68,6 +68,13 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
         },
         li({ node, children, ...props }) {
           //console.log("li", node, children, props);
+
+          if(!children) {
+            // NB: Supposedly, this isn't supposed to be undefined according to the types, but it sometimes is
+            // rather than sink a bunch of time into it, just returning it as-is and moving on.
+            return <li children={children} {...props} />;
+          }
+
           children = children.map((child) => {
             if (!child || typeof(child) === "number" || typeof(child) === "boolean") {
               return child;
