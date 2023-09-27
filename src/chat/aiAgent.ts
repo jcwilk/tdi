@@ -69,10 +69,10 @@ export function addAssistant(
   );
 
   const newSystemMessages = filterByIsSystemMessage(messagesAndTyping);
-  const newUninterruptedUserMessages = filterByIsUninterruptedUserMessage(messagesAndTyping);
+  const newUninterruptingUserMessages = filterByIsUninterruptedUserMessage(messagesAndTyping);
   const newInterruptingUserMessages = filterByIsInterruptingUserMessage(messagesAndTyping);
 
-  const newRespondableMessages = merge(newUninterruptedUserMessages, newSystemMessages).pipe(
+  const newRespondableMessages = merge(newUninterruptingUserMessages, newSystemMessages).pipe(
     map(([messages, _typing]) => messages)
   );
 
