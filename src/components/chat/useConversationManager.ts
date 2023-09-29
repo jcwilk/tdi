@@ -19,30 +19,17 @@ function buildParticipatedConversation(db: ConversationDB, messages: MessageDB[]
   return addAssistant(createConversation(messages, model, functionOptions), db);
 }
 
-function pickSearchParams(keys: string[], searchParams: URLSearchParams): URLSearchParams {
-  const newSearchParams = new URLSearchParams();
-
-  for (const key of keys) {
-    const value = searchParams.getAll(key);
-    if (value.length) {
-      for (const val of value) {
-        newSearchParams.append(key, val);
-      }
-    }
-  }
-
-  return newSearchParams;
-}
-
 type ConversationAction =
   | { type: 'SET_ACTIVE'; payload: RunningConversation }
   | { type: 'ADD_ACTIVE'; payload: Conversation }
   | { type: 'SET_INACTIVE' }
+  | { type: 'SET_CORRECTED' }
   ;
 
 type ConversationState = {
   runningConversationMap: Map<string, RunningConversation>,
-  activeRunningConversation: RunningConversation | null
+  activeRunningConversation: RunningConversation | null,
+  needsCorrection: boolean,
 };
 
 export type RunningConversation = {
@@ -60,7 +47,9 @@ function conversationReducer(state: ConversationState, action: ConversationActio
       const newRunningConversation = {conversation: action.payload, id: uuidv4()};
       return {...state, activeRunningConversation: newRunningConversation, runningConversationMap: new Map(state.runningConversationMap).set(newRunningConversation.id, newRunningConversation)};
     case 'SET_INACTIVE':
-      return {...state, activeRunningConversation: null};
+      return {...state, activeRunningConversation: null, needsCorrection: false};
+    case 'SET_CORRECTED':
+      return {...state, needsCorrection: false};
     default:
       throw new Error(`Unknown action: ${JSON.stringify(action)}`);
   }
@@ -70,19 +59,38 @@ function navRoot(navigate: NavigateFunction, replace: boolean = false) {
   navigate('?', { replace: replace, state: {} as NavigateState });
 }
 
-// Something feels off about expecting the caller to pass in the message, but it also doesn't feel quite right to have this function
-// independently pluck the most recent message out of the BehaviorSubject.
-function navConversation(navigate: NavigateFunction, runningConversation: RunningConversation, message: MessageDB, replace: boolean = false) {
-  const params = new URLSearchParams();
-  params.append("ln", message.hash);
-  params.append("model", runningConversation.conversation.model);
-  params.append("functions", JSON.stringify(runningConversation.conversation.functions.map(f => f.name)));
+const rootSearchParams = new URLSearchParams();
 
-  navConversationByUuidOrSha(navigate, runningConversation.id, params, replace);
+function conversationToSearchParams(conversation: Conversation): URLSearchParams {
+  const lastMessage = getLastMessage(conversation);
+
+  if (!lastMessage) return rootSearchParams;
+
+  const params = new URLSearchParams();
+
+  params.append("ln", lastMessage.hash);
+  params.append("model", conversation.model);
+  params.append("functions", JSON.stringify(conversation.functions.map(f => f.name)));
+
+  return params;
 }
 
-function navConversationByUuidOrSha(navigate: NavigateFunction, uuid: string | null, params: URLSearchParams, replace: boolean = false) {
-  navigate(`?${params.toString()}`, { replace, state: { activeConversation: uuid } as NavigateState });
+function navConversation(navigate: NavigateFunction, runningConversation: RunningConversation, replace: boolean = false) {
+  const params = conversationToSearchParams(runningConversation.conversation);
+
+  navigate(`?${params.toString()}`, { replace, state: { activeConversation: runningConversation.id } as NavigateState });
+}
+
+function navRemix(navigate: NavigateFunction, activeConversation: Conversation, remixParams: {model?: string, updatedFunctions?: FunctionOption[], hash?: string}) {
+  const {model, updatedFunctions, hash} = remixParams;
+
+  const newNavParams = conversationToSearchParams(activeConversation);
+
+  if (model) newNavParams.set('model', model);
+  if (updatedFunctions) newNavParams.set('functions', JSON.stringify(updatedFunctions.map(f => f.name)));
+  if (hash) newNavParams.set('ln', hash);
+
+  navigate(`?${newNavParams.toString()}`, { state: {} as NavigateState });
 }
 
 // NB: Hoisted this out of the useEffect and ditched the isMounted check for simplicity
@@ -92,18 +100,21 @@ async function handleNavEvent(db: ConversationDB, event: RouterState, currentRun
   const eventConversationUuid = state?.activeConversation ?? null;
   const eventParams = new URLSearchParams(eventSearch);
   const eventLeafNodeHash = eventParams.get('ln') ?? null;
+  const processReplace = !!state?.processReplace;
+
+  console.log("handleNavEvent", event)
 
   if (state === null) {
     // from my testing and understanding, this can never be detected because we set up the listener after we get to the page
     // so if we detect it, something about my understanding is wrong so might be worth investigating
     // Also, we immediately replace their entry url with a stateful one, so this should never happen even from back navigating
     console.error("Unexpected new page navigation detection!", event)
-    return;
+    //return;
   }
 
-  if (historyAction === "REPLACE") {
+  if (historyAction === "REPLACE" && !processReplace) {
     // no-op, this was just done to align the URL
-    return;
+    return { type: 'SET_CORRECTED' };
   }
 
   if (eventConversationUuid) {
@@ -137,12 +148,8 @@ async function handleNavEvent(db: ConversationDB, event: RouterState, currentRun
 
 export function useConversationsManager(db: ConversationDB) {
   const navigate = useNavigate();
-  const location = useLocation();
-  const params = new URLSearchParams(location.search);
 
-  const paramLeafHash = params.get('ln');
   const [activeRunningConversation, setActiveRunningConversation] = useState<RunningConversation | null>(null);
-
   const [runningConversationMap, setRunningConversationMap] = useState<Map<string, RunningConversation>>(new Map<string, RunningConversation>());
 
   const runningConversations = useMemo(() => {
@@ -152,12 +159,11 @@ export function useConversationsManager(db: ConversationDB) {
   // this is just for the cleanup function so it can tear them all down
   const runningConversationsRef = useRef(runningConversationMap);
 
-  console.log("paramLeafHash", paramLeafHash)
   console.log("activeRunningConversation", activeRunningConversation)
   console.log("runningConversationMap", runningConversationMap)
 
-  const [correctedHistory, setCorrectedHistory] = useState<boolean>(false);
-  const navParams = useMemo(() => pickSearchParams(['ln', 'model', 'functions'], params), [location.search]);
+  // The value of this state is only read from the prevValue of the setter
+  const [_correctedHistory, setCorrectedHistory] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true
@@ -171,14 +177,31 @@ export function useConversationsManager(db: ConversationDB) {
       }),
       filter(action => action !== undefined),
 
+      tap(action => {
+        console.log("action", action)
+      }),
+
       // Step 2: State Reduction with Scan
       scan((currentState, action) => {
         return conversationReducer(currentState, action as ConversationAction);
-      }, { runningConversationMap, activeRunningConversation }), // so that we respect the initial state of the useState hooks
+      }, { runningConversationMap, activeRunningConversation, needsCorrection: true }), // so that we respect the initial state of the useState hooks
 
       // Step 3: Side effects
       tap(finalState => {
+        console.log("finalState", finalState)
         if (!isMounted) return;
+
+        // Handling for the case where we need to correct the history on page load
+        if (finalState.needsCorrection && finalState.activeRunningConversation) {
+          const closureConvo = finalState.activeRunningConversation;
+          setCorrectedHistory(prevValue => {
+            if (prevValue) return prevValue;
+
+            navRoot(navigate, true);
+            navConversation(navigate, closureConvo);
+            return true;
+          })
+        }
 
         setRunningConversationMap(finalState.runningConversationMap);
         runningConversationsRef.current = finalState.runningConversationMap;
@@ -194,39 +217,12 @@ export function useConversationsManager(db: ConversationDB) {
   }, [db])
 
   useEffect(() => {
+    console.log("manager setup!")
     return () => {
       console.log("manager teardown!", runningConversationsRef.current)
       runningConversationsRef.current.forEach(({conversation}) => teardownConversation(conversation))
     }
   }, [])
-
-  useEffect(() => {
-    if (!activeRunningConversation) {
-      navRoot(navigate, true);
-      return;
-    }
-
-    const message = getLastMessage(activeRunningConversation.conversation);
-
-    if (!message) {
-      navRoot(navigate, true);
-      return;
-    }
-
-    navConversation(navigate, activeRunningConversation, message, true);
-  }, [activeRunningConversation, navConversation, navRoot, navigate])
-
-  useEffect(() => {
-    if (correctedHistory) return;
-
-    navRoot(navigate, true);
-
-    if (paramLeafHash) {
-      navConversationByUuidOrSha(navigate, null, navParams);
-    }
-
-    setCorrectedHistory(true);
-  }, [correctedHistory, setCorrectedHistory, navigate, navRoot, navConversationByUuidOrSha, paramLeafHash]);
 
   useEffect(() => {
     if (!activeRunningConversation) return;
@@ -235,7 +231,7 @@ export function useConversationsManager(db: ConversationDB) {
       .pipe(
         debounceTime(0), // only ever process the last message
         tap(message => {
-          navConversation(navigate, activeRunningConversation, message, true);
+          navConversation(navigate, activeRunningConversation, true);
         })
       )
       .subscribe();
@@ -245,30 +241,15 @@ export function useConversationsManager(db: ConversationDB) {
     };
   }, [activeRunningConversation, navConversation, navigate]);
 
-  const navRemix = useCallback((remixParams: {model?: string, updatedFunctions?: FunctionOption[]}) => {
-    if (!activeRunningConversation) return;
-
-    const {model, updatedFunctions} = remixParams;
-
-    const newNavParams = new URLSearchParams(navParams);
-
-    if (model) newNavParams.set('model', model);
-
-    if (updatedFunctions) newNavParams.set('functions', JSON.stringify(updatedFunctions.map(f => f.name)));
-
-    navigate(`?${newNavParams.toString()}`, { state: {} as NavigateState });
-  }, [activeRunningConversation, navParams]);
-
   const goBack = useCallback(() => {
     navigate(-1);
   }, [navigate]);
 
   const openMessage = useCallback((message: MessageDB) => {
-    const newNavParams = new URLSearchParams(navParams);
-    newNavParams.set('ln', message.hash);
+    if (!activeRunningConversation) return;
 
-    navConversationByUuidOrSha(navigate, null, newNavParams);
-  }, [navigate, navConversationByUuidOrSha, navParams]);
+    navRemix(navigate, activeRunningConversation.conversation, {hash: message.hash});
+  }, [navigate, activeRunningConversation]);
 
   const openSha = useCallback(async (sha: string) => {
     const message = await db.getMessageByHash(sha);
@@ -280,24 +261,23 @@ export function useConversationsManager(db: ConversationDB) {
   const switchToConversation = useCallback((runningConversation: RunningConversation) => {
     const message = getLastMessage(runningConversation.conversation);
     if (!message) return; // TODO: bit of an edge case of when a conversation is empty, just skipping over it for now
+    // TODO: it may be possible to work around this issue by making the conversation messages typed to be non-empty, then we could always asssume there is a last message
+    // at time of writing, removing this guard would have the effect of it sending them to the root. instead we're nooping
 
-    const newNavParams = new URLSearchParams(navParams);
-    newNavParams.set('ln', message.hash);
-
-    navConversationByUuidOrSha(navigate, runningConversation.id, newNavParams);
-  }, [navigate, navConversationByUuidOrSha, navParams]);
+    navConversation(navigate, runningConversation);
+  }, [navigate, navConversation]);
 
   const changeModel = useCallback((model: string) => {
     if (!activeRunningConversation) return;
 
-    navRemix({model});
-  }, [activeRunningConversation, navRemix]);
+    navRemix(navigate, activeRunningConversation.conversation, {model});
+  }, [activeRunningConversation, navRemix, navigate]);
 
   const changeFunctions = useCallback((updatedFunctions: FunctionOption[]) => {
     if (!activeRunningConversation) return;
 
-    navRemix({updatedFunctions});
-  }, [activeRunningConversation, navRemix]);
+    navRemix(navigate, activeRunningConversation.conversation, {updatedFunctions});
+  }, [activeRunningConversation, navRemix, navigate]);
 
   return {
     activeRunningConversation,

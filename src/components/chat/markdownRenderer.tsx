@@ -70,8 +70,8 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
           //console.log("li", node, children, props);
 
           if(!children) {
-            // NB: Supposedly, this isn't supposed to be undefined according to the types, but it sometimes is
-            // rather than sink a bunch of time into it, just returning it as-is and moving on.
+            // NB: Supposedly, this isn't supposed to be undefined according to the types, but it sometimes is.
+            // Rather than sink a bunch of time into it, just returning it as-is and moving on.
             return <li children={children} {...props} />;
           }
 
@@ -104,8 +104,6 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
           return <ul {...props} style={{ marginBlockStart: '0', marginBlockEnd: '0' }} children={children} />;
         },
         code({ node, inline, className, children, ...props }) {
-          const match = /language-(\w+)/.exec(className || '');
-
           if (inline) {
             return (
               <code {...props} className={className} style={{ whiteSpace: 'pre-wrap' }}>
@@ -113,6 +111,8 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
               </code>
             )
           }
+
+          const match = /language-(\w+)/.exec(className || '');
 
           return match ? (
             <SyntaxHighlighter

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import TextFieldsForm from './components/text_fields_form';
 import { createBrowserRouter, RouterProvider } from "react-router-dom"
 import { RouterState } from '@remix-run/router';
-import { Subject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 
 const App = () => {
   return (
@@ -16,7 +16,7 @@ const router = createBrowserRouter([
   { path: "*", element: <App /> }
 ]);
 
-const routerStream = new Subject<RouterState>();
+const routerStream = new BehaviorSubject<RouterState>(router.state);
 
 router.subscribe(routerState => routerStream.next(routerState));
 
