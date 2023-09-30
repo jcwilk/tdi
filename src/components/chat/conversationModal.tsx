@@ -15,10 +15,12 @@ import { FunctionManagement } from './functionManagement';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 import MessageEntry from './messageEntry';
 import PauseIcon from '@mui/icons-material/Pause';
+import MinimizeIcon from '@mui/icons-material/Minimize';
 
 type ConversationModalProps = {
   conversation: Conversation;
   onClose: () => void;
+  minimize: () => void;
   openSha: (leafMessage: string) => void; // Callback for attempting to open a message by sha
   openMessage: (message: MessageDB) => void; // Callback for opening a message in the editor
   onNewModel: (model: string) => void;
@@ -34,7 +36,7 @@ function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]):
   return -1; // Return -1 if no match is found
 }
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, openSha, openMessage, onNewModel, onFunctionsChange }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, minimize, openSha, openMessage, onNewModel, onFunctionsChange }) => {
   const [messages, setMessages] = useState<(MessageDB)[]>(getAllMessages(conversation));
   const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
@@ -115,10 +117,18 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           <IconButton
             edge="start"
             color="inherit"
-            onClick={() => onClose()} // Assuming you have onClose method already
+            onClick={onClose}
             aria-label="close"
           >
             <CloseIcon />
+          </IconButton>
+          <IconButton
+            edge="start"
+            color="inherit"
+            onClick={minimize}
+            aria-label="close"
+          >
+            <MinimizeIcon />
           </IconButton>
           <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
             {currentLeafHash && emojiSha(currentLeafHash, 5)}

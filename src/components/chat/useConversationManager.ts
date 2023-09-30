@@ -1,16 +1,18 @@
 import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
-import { Subject, concatMap, debounceTime, filter, scan, tap } from 'rxjs';
+import { BehaviorSubject, Subject, concatMap, debounceTime, filter, of, scan, tap, withLatestFrom } from 'rxjs';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Conversation, ConversationMode, createConversation, getLastMessage, isConversationMode, observeNewMessages, teardownConversation } from '../../chat/conversation';
 import { addAssistant } from '../../chat/aiAgent';
-import { useLocation, useNavigate, NavigateFunction } from 'react-router-dom';
+import { useNavigate, NavigateFunction } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
 import { RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 import { v4 as uuidv4 } from 'uuid';
 
 type NavigateState = {
-  activeConversation: string | null; // uuid
+  activeConversation?: string; // uuid
+  processReplace?: boolean,
+  closeConversation?: boolean,
 };
 
 function buildParticipatedConversation(db: ConversationDB, messages: MessageDB[], model: ConversationMode = "gpt-3.5-turbo", functions: string[] = []): Conversation {
@@ -23,13 +25,12 @@ type ConversationAction =
   | { type: 'SET_ACTIVE'; payload: RunningConversation }
   | { type: 'ADD_ACTIVE'; payload: Conversation }
   | { type: 'SET_INACTIVE' }
-  | { type: 'SET_CORRECTED' }
+  | { type: 'CLOSE'; payload: RunningConversation }
   ;
 
 type ConversationState = {
   runningConversationMap: Map<string, RunningConversation>,
   activeRunningConversation: RunningConversation | null,
-  needsCorrection: boolean,
 };
 
 export type RunningConversation = {
@@ -47,16 +48,18 @@ function conversationReducer(state: ConversationState, action: ConversationActio
       const newRunningConversation = {conversation: action.payload, id: uuidv4()};
       return {...state, activeRunningConversation: newRunningConversation, runningConversationMap: new Map(state.runningConversationMap).set(newRunningConversation.id, newRunningConversation)};
     case 'SET_INACTIVE':
-      return {...state, activeRunningConversation: null, needsCorrection: false};
-    case 'SET_CORRECTED':
-      return {...state, needsCorrection: false};
+      return {...state, activeRunningConversation: null};
+    case 'CLOSE':
+      const newMap = new Map(state.runningConversationMap);
+      newMap.delete(action.payload.id);
+      return {...state, activeRunningConversation: null, runningConversationMap: newMap};
     default:
       throw new Error(`Unknown action: ${JSON.stringify(action)}`);
   }
 }
 
-function navRoot(navigate: NavigateFunction, replace: boolean = false) {
-  navigate('?', { replace: replace, state: {} as NavigateState });
+function navRoot(navigate: NavigateFunction, replace: boolean = false, processReplace: boolean = false) {
+  navigate('?', { replace: replace, state: { processReplace } as NavigateState });
 }
 
 const rootSearchParams = new URLSearchParams();
@@ -73,6 +76,14 @@ function conversationToSearchParams(conversation: Conversation): URLSearchParams
   params.append("functions", JSON.stringify(conversation.functions.map(f => f.name)));
 
   return params;
+}
+
+function navMessage(navigate: NavigateFunction, message: MessageDB, replace: boolean = false) {
+  const params = new URLSearchParams();
+
+  params.append("ln", message.hash);
+
+  navigate(`?${params.toString()}`, { replace, state: { processReplace: true } as NavigateState });
 }
 
 function navConversation(navigate: NavigateFunction, runningConversation: RunningConversation, replace: boolean = false) {
@@ -93,33 +104,45 @@ function navRemix(navigate: NavigateFunction, activeConversation: Conversation, 
   navigate(`?${newNavParams.toString()}`, { state: {} as NavigateState });
 }
 
+function navCloseConversation(navigate: NavigateFunction, runningConversation: RunningConversation) {
+  const params = conversationToSearchParams(runningConversation.conversation);
+
+  navigate(`?`, { state: { activeConversation: runningConversation.id, closeConversation: true } as NavigateState });
+}
+
 // NB: Hoisted this out of the useEffect and ditched the isMounted check for simplicity
 async function handleNavEvent(db: ConversationDB, event: RouterState, currentRunningConversations: Map<string, RunningConversation>): Promise<ConversationAction | undefined> {
   const { historyAction, location: eventLocation } = event;
-  const { search: eventSearch, state } = eventLocation;
+  const eventSearch = eventLocation.search;
+  const state: NavigateState | null = eventLocation.state ?? null;
+  const key = eventLocation.key;
   const eventConversationUuid = state?.activeConversation ?? null;
+  const processReplace = state?.processReplace ?? false;
+  const closeConversation = state?.closeConversation ?? false;
   const eventParams = new URLSearchParams(eventSearch);
   const eventLeafNodeHash = eventParams.get('ln') ?? null;
-  const processReplace = !!state?.processReplace;
 
   console.log("handleNavEvent", event)
 
-  if (state === null) {
-    // from my testing and understanding, this can never be detected because we set up the listener after we get to the page
-    // so if we detect it, something about my understanding is wrong so might be worth investigating
-    // Also, we immediately replace their entry url with a stateful one, so this should never happen even from back navigating
-    console.error("Unexpected new page navigation detection!", event)
-    //return;
+  if (state === null || key === "default") {
+    // any logic around setting up the first navigation should go here
+    // but this may not be the right mechanism to handle that
   }
 
   if (historyAction === "REPLACE" && !processReplace) {
     // no-op, this was just done to align the URL
-    return { type: 'SET_CORRECTED' };
+    return;
   }
 
   if (eventConversationUuid) {
     const runningConversation = currentRunningConversations.get(eventConversationUuid);
     if (runningConversation) {
+      if (closeConversation) {
+        currentRunningConversations.delete(eventConversationUuid);
+        teardownConversation(runningConversation.conversation);
+        return { type: 'CLOSE', payload: runningConversation };
+      }
+
       return { type: 'SET_ACTIVE', payload: runningConversation };
     }
   }
@@ -139,12 +162,22 @@ async function handleNavEvent(db: ConversationDB, event: RouterState, currentRun
       const model: ConversationMode = isConversationMode(rawModel) ? rawModel : 'gpt-3.5-turbo';
 
       const conversation = buildParticipatedConversation(db, conversationFromDb, model, functionNames);
-      return { type: 'ADD_ACTIVE', payload: conversation };
+      if (eventConversationUuid) {
+        return { type: 'SET_ACTIVE', payload: { conversation, id: eventConversationUuid } };
+      }
+      else {
+        return { type: 'ADD_ACTIVE', payload: conversation };
+      }
     }
   }
 
   return { type: 'SET_INACTIVE' };
 }
+
+const initialReducerState: ConversationState = {
+  runningConversationMap: new Map<string, RunningConversation>(),
+  activeRunningConversation: null
+};
 
 export function useConversationsManager(db: ConversationDB) {
   const navigate = useNavigate();
@@ -156,9 +189,6 @@ export function useConversationsManager(db: ConversationDB) {
     return Array.from(runningConversationMap.values());
   }, [runningConversationMap]);
 
-  // this is just for the cleanup function so it can tear them all down
-  const runningConversationsRef = useRef(runningConversationMap);
-
   console.log("activeRunningConversation", activeRunningConversation)
   console.log("runningConversationMap", runningConversationMap)
 
@@ -166,14 +196,20 @@ export function useConversationsManager(db: ConversationDB) {
   const [_correctedHistory, setCorrectedHistory] = useState<boolean>(false);
 
   useEffect(() => {
+    console.log("manager setup!")
     let isMounted = true
 
     const routerStream: Subject<RouterState> = (window as any).$app.routerStream;
+    const reducerState: BehaviorSubject<ConversationState> = new BehaviorSubject(initialReducerState);
 
     const subscription = routerStream.pipe(
-      // Step 1: Mapping and filtering nav events to actions
-      concatMap(async event => {
-        return await handleNavEvent(db, event, runningConversationsRef.current);
+      withLatestFrom(reducerState),
+
+      // Mapping and flattening nav events to actions
+      concatMap(async ([event, reducerState]) => {
+        // This is a bit of a hack to get around the fact that we can't await in a scan
+        // I'm basically thinking of it as a paper-thin middleware to handle async precusory reads
+        return await handleNavEvent(db, event, reducerState.runningConversationMap);
       }),
       filter(action => action !== undefined),
 
@@ -181,48 +217,55 @@ export function useConversationsManager(db: ConversationDB) {
         console.log("action", action)
       }),
 
-      // Step 2: State Reduction with Scan
+      // State Reduction with Scan
       scan((currentState, action) => {
         return conversationReducer(currentState, action as ConversationAction);
-      }, { runningConversationMap, activeRunningConversation, needsCorrection: true }), // so that we respect the initial state of the useState hooks
+      }, reducerState.value), // so that we respect the initial state
 
-      // Step 3: Side effects
+      filter(() => isMounted),
+
       tap(finalState => {
-        console.log("finalState", finalState)
-        if (!isMounted) return;
-
-        // Handling for the case where we need to correct the history on page load
-        if (finalState.needsCorrection && finalState.activeRunningConversation) {
-          const closureConvo = finalState.activeRunningConversation;
-          setCorrectedHistory(prevValue => {
-            if (prevValue) return prevValue;
-
-            navRoot(navigate, true);
-            navConversation(navigate, closureConvo);
-            return true;
-          })
-        }
-
         setRunningConversationMap(finalState.runningConversationMap);
-        runningConversationsRef.current = finalState.runningConversationMap;
         setActiveRunningConversation(finalState.activeRunningConversation);
-      })
+      }),
+    ).subscribe(reducerState);
+
+
+    return () => {
+      console.log("manager teardown!")
+      subscription.unsubscribe();
+      reducerState.complete();
+      reducerState.value.runningConversationMap.forEach(({conversation}) => teardownConversation(conversation));
+
+      isMounted = false;
+    }
+  }, [])
+
+  // This useEffect is for handling the case where the user navigates directly to a conversation, ie deep linking
+  useEffect(() => {
+    if (!activeRunningConversation) return;
+
+    const routerStream: Subject<RouterState> = (window as any).$app.routerStream;
+
+    const subscription = routerStream.pipe(
+      debounceTime(0), // debounce so that we're not queueing a history correction on top of a totally different nav event
+      filter(event => {
+        const { historyAction, location: eventLocation } = event;
+        const eventSearch = eventLocation.search;
+        const state: NavigateState | null = eventLocation.state ?? null;
+        const eventConversationUuid = state?.activeConversation ?? null;
+        const eventParams = new URLSearchParams(eventSearch);
+        const eventLeafNodeHash = eventParams.get('ln') ?? null;
+
+        return !eventConversationUuid && !!eventLeafNodeHash && historyAction === "POP";
+      }),
+      tap(() => navConversation(navigate, activeRunningConversation, true)),
     ).subscribe();
 
     return () => {
       subscription.unsubscribe();
-
-      isMounted = false;
     }
-  }, [db])
-
-  useEffect(() => {
-    console.log("manager setup!")
-    return () => {
-      console.log("manager teardown!", runningConversationsRef.current)
-      runningConversationsRef.current.forEach(({conversation}) => teardownConversation(conversation))
-    }
-  }, [])
+  }, [activeRunningConversation, navigate])
 
   useEffect(() => {
     if (!activeRunningConversation) return;
@@ -230,7 +273,7 @@ export function useConversationsManager(db: ConversationDB) {
     const subscription = observeNewMessages(activeRunningConversation.conversation, false)
       .pipe(
         debounceTime(0), // only ever process the last message
-        tap(message => {
+        tap(_message => {
           navConversation(navigate, activeRunningConversation, true);
         })
       )
@@ -242,13 +285,25 @@ export function useConversationsManager(db: ConversationDB) {
   }, [activeRunningConversation, navConversation, navigate]);
 
   const goBack = useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
-
-  const openMessage = useCallback((message: MessageDB) => {
     if (!activeRunningConversation) return;
 
-    navRemix(navigate, activeRunningConversation.conversation, {hash: message.hash});
+    navCloseConversation(navigate, activeRunningConversation);
+    navRoot(navigate, true);
+  }, [navigate, activeRunningConversation]);
+
+  const minimize = useCallback(() => {
+    if (!activeRunningConversation) return;
+
+    navRoot(navigate);
+  }, [navigate, activeRunningConversation]);
+
+  const openMessage = useCallback((message: MessageDB) => {
+    if (activeRunningConversation) {
+      navRemix(navigate, activeRunningConversation.conversation, {hash: message.hash});
+    }
+    else {
+      navMessage(navigate, message);
+    }
   }, [navigate, activeRunningConversation]);
 
   const openSha = useCallback(async (sha: string) => {
@@ -283,6 +338,7 @@ export function useConversationsManager(db: ConversationDB) {
     activeRunningConversation,
     runningConversations,
     goBack,
+    minimize,
     openMessage,
     openSha,
     switchToConversation,
