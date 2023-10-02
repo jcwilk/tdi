@@ -6,7 +6,6 @@ import { MessageDB } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
 import { emojiSha } from '../../chat/emojiSha';
 import { FunctionOption } from '../../openai_api';
-import { editConversation, pruneConversation } from '../../chat/messagePersistence';
 import BoxPopup from '../box_popup';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
@@ -21,22 +20,17 @@ type ConversationModalProps = {
   conversation: Conversation;
   onClose: () => void;
   minimize: () => void;
+  editMessage: (message: MessageDB, newContent: string) => void; // Callback for editing a message
+  pruneMessage: (message: MessageDB) => void; // Callback for pruning a message
   openSha: (leafMessage: string) => void; // Callback for attempting to open a message by sha
   openMessage: (message: MessageDB) => void; // Callback for opening a message in the editor
   onNewModel: (model: string) => void;
   onFunctionsChange: (updatedFunctions: FunctionOption[]) => void;
 };
 
-function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]): number {
-  for (let i = 0; i < arr.length; i++) {
-    if (arr[i][property] === value) {
-      return i;
-    }
-  }
-  return -1; // Return -1 if no match is found
-}
+const noopF = () => { };
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, minimize, openSha, openMessage, onNewModel, onFunctionsChange }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, minimize, editMessage, pruneMessage, openSha, openMessage, onNewModel, onFunctionsChange }) => {
   const [messages, setMessages] = useState<(MessageDB)[]>(getAllMessages(conversation));
   const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
@@ -71,28 +65,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
       console.log("CMCHECK TEARDOWN MODAL")
     };
   }, [conversation]);
-
-  const handlePrune = useCallback(async (hash: string) => {
-    if(messages.length === 0) return
-
-    const lastMessage = messages[messages.length - 1];
-    const newLeafMessage = await pruneConversation(lastMessage, [hash]);
-    if(newLeafMessage.hash == lastMessage.hash) return;
-
-    openMessage(newLeafMessage);
-  }, [messages, openSha, pruneConversation]);
-
-  const handleEdit = async (message: MessageDB, newContent: string) => {
-    if(messages.length === 0) return;
-    const lastMessage = messages[messages.length - 1];
-
-    const index = findIndexByProperty(messages, "hash", message.hash);
-
-    const newLeafMessage = await editConversation(lastMessage, index, {role: message.role, content: newContent});
-    if(newLeafMessage.hash == lastMessage.hash) return;
-
-    openMessage(newLeafMessage);
-  }
 
   const handleModelChange = useCallback((event: React.MouseEvent<HTMLElement>, newModel: ConversationMode | null) => {
     if (newModel === null) return;
@@ -177,7 +149,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           <MessageBox
             key={message.hash}
             message={message}
-            onPrune={handlePrune}
+            onPrune={pruneMessage}
             onEdit={setEditingMessage}
             openOtherHash={openSha}
             openMessage={openMessage}
@@ -187,10 +159,10 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           <MessageBox
             key="assistant-typing"
             message={{ role: 'assistant', content: assistantTyping }}
-            onPrune={handlePrune}
-            onEdit={setEditingMessage}
+            onPrune={noopF}
+            onEdit={noopF}
             openOtherHash={openSha}
-            openMessage={openMessage}
+            openMessage={noopF}
           />
         )}
         <div ref={messagesEndRef} />
@@ -201,7 +173,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
         openEditor={editingMessage?.hash ?? "closed"}
         onClose={() => setEditingMessage(null)}
         onSubmit={async (text) => {
-          editingMessage && await handleEdit(editingMessage, text);
+          editingMessage && await editMessage(editingMessage, text);
           setEditingMessage(null);
         }}
         onSubmitText='Update'

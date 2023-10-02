@@ -8,6 +8,16 @@ import { FunctionOption } from '../../openai_api';
 import { RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 import { v4 as uuidv4 } from 'uuid';
+import { editConversation, pruneConversation } from '../../chat/messagePersistence';
+
+function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]): number {
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i][property] === value) {
+      return i;
+    }
+  }
+  return -1; // Return -1 if no match is found
+}
 
 type NavigateState = {
   activeConversation?: string; // uuid
@@ -203,13 +213,17 @@ export function useConversationsManager(db: ConversationDB) {
     const reducerState: BehaviorSubject<ConversationState> = new BehaviorSubject(initialReducerState);
 
     const subscription = routerStream.pipe(
-      withLatestFrom(reducerState),
-
       // Mapping and flattening nav events to actions
-      concatMap(async ([event, reducerState]) => {
+      concatMap(async event => {
         // This is a bit of a hack to get around the fact that we can't await in a scan
         // I'm basically thinking of it as a paper-thin middleware to handle async precusory reads
-        return await handleNavEvent(db, event, reducerState.runningConversationMap);
+
+        // It's important to fetch this value here, inside the async function, so that it has
+        // the current value on each invocation of the function. That way there won't ever be
+        // a race condition vs the reducerState value getting updated since everything after this
+        // until and including the `subscribe` is synchronous.
+        const runningConversationMap = reducerState.value.runningConversationMap;
+        return await handleNavEvent(db, event, runningConversationMap);
       }),
       filter(action => action !== undefined),
 
@@ -242,6 +256,13 @@ export function useConversationsManager(db: ConversationDB) {
   }, [])
 
   // This useEffect is for handling the case where the user navigates directly to a conversation, ie deep linking
+  // we want to make sure that the history is corrected with the right convo id so that the back button works as expected
+  // otherwise it would keep creating new conversations every time we re-popped the history
+  // The reason why we're setting up a listener and not just doing it once is because they may have triggered a series of
+  // queued history events, and we want to make sure that we're replacing the right one so we're only reacting to the
+  // most recent one with a debounce, which means we'll intentionally miss it if there's further events on its heels.
+  // but that's okay because if they come back to it in the history then it will still trigger this hook to correct it.
+  // if they don't come back to that history event, then it's okay because no harm done
   useEffect(() => {
     if (!activeRunningConversation) return;
 
@@ -306,6 +327,37 @@ export function useConversationsManager(db: ConversationDB) {
     }
   }, [navigate, activeRunningConversation]);
 
+  const editMessage = useCallback(async (message: MessageDB, newContent: string) => {
+    if (!activeRunningConversation) return;
+
+    const messages = await db.getConversationFromLeaf(message.hash);
+    if (messages.length === 0) return;
+
+    const lastMessage = messages[messages.length - 1];
+    console.log("lastMessage", lastMessage, messages)
+
+    const index = findIndexByProperty(messages, "hash", message.hash);
+
+    const newLeafMessage = await editConversation(lastMessage, index, {role: message.role, content: newContent});
+    if(newLeafMessage.hash === lastMessage.hash) return;
+
+    // BUG: for some reason this only has the leaf message of the message which was edited, not the most recent message
+    // maybe an issue with the persistence functions?
+    openMessage(newLeafMessage); // TODO: add a new special replace existing convo action when the convo is paused
+  }, [db, activeRunningConversation, openMessage]);
+
+  const pruneMessage = useCallback(async (message: MessageDB) => {
+    if (!activeRunningConversation) return;
+
+    const lastMessage = getLastMessage(activeRunningConversation.conversation);
+    if (!lastMessage) return;
+
+    const newLeafMessage = await pruneConversation(lastMessage, [message.hash]);
+    if(newLeafMessage.hash == lastMessage.hash) return;
+
+    openMessage(newLeafMessage); // TODO: same as above
+  }, [activeRunningConversation, openMessage]);
+
   const openSha = useCallback(async (sha: string) => {
     const message = await db.getMessageByHash(sha);
     if (!message) return;
@@ -339,6 +391,8 @@ export function useConversationsManager(db: ConversationDB) {
     runningConversations,
     goBack,
     minimize,
+    editMessage,
+    pruneMessage,
     openMessage,
     openSha,
     switchToConversation,

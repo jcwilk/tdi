@@ -13,7 +13,7 @@ import EmojiShaButton from './emojiShaButton';
 
 type MessageProps = {
   message: MaybePersistedMessage;
-  onPrune: (hash: string) => void;
+  onPrune: (message: MessageDB) => void;
   onEdit: (message: MessageDB) => void;
   openOtherHash: (hash: string) => void;
   openMessage: (message: MessageDB) => void;
@@ -95,7 +95,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
           gap: '5px',
         }}
       >
-        {isMessageDB(message) && <PruneButton onClick={() => onPrune(message.hash)} />}
+        {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
         {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
         {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} />}
         <CopyButton contentToCopy={message.content} />

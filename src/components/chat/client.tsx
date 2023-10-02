@@ -12,6 +12,8 @@ const Client: React.FC = () => {
     runningConversations,
     goBack,
     minimize,
+    editMessage,
+    pruneMessage,
     openMessage,
     openSha,
     switchToConversation,
@@ -29,6 +31,8 @@ const Client: React.FC = () => {
       conversation={activeRunningConversation.conversation}
       onClose={goBack}
       minimize={minimize}
+      editMessage={editMessage}
+      pruneMessage={pruneMessage}
       openMessage={openMessage}
       openSha={openSha}
       onNewModel={changeModel}
