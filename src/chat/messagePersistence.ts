@@ -18,6 +18,15 @@ const hashFunction = async (message: Message, parentHashes: string[]): Promise<s
   return hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
 };
 
+function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]): number {
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i][property] === value) {
+      return i;
+    }
+  }
+  return -1; // Return -1 if no match is found
+}
+
 export async function processMessagesWithHashing(
   message: Message,
   currentParentHashes: string[] = []
@@ -55,7 +64,7 @@ async function reprocessMessagesStartingFrom(messagesForReprocessing: Message[],
 
 export async function editConversation(
   leafMessage: MessageDB,
-  index: number,
+  originalMessage: MessageDB,
   newMessage: Message
 ): Promise<MessageDB> {
   const conversationDB = new ConversationDB();
@@ -63,8 +72,11 @@ export async function editConversation(
   // Fetch the full conversation from the leaf to the root
   const conversation = await conversationDB.getConversationFromLeaf(leafMessage.hash);
 
+  const index = findIndexByProperty(conversation, 'hash', originalMessage.hash);
+
   if (index < 0 || index >= conversation.length) {
-    throw new Error("Invalid index");
+    console.error("Invalid index - message not found");
+    return leafMessage;
   }
 
   // The messages before the index remain untouched.
@@ -75,6 +87,7 @@ export async function editConversation(
 
   // We'll need to reprocess the message at the given index and any subsequent messages.
   const messagesForReprocessing = identifyMessagesForReprocessing(conversation, index);
+  //console.log("messagesForReprocessing: ", messagesForReprocessing);
   messagesForReprocessing[0] = newMessage;  // Replace the message at the given index with the new message
 
   return reprocessMessagesStartingFrom(messagesForReprocessing, parentMessage);

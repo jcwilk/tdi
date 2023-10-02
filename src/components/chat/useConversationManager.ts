@@ -10,15 +10,6 @@ import { getAllFunctionOptions } from '../../chat/functionCalling';
 import { v4 as uuidv4 } from 'uuid';
 import { editConversation, pruneConversation } from '../../chat/messagePersistence';
 
-function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]): number {
-  for (let i = 0; i < arr.length; i++) {
-    if (arr[i][property] === value) {
-      return i;
-    }
-  }
-  return -1; // Return -1 if no match is found
-}
-
 type NavigateState = {
   activeConversation?: string; // uuid
   processReplace?: boolean,
@@ -199,6 +190,8 @@ export function useConversationsManager(db: ConversationDB) {
     return Array.from(runningConversationMap.values());
   }, [runningConversationMap]);
 
+  const runningLeafHash = activeRunningConversation ? getLastMessage(activeRunningConversation.conversation)?.hash ?? null : null;
+
   console.log("activeRunningConversation", activeRunningConversation)
   console.log("runningConversationMap", runningConversationMap)
 
@@ -327,22 +320,18 @@ export function useConversationsManager(db: ConversationDB) {
     }
   }, [navigate, activeRunningConversation]);
 
-  const editMessage = useCallback(async (message: MessageDB, newContent: string) => {
+  const editMessage = useCallback(async (messageToEdit: MessageDB, newContent: string) => {
     if (!activeRunningConversation) return;
 
-    const messages = await db.getConversationFromLeaf(message.hash);
-    if (messages.length === 0) return;
+    const messagesUpToEdit = await db.getConversationFromLeaf(messageToEdit.hash);
+    if (messagesUpToEdit.length === 0) return;
 
-    const lastMessage = messages[messages.length - 1];
-    console.log("lastMessage", lastMessage, messages)
+    const lastMessage = getLastMessage(activeRunningConversation.conversation);
+    if (!lastMessage) return;
 
-    const index = findIndexByProperty(messages, "hash", message.hash);
-
-    const newLeafMessage = await editConversation(lastMessage, index, {role: message.role, content: newContent});
+    const newLeafMessage = await editConversation(lastMessage, messageToEdit, {role: messageToEdit.role, content: newContent});
     if(newLeafMessage.hash === lastMessage.hash) return;
 
-    // BUG: for some reason this only has the leaf message of the message which was edited, not the most recent message
-    // maybe an issue with the persistence functions?
     openMessage(newLeafMessage); // TODO: add a new special replace existing convo action when the convo is paused
   }, [db, activeRunningConversation, openMessage]);
 

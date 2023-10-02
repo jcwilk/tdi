@@ -48,21 +48,17 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
   }, [messages, assistantTyping, messagesEndRef.current, autoScroll]);
 
   useEffect(() => {
-    console.log("CMCHECK SETUP MODAL")
     const subscriptions = [
       observeTypingUpdates(conversation, "assistant").subscribe(partial => {
-        console.log("CMCHECK TYPING UPDATE", partial)
         setAssistantTyping(partial);
       }),
       observeNewMessages(conversation, false).subscribe((message: MessageDB) => {
-        console.log("CMCHECK NEW MESSAGE", message)
         setMessages((previousMessages) => [...previousMessages, message]);
       })
     ];
 
     return () => {
       subscriptions.forEach((subscription) => subscription.unsubscribe());
-      console.log("CMCHECK TEARDOWN MODAL")
     };
   }, [conversation]);
 

@@ -84,7 +84,6 @@ const LeafMessages: React.FC<{
       // Debounce the aggregated message array emission
       debounceTime(10), // Adjust the debounce time as needed
       tap(aggregatedMessages => {
-        console.log("aggregating", aggregatedMessages.length)
         setLeafMessages(aggregatedMessages);
       })
     ).subscribe();
