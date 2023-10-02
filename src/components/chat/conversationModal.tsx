@@ -24,7 +24,7 @@ type ConversationModalProps = {
   pruneMessage: (message: MessageDB) => void; // Callback for pruning a message
   openSha: (leafMessage: string) => void; // Callback for attempting to open a message by sha
   openMessage: (message: MessageDB) => void; // Callback for opening a message in the editor
-  onNewModel: (model: string) => void;
+  onNewModel: (model: ConversationMode) => void;
   onFunctionsChange: (updatedFunctions: FunctionOption[]) => void;
 };
 

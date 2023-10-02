@@ -79,10 +79,11 @@ function conversationToSearchParams(conversation: Conversation): URLSearchParams
   return params;
 }
 
-function navMessage(navigate: NavigateFunction, message: MessageDB, replace: boolean = false) {
+function navMessage(navigate: NavigateFunction, message: MessageDB, replace: boolean = false, model: ConversationMode = "paused") {
   const params = new URLSearchParams();
 
   params.append("ln", message.hash);
+  params.append("model", model);
 
   navigate(`?${params.toString()}`, { replace, state: { processReplace: true } as NavigateState });
 }
@@ -93,7 +94,13 @@ function navConversation(navigate: NavigateFunction, runningConversation: Runnin
   navigate(`?${params.toString()}`, { replace, state: { activeConversation: runningConversation.id } as NavigateState });
 }
 
-function navRemix(navigate: NavigateFunction, activeConversation: Conversation, remixParams: {model?: string, updatedFunctions?: FunctionOption[], hash?: string}) {
+type RemixParams = {
+  model?: ConversationMode
+  updatedFunctions?: FunctionOption[]
+  hash?: string
+}
+
+function navRemix(navigate: NavigateFunction, activeConversation: Conversation, remixParams: RemixParams) {
   const {model, updatedFunctions, hash} = remixParams;
 
   const newNavParams = conversationToSearchParams(activeConversation);
@@ -311,15 +318,40 @@ export function useConversationsManager(db: ConversationDB) {
     navRoot(navigate);
   }, [navigate, activeRunningConversation]);
 
-  const openMessage = useCallback((message: MessageDB) => {
+  const openMessage = useCallback((message: MessageDB, model: ConversationMode = "paused") => {
     if (activeRunningConversation) {
-      navRemix(navigate, activeRunningConversation.conversation, {hash: message.hash});
+      const remixParams: RemixParams = {hash: message.hash, model};
+      navRemix(navigate, activeRunningConversation.conversation, remixParams);
     }
     else {
-      navMessage(navigate, message);
+      navMessage(navigate, message, false, model);
     }
   }, [navigate, activeRunningConversation]);
 
+  const switchToConversation = useCallback((runningConversation: RunningConversation) => {
+    const message = getLastMessage(runningConversation.conversation);
+    if (!message) return; // TODO: bit of an edge case of when a conversation is empty, just skipping over it for now
+    // TODO: it may be possible to work around this issue by making the conversation messages typed to be non-empty, then we could always asssume there is a last message
+    // at time of writing, removing this guard would have the effect of it sending them to the root. instead we're nooping
+
+    navConversation(navigate, runningConversation);
+  }, [navigate, navConversation]);
+
+  const changeModel = useCallback((model: ConversationMode) => {
+    if (!activeRunningConversation) return;
+
+    navRemix(navigate, activeRunningConversation.conversation, {model});
+  }, [activeRunningConversation, navRemix, navigate]);
+
+  const changeFunctions = useCallback((updatedFunctions: FunctionOption[]) => {
+    if (!activeRunningConversation) return;
+
+    navRemix(navigate, activeRunningConversation.conversation, {updatedFunctions});
+  }, [activeRunningConversation, navRemix, navigate]);
+
+  //////////
+  // The below commands are expected to drop the new convo into "paused" - the above commands are not
+  //////////
   const editMessage = useCallback(async (messageToEdit: MessageDB, newContent: string) => {
     if (!activeRunningConversation) return;
 
@@ -351,29 +383,10 @@ export function useConversationsManager(db: ConversationDB) {
     const message = await db.getMessageByHash(sha);
     if (!message) return;
 
+    console.log("openSha", message)
+
     openMessage(message);
   }, [db, openMessage]);
-
-  const switchToConversation = useCallback((runningConversation: RunningConversation) => {
-    const message = getLastMessage(runningConversation.conversation);
-    if (!message) return; // TODO: bit of an edge case of when a conversation is empty, just skipping over it for now
-    // TODO: it may be possible to work around this issue by making the conversation messages typed to be non-empty, then we could always asssume there is a last message
-    // at time of writing, removing this guard would have the effect of it sending them to the root. instead we're nooping
-
-    navConversation(navigate, runningConversation);
-  }, [navigate, navConversation]);
-
-  const changeModel = useCallback((model: string) => {
-    if (!activeRunningConversation) return;
-
-    navRemix(navigate, activeRunningConversation.conversation, {model});
-  }, [activeRunningConversation, navRemix, navigate]);
-
-  const changeFunctions = useCallback((updatedFunctions: FunctionOption[]) => {
-    if (!activeRunningConversation) return;
-
-    navRemix(navigate, activeRunningConversation.conversation, {updatedFunctions});
-  }, [activeRunningConversation, navRemix, navigate]);
 
   return {
     activeRunningConversation,

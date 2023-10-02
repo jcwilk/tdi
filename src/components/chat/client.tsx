@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ConversationDB } from '../../chat/conversationDb';
+import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import ConversationModal from './conversationModal';
 import LeafMessages from './leafMessages';
 import { useConversationsManager } from './useConversationManager';
@@ -22,7 +22,7 @@ const Client: React.FC = () => {
   } = useConversationsManager(db);
 
   if (!activeRunningConversation) {
-    return <LeafMessages db={db} runningConversations={runningConversations} openMessage={openMessage} switchToConversation={switchToConversation} />;
+    return <LeafMessages db={db} runningConversations={runningConversations} openMessage={(message: MessageDB) => openMessage(message, "gpt-3.5-turbo")} switchToConversation={switchToConversation} />;
   }
 
   return (
