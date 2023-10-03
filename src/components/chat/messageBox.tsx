@@ -1,15 +1,19 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Box } from '@mui/material';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import PruneButton from './pruneButton';
 import EditButton from './editButton';
-import { MaybePersistedMessage, MessageDB, isMessageDB } from '../../chat/conversationDb';
+import { ConversationDB, MaybePersistedMessage, MessageDB, isMessageDB } from '../../chat/conversationDb';
 import AssistantIcon from '@mui/icons-material/PrecisionManufacturing';
 import UserIcon from '@mui/icons-material/Person';
 import SystemIcon from '@mui/icons-material/Dns';
 import FunctionIcon from '@mui/icons-material/Functions';
 import EmojiShaButton from './emojiShaButton';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useLiveQuery } from "dexie-react-hooks"
+import CornerButton from './cornerButton';
 
 type MessageProps = {
   message: MaybePersistedMessage;
@@ -19,7 +23,21 @@ type MessageProps = {
   openMessage: (message: MessageDB) => void;
 };
 
+const db = new ConversationDB();
+
 const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage }) => {
+  const siblings: MessageDB[] = useLiveQuery(() => {
+    if (!isMessageDB(message)) {
+      return [];
+    }
+
+    return db.messages.where('parentHash').equals(message.parentHash ?? "").toArray();
+  }, [], []);
+
+  const siblingPos = isMessageDB(message) ? siblings.findIndex((sibling) => sibling.hash === message.hash) + 1 : 0;
+  const leftSibling = isMessageDB(message) ? siblings[siblingPos - 2] ?? null : null;
+  const rightSibling = isMessageDB(message) ? siblings[siblingPos] ?? null : null;
+
   // Define styles
   let backgroundColor: string;
   let icon: JSX.Element; // You would define your icons here based on message role
@@ -88,17 +106,50 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
       <Box
         sx={{
           position: 'absolute',
+          left: '10px',
           right: '10px',
           bottom: '-1px',
           zIndex: 10,
           display: 'flex',
-          gap: '5px',
+          justifyContent: 'space-between',
         }}
       >
-        {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
-        {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
-        {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} />}
-        <CopyButton contentToCopy={message.content} />
+        <Box
+          sx={{
+            display: 'flex',
+            gap: '5px',
+          }}
+        >
+          { isMessageDB(message) && (leftSibling || rightSibling) &&
+            <>
+              {leftSibling &&
+                <CornerButton
+                  onClick={() => openMessage(leftSibling)}
+                  icon={<ChevronLeftIcon fontSize="inherit" />}
+                />
+              }
+              {siblingPos}/{siblings.length}
+              {rightSibling &&
+                <CornerButton
+                  onClick={() => openMessage(rightSibling)}
+                  icon={<ChevronRightIcon fontSize="inherit" />}
+                />
+              }
+            </>
+          }
+        </Box>
+
+        <Box
+          sx={{
+            display: 'flex',
+            gap: '5px',
+          }}
+        >
+          {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
+          {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
+          {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} />}
+          <CopyButton contentToCopy={message.content} />
+        </Box>
       </Box>
     </Box>
   );

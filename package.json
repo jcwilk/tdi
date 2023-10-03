@@ -54,6 +54,7 @@
         "@mui/material": "^5.12.0",
         "copy-to-clipboard": "^3.3.3",
         "dexie": "^3.2.4",
+        "dexie-react-hooks": "^1.1.6",
         "js-md5": "^0.7.3",
         "nano-editor": "^1.2.4",
         "openai": "^3.2.1",
