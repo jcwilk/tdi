@@ -48,6 +48,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
   }, [messages, assistantTyping, messagesEndRef.current, autoScroll]);
 
   useEffect(() => {
+    setMessages(getAllMessages(conversation));
+
     const subscriptions = [
       observeTypingUpdates(conversation, "assistant").subscribe(partial => {
         setAssistantTyping(partial);

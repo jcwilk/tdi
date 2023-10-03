@@ -14,6 +14,7 @@ type NavigateState = {
   activeConversation?: string; // uuid
   processReplace?: boolean,
   closeConversation?: boolean,
+  replaceConversation?: boolean,
 };
 
 function buildParticipatedConversation(db: ConversationDB, messages: MessageDB[], model: ConversationMode = "gpt-3.5-turbo", functions: string[] = []): Conversation {
@@ -53,6 +54,8 @@ function conversationReducer(state: ConversationState, action: ConversationActio
     case 'CLOSE':
       const newMap = new Map(state.runningConversationMap);
       newMap.delete(action.payload.id);
+      teardownConversation(action.payload.conversation);
+
       return {...state, activeRunningConversation: null, runningConversationMap: newMap};
     default:
       throw new Error(`Unknown action: ${JSON.stringify(action)}`);
@@ -100,16 +103,23 @@ type RemixParams = {
   hash?: string
 }
 
-function navRemix(navigate: NavigateFunction, activeConversation: Conversation, remixParams: RemixParams) {
+// if existing convo is paused then we want to replace the existing convo (both via nav and via state)
+// if existing convo is not paused then we want to push the new convo via nav into a new state
+function navRemix(navigate: NavigateFunction, activeConversation: RunningConversation, remixParams: RemixParams) {
   const {model, updatedFunctions, hash} = remixParams;
 
-  const newNavParams = conversationToSearchParams(activeConversation);
+  const newNavParams = conversationToSearchParams(activeConversation.conversation);
 
   if (model) newNavParams.set('model', model);
   if (updatedFunctions) newNavParams.set('functions', JSON.stringify(updatedFunctions.map(f => f.name)));
   if (hash) newNavParams.set('ln', hash);
 
-  navigate(`?${newNavParams.toString()}`, { state: {} as NavigateState });
+  if (activeConversation.conversation.model === "paused") {
+    navigate(`?${newNavParams.toString()}`, { replace: true, state: { processReplace: true, replaceConversation: true, activeConversation: activeConversation.id } as NavigateState });
+  }
+  else {
+    navigate(`?${newNavParams.toString()}`, { state: {} as NavigateState });
+  }
 }
 
 function navCloseConversation(navigate: NavigateFunction, runningConversation: RunningConversation) {
@@ -126,6 +136,7 @@ async function handleNavEvent(db: ConversationDB, event: RouterState, currentRun
   const key = eventLocation.key;
   const eventConversationUuid = state?.activeConversation ?? null;
   const processReplace = state?.processReplace ?? false;
+  const replaceConversation = state?.replaceConversation ?? false;
   const closeConversation = state?.closeConversation ?? false;
   const eventParams = new URLSearchParams(eventSearch);
   const eventLeafNodeHash = eventParams.get('ln') ?? null;
@@ -142,12 +153,10 @@ async function handleNavEvent(db: ConversationDB, event: RouterState, currentRun
     return;
   }
 
-  if (eventConversationUuid) {
+  if (eventConversationUuid && !replaceConversation) { // we want replaceConversation to lead to creating a new convo below
     const runningConversation = currentRunningConversations.get(eventConversationUuid);
     if (runningConversation) {
       if (closeConversation) {
-        currentRunningConversations.delete(eventConversationUuid);
-        teardownConversation(runningConversation.conversation);
         return { type: 'CLOSE', payload: runningConversation };
       }
 
@@ -196,8 +205,6 @@ export function useConversationsManager(db: ConversationDB) {
   const runningConversations = useMemo(() => {
     return Array.from(runningConversationMap.values());
   }, [runningConversationMap]);
-
-  const runningLeafHash = activeRunningConversation ? getLastMessage(activeRunningConversation.conversation)?.hash ?? null : null;
 
   console.log("activeRunningConversation", activeRunningConversation)
   console.log("runningConversationMap", runningConversationMap)
@@ -321,7 +328,7 @@ export function useConversationsManager(db: ConversationDB) {
   const openMessage = useCallback((message: MessageDB, model: ConversationMode = "paused") => {
     if (activeRunningConversation) {
       const remixParams: RemixParams = {hash: message.hash, model};
-      navRemix(navigate, activeRunningConversation.conversation, remixParams);
+      navRemix(navigate, activeRunningConversation, remixParams);
     }
     else {
       navMessage(navigate, message, false, model);
@@ -340,13 +347,13 @@ export function useConversationsManager(db: ConversationDB) {
   const changeModel = useCallback((model: ConversationMode) => {
     if (!activeRunningConversation) return;
 
-    navRemix(navigate, activeRunningConversation.conversation, {model});
+    navRemix(navigate, activeRunningConversation, {model});
   }, [activeRunningConversation, navRemix, navigate]);
 
   const changeFunctions = useCallback((updatedFunctions: FunctionOption[]) => {
     if (!activeRunningConversation) return;
 
-    navRemix(navigate, activeRunningConversation.conversation, {updatedFunctions});
+    navRemix(navigate, activeRunningConversation, {updatedFunctions});
   }, [activeRunningConversation, navRemix, navigate]);
 
   //////////
@@ -368,6 +375,7 @@ export function useConversationsManager(db: ConversationDB) {
   }, [db, activeRunningConversation, openMessage]);
 
   const pruneMessage = useCallback(async (message: MessageDB) => {
+    console.log("test", activeRunningConversation, activeRunningConversation && getLastMessage(activeRunningConversation.conversation))
     if (!activeRunningConversation) return;
 
     const lastMessage = getLastMessage(activeRunningConversation.conversation);
