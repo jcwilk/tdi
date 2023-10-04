@@ -4,15 +4,16 @@ import { Button } from '@mui/material';
 type CornerButtonProps = {
   onClick: (event: React.MouseEvent) => void;
   icon: React.ReactNode;
+  disabled?: boolean;
 };
 
-const CornerButton: React.FC<CornerButtonProps> = ({ onClick, icon }) => (
+const CornerButton: React.FC<CornerButtonProps> = ({ onClick, icon, disabled = false }) => (
   <Button
     variant="contained"
     style={{
       borderRadius: '18px',
-      backgroundColor: '#424242', // Darker background color for dark mode
-      color: '#E0E0E0', // Lighter text color for dark mode
+      backgroundColor: disabled ? '#333' : '#424242', // Darker background color for dark mode
+      color: disabled ? '#424242' : '#E0E0E0', // Lighter text color for dark mode
       padding: '4px 8px',
       fontSize: '0.8rem',
       lineHeight: '1',
@@ -23,6 +24,7 @@ const CornerButton: React.FC<CornerButtonProps> = ({ onClick, icon }) => (
       minWidth: 'initial', // Allow the button to shrink to fit the icon
     }}
     onClick={onClick}
+    disabled={disabled}
   >
     {icon}
   </Button>

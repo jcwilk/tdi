@@ -143,7 +143,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           flexDirection: 'column',
         }}
       >
-        {messages.map((message) => (
+        {messages.map((message, index) => (
           <MessageBox
             key={message.hash}
             message={message}
@@ -151,6 +151,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             onEdit={setEditingMessage}
             openOtherHash={openSha}
             openMessage={openMessage}
+            isTail={index === messages.length - 1}
           />
         ))}
         {assistantTyping && (
@@ -161,6 +162,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             onEdit={noopF}
             openOtherHash={openSha}
             openMessage={noopF}
+            isTail={false}
           />
         )}
         <div ref={messagesEndRef} />

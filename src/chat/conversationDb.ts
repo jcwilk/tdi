@@ -157,4 +157,13 @@ export class ConversationDB extends Dexie {
 
     return dotProduct / (embedding1Norm * embedding2Norm);
   }
+
+  async getLeafMessageFromAncestor(message: MessageDB): Promise<MessageDB> {
+    const children = await this.messages.where('parentHash').equals(message.hash).sortBy('timestamp');
+    if (children.length === 0) {
+        return message;  // No children, message is a leaf node
+    }
+    // Recurse with the oldest child
+    return this.getLeafMessageFromAncestor(children[0]);
+}
 }

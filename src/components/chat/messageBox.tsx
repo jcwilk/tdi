@@ -14,6 +14,8 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useLiveQuery } from "dexie-react-hooks"
 import CornerButton from './cornerButton';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
 
 type MessageProps = {
   message: MaybePersistedMessage;
@@ -21,18 +23,35 @@ type MessageProps = {
   onEdit: (message: MessageDB) => void;
   openOtherHash: (hash: string) => void;
   openMessage: (message: MessageDB) => void;
+  isTail: boolean;
 };
 
 const db = new ConversationDB();
 
-const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage }) => {
+const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage, isTail }) => {
   const siblings: MessageDB[] = useLiveQuery(() => {
     if (!isMessageDB(message)) {
       return [];
     }
 
-    return db.messages.where('parentHash').equals(message.parentHash ?? "").toArray();
-  }, [], []);
+    return db.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
+  }, [message], []);
+
+  const availableChild: MessageDB | null | undefined = useLiveQuery(() => {
+    if (!isMessageDB(message) || !isTail) {
+      return null;
+    }
+
+    return db.messages.where('parentHash').equals(message.hash).sortBy('timestamp').then(children => children[0] ?? null);
+  }, [message, isTail], undefined);
+
+  const availableDescendent: MessageDB | null = useLiveQuery(() => {
+    if (!isMessageDB(message) || !isTail) {
+      return null;
+    }
+
+    return db.getLeafMessageFromAncestor(message).then(leaf => leaf.hash === message.hash ? null : leaf);
+  }, [message, isTail], null);
 
   const siblingPos = isMessageDB(message) ? siblings.findIndex((sibling) => sibling.hash === message.hash) + 1 : 0;
   const leftSibling = isMessageDB(message) ? siblings[siblingPos - 2] ?? null : null;
@@ -122,21 +141,55 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
         >
           { isMessageDB(message) && (leftSibling || rightSibling) &&
             <>
-              {leftSibling &&
+              {leftSibling ?
                 <CornerButton
                   onClick={() => openMessage(leftSibling)}
                   icon={<ChevronLeftIcon fontSize="inherit" />}
                 />
+                :
+                <CornerButton
+                  onClick={() => {}}
+                  icon={<ChevronLeftIcon fontSize="inherit" />}
+                  disabled
+                />
               }
               {siblingPos}/{siblings.length}
-              {rightSibling &&
+              {rightSibling ?
                 <CornerButton
                   onClick={() => openMessage(rightSibling)}
                   icon={<ChevronRightIcon fontSize="inherit" />}
                 />
+                :
+                <CornerButton
+                  onClick={() => {}}
+                  icon={<ChevronRightIcon fontSize="inherit" />}
+                  disabled
+                />
+              }
+              { isTail &&
+                <>
+                  {availableChild &&
+                    <>
+                      <CornerButton onClick={() => openMessage(availableChild)} icon={<KeyboardArrowDownIcon fontSize="inherit" />} />
+                      {availableDescendent && availableChild.hash !== availableDescendent.hash && <CornerButton onClick={() => openMessage(availableDescendent)} icon={<KeyboardDoubleArrowDownIcon fontSize="inherit" />} />}
+                    </>
+                  }
+                  {availableChild === null &&
+                    <CornerButton onClick={() => {}} icon={<KeyboardArrowDownIcon fontSize="inherit" />} disabled />
+                  }
+                </>
               }
             </>
           }
+        </Box>
+
+        <Box
+          sx={{
+            display: 'flex',
+            gap: '5px',
+          }}
+        >
+
         </Box>
 
         <Box
