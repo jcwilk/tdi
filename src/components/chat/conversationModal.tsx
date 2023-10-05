@@ -77,7 +77,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
         flexDirection: 'column',
         height: '100vh',
         overflow: 'hidden',
-        fontFamily: '"Roboto Mono", monospace',
+        fontFamily: 'Poppins, sans-serif',
         backgroundColor: '#212121',
         color: '#f5f5f5',
       }}

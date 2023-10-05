@@ -27,8 +27,8 @@ function concatWithEllipses(str: string, maxLength: number): string {
 
 const functionSpecs: FunctionSpec[] = [
   {
-    name: "embedding_search",
-    description: "Searches for the most similar embeddings to the provided query.",
+    name: "concept_search",
+    description: "Searches for the most similar messages to the provided query via embedding cosine similarity.",
     implementation: async (utils = {db: ConversationDB}, query: string, limit: number) => {
       const { db } = utils;
       const embedding = await getEmbedding(query);
@@ -51,13 +51,13 @@ const functionSpecs: FunctionSpec[] = [
       {
         name: "query",
         type: "string",
-        description: "The query to search for.",
+        description: "The query to convert into an embedding for the search.",
         required: true
       },
       {
         name: "limit",
         type: "number",
-        description: "The maximum number of results to return.",
+        description: "The maximum number of message results to return.",
         required: true
       }
     ]

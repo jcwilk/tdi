@@ -200,8 +200,8 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
         >
           {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
           {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
-          {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} />}
           <CopyButton contentToCopy={message.content} />
+          {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} />}
         </Box>
       </Box>
     </Box>

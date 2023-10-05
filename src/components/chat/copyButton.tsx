@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import React, { ReactNode, useState } from 'react';
+import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import copy from 'copy-to-clipboard';
 import CornerButton from './cornerButton';
 
 type CopyButtonProps = {
   contentToCopy: string;
+  copyIcon?: ReactNode;
 };
 
-const CopyButton: React.FC<CopyButtonProps> = ({ contentToCopy }) => {
+const CopyButton: React.FC<CopyButtonProps> = ({ contentToCopy, copyIcon=<ContentPasteIcon fontSize='inherit' /> }) => {
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopyClick = (event: React.MouseEvent) => {
@@ -24,7 +25,7 @@ const CopyButton: React.FC<CopyButtonProps> = ({ contentToCopy }) => {
       icon={
         isCopied
           ? <CheckCircleOutlineIcon fontSize='inherit' />
-          : <ContentCopyIcon fontSize='inherit' />
+          : copyIcon
       }
     />
   );
