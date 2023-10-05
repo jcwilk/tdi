@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Box, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import React, { useEffect, useState, useRef, useCallback, ReactNode } from 'react';
+import { Box, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
 import { Conversation, ConversationMode, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
-import { MessageDB } from '../../chat/conversationDb';
+import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
 import { emojiSha } from '../../chat/emojiSha';
 import { FunctionOption } from '../../openai_api';
@@ -15,6 +15,10 @@ import { getAllFunctionOptions } from '../../chat/functionCalling';
 import MessageEntry from './messageEntry';
 import PauseIcon from '@mui/icons-material/Pause';
 import MinimizeIcon from '@mui/icons-material/Minimize';
+import { useLiveQuery } from 'dexie-react-hooks';
+import CornerButton from './cornerButton';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -28,6 +32,8 @@ type ConversationModalProps = {
   onFunctionsChange: (updatedFunctions: FunctionOption[]) => void;
 };
 
+const db = new ConversationDB();
+
 const noopF = () => { };
 
 const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, minimize, editMessage, pruneMessage, openSha, openMessage, onNewModel, onFunctionsChange }) => {
@@ -39,6 +45,18 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
 
   const currentLeafHash = messages[messages.length - 1]?.hash; // no need for useMemo because it's a primitive
+
+  const availableChild: MessageDB | null | undefined = useLiveQuery(() => {
+    const message = messages[messages.length - 1];
+
+    return db.messages.where('parentHash').equals(message.hash).sortBy('timestamp').then(children => children[0] ?? null);
+  }, [messages], undefined);
+
+  const availableDescendent: MessageDB | null = useLiveQuery(() => {
+    const message = messages[messages.length - 1];
+
+    return db.getLeafMessageFromAncestor(message).then(leaf => leaf.hash === message.hash ? null : leaf);
+  }, [messages], null);
 
   useEffect(() => {
     const messageEnd = messagesEndRef.current;
@@ -69,6 +87,26 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
 
     onNewModel(newModel);
   }, [onNewModel]);
+
+  const renderExpander = useCallback((icon: ReactNode, message?: MessageDB, callback?: (message: MessageDB) => void) => {
+    const disabled = !callback;
+
+    return (
+      <Button
+        variant="contained"
+        style={{
+          borderRadius: '18px',
+          backgroundColor: disabled ? '#333' : '#424242', // Darker background color for dark mode
+          color: disabled ? '#424242' : '#E0E0E0', // Lighter text color for dark mode
+          padding: '4px 8px',
+        }}
+        onClick={() => callback && message && callback(message)}
+        disabled={disabled}
+      >
+        {icon}
+      </Button>
+    )
+  }, []);
 
   return (
     <Box
@@ -165,6 +203,24 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             isTail={false}
           />
         )}
+        <Box
+          sx={{
+            display: 'flex',
+            gap: '5px',
+            justifyContent: 'center',
+          }}
+        >
+          {availableChild ?
+            renderExpander(<KeyboardArrowDownIcon fontSize="inherit" />, availableChild, openMessage)
+            :
+            renderExpander(<KeyboardArrowDownIcon fontSize="inherit" />)
+          }
+          {availableDescendent && availableChild && availableChild.hash !== availableDescendent.hash ?
+            renderExpander(<KeyboardDoubleArrowDownIcon fontSize="inherit" />, availableDescendent, openMessage)
+            :
+            renderExpander(<KeyboardDoubleArrowDownIcon fontSize="inherit" />)
+          }
+        </Box>
         <div ref={messagesEndRef} />
       </Box>
 

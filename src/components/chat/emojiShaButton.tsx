@@ -6,16 +6,22 @@ import CopyButton from './copyButton';
 type EmojiShaButtonProps = {
   hash: string;
   openConversation: (hash: string) => void;
+  activeLink?: boolean;
 };
 
-const EmojiShaButton: React.FC<EmojiShaButtonProps> = ({ hash, openConversation }) => {
+const EmojiShaButton: React.FC<EmojiShaButtonProps> = ({ hash, openConversation, activeLink=true }) => {
   const handleOpen = useCallback(() => {
     openConversation(hash);
   }, [hash, openConversation]);
 
   return (
     <>
-      <span onClick={handleOpen}>{emojiSha(hash, 5)}</span>
+      {
+        activeLink ?
+          <a href="#" onClick={(e) => { e.preventDefault(); handleOpen(); }}>{emojiSha(hash, 5)}</a>
+          :
+          emojiSha(hash, 5)
+      }
       <CopyButton contentToCopy={hash} copyIcon={<AssignmentIndIcon fontSize='inherit' />} />
     </>
   );

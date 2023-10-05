@@ -37,22 +37,6 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
     return db.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
   }, [message], []);
 
-  const availableChild: MessageDB | null | undefined = useLiveQuery(() => {
-    if (!isMessageDB(message) || !isTail) {
-      return null;
-    }
-
-    return db.messages.where('parentHash').equals(message.hash).sortBy('timestamp').then(children => children[0] ?? null);
-  }, [message, isTail], undefined);
-
-  const availableDescendent: MessageDB | null = useLiveQuery(() => {
-    if (!isMessageDB(message) || !isTail) {
-      return null;
-    }
-
-    return db.getLeafMessageFromAncestor(message).then(leaf => leaf.hash === message.hash ? null : leaf);
-  }, [message, isTail], null);
-
   const siblingPos = isMessageDB(message) ? siblings.findIndex((sibling) => sibling.hash === message.hash) + 1 : 0;
   const leftSibling = isMessageDB(message) ? siblings[siblingPos - 2] ?? null : null;
   const rightSibling = isMessageDB(message) ? siblings[siblingPos] ?? null : null;
@@ -166,19 +150,6 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
                   disabled
                 />
               }
-              { isTail &&
-                <>
-                  {availableChild &&
-                    <>
-                      <CornerButton onClick={() => openMessage(availableChild)} icon={<KeyboardArrowDownIcon fontSize="inherit" />} />
-                      {availableDescendent && availableChild.hash !== availableDescendent.hash && <CornerButton onClick={() => openMessage(availableDescendent)} icon={<KeyboardDoubleArrowDownIcon fontSize="inherit" />} />}
-                    </>
-                  }
-                  {availableChild === null &&
-                    <CornerButton onClick={() => {}} icon={<KeyboardArrowDownIcon fontSize="inherit" />} disabled />
-                  }
-                </>
-              }
             </>
           }
         </Box>
@@ -201,7 +172,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
           {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
           {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
           <CopyButton contentToCopy={message.content} />
-          {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} />}
+          {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} activeLink={!isTail} />}
         </Box>
       </Box>
     </Box>
