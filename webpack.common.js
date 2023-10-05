@@ -80,6 +80,9 @@ module.exports = {
       logo: './src/full_favicon_trimmed.png', // path to your favicon source file
       // Inject the html into the html-webpack-plugin
       inject: true,
+      mode: 'light',
+      appName: '',
+      shortName: '',
     }),
   ],
 };
