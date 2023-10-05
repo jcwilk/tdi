@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import { emojiSha } from '../../chat/emojiSha';
 import CopyButton from './copyButton';
+import PillButton from './pillButton';
 
 type EmojiShaButtonProps = {
   hash: string;
@@ -16,12 +17,10 @@ const EmojiShaButton: React.FC<EmojiShaButtonProps> = ({ hash, openConversation,
 
   return (
     <>
-      {
-        activeLink ?
-          <a href="#" onClick={(e) => { e.preventDefault(); handleOpen(); }}>{emojiSha(hash, 5)}</a>
-          :
-          emojiSha(hash, 5)
-      }
+      <PillButton
+        contents={emojiSha(hash, 5)}
+        onOpen={activeLink ? handleOpen : undefined}
+      />
       <CopyButton contentToCopy={hash} copyIcon={<AssignmentIndIcon fontSize='inherit' />} />
     </>
   );

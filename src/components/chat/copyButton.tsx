@@ -12,8 +12,7 @@ type CopyButtonProps = {
 const CopyButton: React.FC<CopyButtonProps> = ({ contentToCopy, copyIcon=<ContentPasteIcon fontSize='inherit' /> }) => {
   const [isCopied, setIsCopied] = useState(false);
 
-  const handleCopyClick = (event: React.MouseEvent) => {
-    event.stopPropagation();
+  const handleCopyClick = () => {
     copy(contentToCopy);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);

@@ -6,6 +6,7 @@ import CopyButton from './copyButton';
 import { emojiSha } from '../../chat/emojiSha';
 import { Link } from '@mui/material';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import PillButton from './pillButton';
 
 // This regex matches SHA hashes (0-9, a-f, 40 characters long)
 const shaRegex = /([a-f0-9]{40,})/;
@@ -24,18 +25,12 @@ const parseContent = (content: string, openOtherHash: (hash: string) => void) =>
   return parts.reduce<(string | JSX.Element)[]>((acc, part, index) => {
     if (shaRegex.test(part)) {
       acc.push(
-        <Link
-          component="button"
-          variant="body2"
-          onClick={(event) => {
-            event.preventDefault();
-            openOtherHash(part);
-          }}
-          key={index + "_link"}
-        >
-          {emojiSha(part, 5)}
-          <CopyButton contentToCopy={part} key={index} copyIcon={<AssignmentIndIcon fontSize='inherit' />} />
-        </Link>
+        <PillButton
+          contents={emojiSha(part, 5)}
+          onOpen={() => openOtherHash(part)}
+          key={index + "_pill"}
+        />,
+        <CopyButton contentToCopy={part} key={index} copyIcon={<AssignmentIndIcon fontSize='inherit' />} />
       );
     }
     else {

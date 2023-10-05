@@ -120,7 +120,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
         <Box
           sx={{
             display: 'flex',
-            gap: '5px',
+            gap: '2px',
           }}
         >
           { isMessageDB(message) && (leftSibling || rightSibling) &&
@@ -153,20 +153,10 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
             </>
           }
         </Box>
-
         <Box
           sx={{
             display: 'flex',
-            gap: '5px',
-          }}
-        >
-
-        </Box>
-
-        <Box
-          sx={{
-            display: 'flex',
-            gap: '5px',
+            gap: '2px',
           }}
         >
           {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
