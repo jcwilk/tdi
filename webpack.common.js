@@ -2,6 +2,7 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const HtmlInlineScriptPlugin = require('html-inline-script-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin')
+const FaviconsWebpackPlugin = require('favicons-webpack-plugin');
 
 module.exports = {
   entry: {
@@ -72,6 +73,13 @@ module.exports = {
           to: path.resolve(__dirname, 'docs/jasmine/'),
         },
       ],
+    }),
+
+    new FaviconsWebpackPlugin({
+      // Your source logo (required)
+      logo: './src/full_favicon_trimmed.png', // path to your favicon source file
+      // Inject the html into the html-webpack-plugin
+      inject: true,
     }),
   ],
 };
