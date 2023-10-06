@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
@@ -14,8 +14,8 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useLiveQuery } from "dexie-react-hooks"
 import CornerButton from './cornerButton';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
+import InfoIcon from '@mui/icons-material/Info';
+import MessageDetails from './messageDetails';
 
 type MessageProps = {
   message: MaybePersistedMessage;
@@ -29,6 +29,8 @@ type MessageProps = {
 const db = new ConversationDB();
 
 const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage, isTail }) => {
+  const [openDetails, setOpenDetails] = useState(false);
+
   const siblings: MessageDB[] = useLiveQuery(() => {
     if (!isMessageDB(message)) {
       return [];
@@ -162,9 +164,13 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
           {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
           {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
           <CopyButton contentToCopy={message.content} />
+          {isMessageDB(message) && <CornerButton onClick={() => setOpenDetails(true)} icon={<InfoIcon fontSize="inherit" />} />}
           {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} activeLink={!isTail} />}
         </Box>
       </Box>
+      { isMessageDB(message) &&
+        <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} openOtherHash={openOtherHash} />
+      }
     </Box>
   );
 };
