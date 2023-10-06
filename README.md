@@ -7,8 +7,8 @@ It can be visited at [jcwilk.github.io/tdi](https://jcwilk.github.io/tdi) - It r
 ## TDI Legacy
 
 If you're looking for or are curious about the history of this project, or are interested in a workflow/step/test oriented interface rather than a more open-ended chat
-interface, then go over and check out [github.com/jcwilk/tdi_legacy] formerly called "Test Driven Interactions". There's a gif there illustrating how it works and is also
-running as a freely available Github Pages site.
+interface, then go over and check out [github.com/jcwilk/tdi_legacy](https://github.com/jcwilk/tdi_legacy) formerly called "Test Driven Interactions". There's a gif there
+illustrating how it works and is also running as a freely available Github Pages site.
 
 ## How to run
 
