@@ -3,7 +3,7 @@ import BackspaceIcon from '@mui/icons-material/Backspace';
 import CornerButton from './cornerButton';
 
 type PruneButtonProps = {
-  onClick: (event: React.MouseEvent) => void;
+  onClick: () => void;
 };
 
 const PruneButton: React.FC<PruneButtonProps> = ({ onClick }) => {

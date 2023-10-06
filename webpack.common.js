@@ -6,7 +6,6 @@ const FaviconsWebpackPlugin = require('favicons-webpack-plugin');
 
 module.exports = {
   entry: {
-    main: './src/index.ts',
     react: './src/react-index.tsx', // Add your React entry point here
   },
   module: {

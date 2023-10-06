@@ -3,7 +3,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import CornerButton from './cornerButton';
 
 type EditButtonProps = {
-  onClick: (event: React.MouseEvent) => void;
+  onClick: () => void;
 };
 
 const EditButton: React.FC<EditButtonProps> = ({ onClick }) => {
