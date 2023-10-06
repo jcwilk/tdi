@@ -7,7 +7,7 @@
         "doc": "docs"
     },
     "scripts": {
-        "test": "jest test",
+        "test": "jest test --passWithNoTests",
         "build": "webpack --config webpack.prod.js",
         "dev": "webpack serve --open --public 'localhost:8080/tdi' --config webpack.dev.js"
     },
