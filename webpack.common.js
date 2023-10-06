@@ -56,7 +56,7 @@ module.exports = {
   },
   plugins: [
     new HtmlWebpackPlugin({
-      title: 'Template',
+      title: 'Tree Driven Interaction',
       template: 'src/index.html',
       minify: {
         collapseWhitespace: false,

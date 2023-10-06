@@ -1,4 +1,4 @@
-# Tree Driven Interactions with GPT prototype
+# Tree Driven Interaction with GPT prototype
 
 This is a Pages-only SPA prototype for a more comprehensive flow of building software function-by-function via code-guided interactions with GPT.
 
