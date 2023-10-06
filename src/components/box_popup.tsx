@@ -5,27 +5,35 @@ import {
   Box,
   Chip,
   Stack,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import MicIcon from '@mui/icons-material/Mic';
 import { getTranscription, getEdit } from "../openai_api";
 import FullScreenPopup from './full_screen_popup';
+import { MessageDB } from "../chat/conversationDb";
+import { ParticipantRole } from "../chat/participantSubjects";
+import AssistantIcon from '@mui/icons-material/PrecisionManufacturing';
+import UserIcon from '@mui/icons-material/Person';
+import SystemIcon from '@mui/icons-material/Dns';
+import FunctionIcon from '@mui/icons-material/Functions';
 
 interface BoxPopupProps {
   openEditor: string;
   onClose: (text: string) => void;
   onSubmitText?: string;
-  onSubmit?: (text: string) => void;
+  onSubmit?: (text: string, role: ParticipantRole) => void;
   description: string;
-  text: string;
+  message: MessageDB;
   fieldId: string;
   fieldName: string;
 }
 
 export default function BoxPopup({
   fieldId,
-  text,
+  message,
   openEditor,
   onClose,
   onSubmit,
@@ -33,16 +41,14 @@ export default function BoxPopup({
   description,
   fieldName
 }: BoxPopupProps) {
-  const [textValue, setTextValue] = useState(text);
+  const [textValue, setTextValue] = useState(message.content);
   const [onStopRecordingEdit, setOnStopRecordingEdit] = useState<Function | null>(null);
   const [onStopRecordingRedo, setOnStopRecordingRedo] = useState<Function | null>(null);
+  const [role, setRole] = useState<ParticipantRole>(message.role);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTextValue(e.target.value);
   };
-
-  useEffect(() => {
-    setTextValue(text);
-  }, [text]);
 
   // Call this function when the user starts recording
   async function startRecordingRedo() {
@@ -70,16 +76,44 @@ export default function BoxPopup({
     });
   }
 
+  const handleRoleChange = (
+    event: React.MouseEvent<HTMLElement>,
+    newRole: ParticipantRole,
+  ) => {
+    if (newRole !== null) {
+      setRole(newRole);
+    }
+  };
+
   return (
     <FullScreenPopup
       open={fieldId === openEditor}
       onClose={() => onClose(textValue)}
       title={description}
       submitText={onSubmitText}
-      onSubmit={() => onSubmit && onSubmit(textValue)}
+      onSubmit={() => onSubmit && onSubmit(textValue, role)}
     >
       <Box sx={{ p: 2 }}>
         <Stack spacing={1}>
+          <ToggleButtonGroup
+            value={role}
+            exclusive
+            onChange={handleRoleChange}
+            aria-label="text alignment"
+          >
+            <ToggleButton value="system" aria-label="system">
+              <SystemIcon />
+            </ToggleButton>
+            <ToggleButton value="assistant" aria-label="assistant">
+              <AssistantIcon />
+            </ToggleButton>
+            <ToggleButton value="user" aria-label="user">
+              <UserIcon />
+            </ToggleButton>
+            <ToggleButton value="function" aria-label="function">
+              <FunctionIcon />
+            </ToggleButton>
+          </ToggleButtonGroup>
           <Stack direction="row" spacing={1}>
             <Chip
               icon={

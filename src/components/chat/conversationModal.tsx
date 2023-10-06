@@ -16,15 +16,15 @@ import MessageEntry from './messageEntry';
 import PauseIcon from '@mui/icons-material/Pause';
 import MinimizeIcon from '@mui/icons-material/Minimize';
 import { useLiveQuery } from 'dexie-react-hooks';
-import CornerButton from './cornerButton';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
+import { ParticipantRole } from '../../chat/participantSubjects';
 
 type ConversationModalProps = {
   conversation: Conversation;
   onClose: () => void;
   minimize: () => void;
-  editMessage: (message: MessageDB, newContent: string) => void; // Callback for editing a message
+  editMessage: (message: MessageDB, newContent: string, newRole: ParticipantRole) => void; // Callback for editing a message
   pruneMessage: (message: MessageDB) => void; // Callback for pruning a message
   openSha: (leafMessage: string) => void; // Callback for attempting to open a message by sha
   openMessage: (message: MessageDB) => void; // Callback for opening a message in the editor
@@ -224,19 +224,21 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
         <div ref={messagesEndRef} />
       </Box>
 
-      <BoxPopup
-        fieldId={editingMessage?.hash ?? "non-id"}
-        openEditor={editingMessage?.hash ?? "closed"}
-        onClose={() => setEditingMessage(null)}
-        onSubmit={async (text) => {
-          editingMessage && await editMessage(editingMessage, text);
-          setEditingMessage(null);
-        }}
-        onSubmitText='Update'
-        description="Message"
-        text={editingMessage?.content || ""}
-        fieldName='Content'
-      />
+      { editingMessage &&
+        <BoxPopup
+          fieldId={editingMessage?.hash ?? "non-id"}
+          openEditor={editingMessage?.hash ?? "closed"}
+          onClose={() => setEditingMessage(null)}
+          onSubmit={async (text, role) => {
+            editingMessage && await editMessage(editingMessage, text, role);
+            setEditingMessage(null);
+          }}
+          onSubmitText='Update'
+          description="Message"
+          message={editingMessage}
+          fieldName='Content'
+        />
+      }
       <MessageEntry
         conversation={conversation}
         autoScroll={autoScroll}

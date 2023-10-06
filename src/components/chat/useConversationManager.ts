@@ -9,6 +9,7 @@ import { RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 import { v4 as uuidv4 } from 'uuid';
 import { editConversation, pruneConversation } from '../../chat/messagePersistence';
+import { ParticipantRole } from '../../chat/participantSubjects';
 
 type NavigateState = {
   activeConversation?: string; // uuid
@@ -359,7 +360,7 @@ export function useConversationsManager(db: ConversationDB) {
   //////////
   // The below commands are expected to drop the new convo into "paused" - the above commands are not
   //////////
-  const editMessage = useCallback(async (messageToEdit: MessageDB, newContent: string) => {
+  const editMessage = useCallback(async (messageToEdit: MessageDB, newContent: string, newRole: ParticipantRole) => {
     if (!activeRunningConversation) return;
 
     const messagesUpToEdit = await db.getConversationFromLeaf(messageToEdit.hash);
@@ -368,7 +369,7 @@ export function useConversationsManager(db: ConversationDB) {
     const lastMessage = getLastMessage(activeRunningConversation.conversation);
     if (!lastMessage) return;
 
-    const newLeafMessage = await editConversation(lastMessage, messageToEdit, {role: messageToEdit.role, content: newContent});
+    const newLeafMessage = await editConversation(lastMessage, messageToEdit, {role: newRole, content: newContent});
     if(newLeafMessage.hash === lastMessage.hash) return;
 
     openMessage(newLeafMessage); // TODO: add a new special replace existing convo action when the convo is paused
