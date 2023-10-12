@@ -14,7 +14,7 @@ const CornerButton: React.FC<CornerButtonProps> = ({ onClick, icon, disabled = f
       maxWidth: '100%', // Allow it to take up to 100% of the container width
       overflow: 'hidden', // Hide overflow
     }}
-    onOpen={onClick}
+    onOpen={disabled ? undefined : onClick}
   />
 );
 

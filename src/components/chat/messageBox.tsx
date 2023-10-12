@@ -43,6 +43,8 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
   const leftSibling = isMessageDB(message) ? siblings[siblingPos - 2] ?? null : null;
   const rightSibling = isMessageDB(message) ? siblings[siblingPos] ?? null : null;
 
+  console.log("siblings", siblings, siblingPos, leftSibling, rightSibling)
+
   // Define styles
   let backgroundColor: string;
   let icon: JSX.Element; // You would define your icons here based on message role

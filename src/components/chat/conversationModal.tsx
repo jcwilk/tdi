@@ -189,7 +189,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             onEdit={setEditingMessage}
             openOtherHash={openSha}
             openMessage={openMessage}
-            isTail={index === messages.length - 1}
+            isTail={index === messages.length - 1 && !assistantTyping}
           />
         ))}
         {assistantTyping && (
