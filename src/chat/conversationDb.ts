@@ -1,3 +1,5 @@
+// TODO: rename file to messageDb.ts and type from MessageDB to PersistedMessage
+
 import Dexie from 'dexie';
 import { ParticipantRole } from './participantSubjects';
 import { Message } from './conversation';
@@ -13,6 +15,8 @@ export interface MessageDB {
 }
 
 export type MaybePersistedMessage = Message | MessageDB;
+
+export type ConversationMessages = [MessageDB, ...MessageDB[]];
 
 export function isMessageDB(message: MaybePersistedMessage): message is MessageDB {
   return (message as MessageDB).hash !== undefined;
@@ -83,6 +87,16 @@ export class ConversationDB extends Dexie {
     }
 
     return conversation.reverse();
+  }
+
+  async getConversationFromLeafMessage(leafMessage: MessageDB): Promise<ConversationMessages> {
+    const conversation: ConversationMessages = [leafMessage];
+    if (!leafMessage.parentHash) return conversation;
+
+    const parentMessage = await this.getMessageByHash(leafMessage.parentHash);
+    if (!parentMessage) return conversation;
+
+    return [...await this.getConversationFromLeafMessage(parentMessage), ...conversation];
   }
 
   getLeafMessages(): Observable<MessageDB> {

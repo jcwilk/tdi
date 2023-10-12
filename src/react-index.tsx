@@ -5,10 +5,13 @@ import { RouterState } from '@remix-run/router';
 import { BehaviorSubject } from 'rxjs';
 import Client from './components/chat/client';
 import './index.css';
+import { MessageAndConversationProvider } from './components/chat/useConversationStore';
 
 const App = () => {
   return (
-    <Client />
+    <MessageAndConversationProvider>
+      <Client />
+    </MessageAndConversationProvider>
   );
 };
 

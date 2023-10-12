@@ -1,6 +1,6 @@
 import { BehaviorSubject, Observable, Subject, concatMap, distinctUntilChanged, filter, from, map, of, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
-import { MessageDB } from './conversationDb';
+import { ConversationMessages, MessageDB } from './conversationDb';
 import { processMessagesWithHashing } from './messagePersistence';
 import { FunctionCall, FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
@@ -47,7 +47,7 @@ function isNewMessageEvent(event: ConversationEvent): event is NewMessageEvent {
 }
 
 export type ConversationState = {
-  messages: MessageDB[];
+  messages: ConversationMessages;
   typingStatus: Map<TyperRole, string>;
 };
 
@@ -71,13 +71,19 @@ interface ScanState {
   event: TypingUpdateEvent | ProcessedMessageEvent | null;
 }
 
-export function createConversation(loadedMessages: MessageDB[], model: ConversationMode = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Conversation {
+export function createConversation(loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Conversation {
   const conversation: Conversation = {
     newMessagesInput: new Subject<ConversationEvent>(),
     outgoingMessageStream: new BehaviorSubject({ messages: loadedMessages, typingStatus: new Map() }),
     functions,
     model
   }
+
+  conversation.outgoingMessageStream.subscribe({
+    complete: () => {
+      console.log("completed conversation!")
+    }
+  })
 
   const lastMessage = loadedMessages[loadedMessages.length - 1];
 
@@ -102,7 +108,7 @@ export function createConversation(loadedMessages: MessageDB[], model: Conversat
     scan(
       (state: ConversationState, event: ConversationEvent) => {
         if (event.type === 'processedMessage') {
-          const newMessages = [...state.messages, event.payload];
+          const newMessages: ConversationMessages = [...state.messages, event.payload];
           const role = event.payload.role;
           if (isTyperRole(role) && state.typingStatus.get(role)) {
             return { ...state, messages: newMessages, typingStatus: new Map(state.typingStatus).set(role, '') };
@@ -173,7 +179,7 @@ export function sendFunctionCall(conversation: Conversation, functionCall: Funct
   } as NewMessageEvent);
 }
 
-export function getLastMessage(conversation: Conversation): MessageDB | undefined {
+export function getLastMessage(conversation: Conversation): MessageDB {
   const messages = conversation.outgoingMessageStream.value.messages;
   return messages[messages.length - 1];
 }

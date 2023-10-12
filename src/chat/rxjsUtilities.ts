@@ -1,4 +1,4 @@
-import { Observable, ReplaySubject, Subject, concatMap, finalize, from, map } from "rxjs";
+import { BehaviorSubject, Observable, ReplaySubject, Subject, concatMap, finalize, from, map, of, skip, switchMap, tap } from "rxjs";
 
 export function subscribeUntilFinalized<T>(
   source: Observable<T>,
@@ -43,3 +43,15 @@ export function scanAsync<T, R>(
       )
     );
 };
+
+export function concatTap<T>(callback: (value: T) => Observable<any>) {
+  return concatMap((value: T) => callback(value).pipe(tap(() => {}), () => of(value)));
+}
+
+export function switchTap<T>(callback: (value: T) => Observable<any>) {
+  return switchMap((value: T) => callback(value).pipe(tap(() => {})));
+}
+
+export function observeNew<T>(subject: BehaviorSubject<T>): Observable<T> {
+  return subject.asObservable().pipe(skip(1));
+}

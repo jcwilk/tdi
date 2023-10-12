@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ConversationDB, MessageDB } from '../../chat/conversationDb';
+import { ConversationDB } from '../../chat/conversationDb';
 import ConversationModal from './conversationModal';
 import LeafMessages from './leafMessages';
 import { useConversationsManager } from './useConversationManager';
@@ -30,8 +30,7 @@ const Client: React.FC = () => {
   const db = useMemo(() => new ConversationDB(), []);
 
   const {
-    activeRunningConversation,
-    runningConversations,
+    runningConversation,
     goBack,
     minimize,
     editMessage,
@@ -46,10 +45,10 @@ const Client: React.FC = () => {
   return (
     <ThemeProvider theme={darkTheme}>
       {
-        activeRunningConversation ?
+        runningConversation ?
           <ConversationModal
-            key={activeRunningConversation.id}
-            conversation={activeRunningConversation.conversation}
+            key={runningConversation.id}
+            conversation={runningConversation.conversation}
             onClose={goBack}
             minimize={minimize}
             editMessage={editMessage}
@@ -60,7 +59,7 @@ const Client: React.FC = () => {
             onFunctionsChange={changeFunctions}
           />
           :
-          <LeafMessages db={db} runningConversations={runningConversations} openMessage={(message: MessageDB) => openMessage(message, "gpt-3.5-turbo")} switchToConversation={switchToConversation} />
+          <LeafMessages db={db} openMessage={openMessage} switchToConversation={switchToConversation} />
       }
     </ThemeProvider>
   );

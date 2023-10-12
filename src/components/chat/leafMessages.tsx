@@ -6,7 +6,7 @@ import { Box, Button, List, ListItemButton, ListItemText, Paper, Typography } fr
 import { styled } from '@mui/material/styles';
 import { emojiSha } from '../../chat/emojiSha';
 import { debounceTime, scan, tap } from 'rxjs';
-import { RunningConversation } from './useConversationManager';
+import { RunningConversation, useConversationStore } from './useConversationStore';
 
 // Define the striped styling
 const StripedListItem = styled(ListItemButton)`
@@ -45,18 +45,17 @@ function insertSortedByTimestamp(messages: MessageDB[], message: MessageDB): Mes
 
 const LeafMessages: React.FC<{
   db: ConversationDB,
-  runningConversations: RunningConversation[],
   openMessage: (message: MessageDB) => void,
   switchToConversation: (runningConversation: RunningConversation) => void
-}> = ({ db, runningConversations, openMessage, switchToConversation }) => {
+}> = ({ db, openMessage, switchToConversation }) => {
   const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
   const [version, setVersion] = useState(0);
+
+  const runningConversations = useConversationStore();
 
   useEffect(() => {
     const subscriptions = runningConversations.map(({conversation}) =>
       observeNewMessages(conversation).subscribe(() => {
-        // TODO: This causes everything to get repainted on every new message, but it should only cause the leafMessages interface to get repainted
-        // instead, we should find a way to shunt all this subscription stuff into the leafMessages component, perhaps by passing runningConversations in?
         setVersion(prevVersion => prevVersion + 1);
       })
     );

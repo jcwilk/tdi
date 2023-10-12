@@ -95,7 +95,7 @@ export async function editConversation(
 
 export async function pruneConversation(
   leafMessage: MessageDB,
-  excludedHashes: string[]
+  excludedMessage: MessageDB
 ): Promise<MessageDB> {
   const conversationDB = new ConversationDB();
 
@@ -103,7 +103,7 @@ export async function pruneConversation(
   const conversation = await conversationDB.getConversationFromLeaf(leafMessage.hash);
 
   // Determine the first excluded message index
-  const firstExcludedIndex = conversation.findIndex(message => excludedHashes.includes(message.hash));
+  const firstExcludedIndex = conversation.findIndex(message => excludedMessage.hash == message.hash);
 
   // If no excluded message is found, return the leaf as is.
   if (firstExcludedIndex === -1) {
