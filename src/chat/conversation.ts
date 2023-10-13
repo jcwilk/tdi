@@ -1,7 +1,7 @@
 import { BehaviorSubject, Observable, Subject, concatMap, distinctUntilChanged, filter, from, map, of, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
-import { ConversationMessages, MessageDB } from './conversationDb';
-import { processMessagesWithHashing } from './messagePersistence';
+import { ConversationDB, ConversationMessages, MessageDB } from './conversationDb';
+import { processMessagesWithHashing, reprocessMessagesStartingFrom } from './messagePersistence';
 import { FunctionCall, FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
 import { SupportedModels } from './chatStreams';
@@ -28,7 +28,7 @@ export type NewMessageEvent = {
 
 export type ProcessedMessageEvent = {
   type: 'processedMessage';
-  payload: MessageDB; // assuming MessageDB is the type for processed messages
+  payload: MessageDB;
 };
 
 export type TypingUpdateEvent = {
@@ -55,8 +55,8 @@ export type ConversationModel = SupportedModels & ("gpt-3.5-turbo" | "gpt-4")
 
 export type ConversationMode = ConversationModel | "paused";
 
-export function isConversationMode(mode: string): mode is ConversationModel {
-  return ["gpt-3.5-turbo", "gpt-4", "gpt-3.5-turbo-0613", "gpt-4-0613", "paused"].includes(mode);
+export function isConversationMode(mode: string): mode is ConversationMode {
+  return ["gpt-3.5-turbo", "gpt-4", "paused"].includes(mode);
 }
 
 export type Conversation = {
@@ -71,7 +71,13 @@ interface ScanState {
   event: TypingUpdateEvent | ProcessedMessageEvent | null;
 }
 
-export function createConversation(loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Conversation {
+export async function createConversation(db: ConversationDB, loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Promise<Conversation> {
+  const newLeafMessage = await reprocessMessagesStartingFrom(loadedMessages);
+
+  if (newLeafMessage.hash !== loadedMessages[loadedMessages.length - 1].hash) {
+    loadedMessages = await db.getConversationFromLeafMessage(newLeafMessage);
+  }
+
   const conversation: Conversation = {
     newMessagesInput: new Subject<ConversationEvent>(),
     outgoingMessageStream: new BehaviorSubject({ messages: loadedMessages, typingStatus: new Map() }),

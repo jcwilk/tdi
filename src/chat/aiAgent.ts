@@ -193,7 +193,6 @@ function handleGptMessages(conversation: Conversation, typingAndSending: Observa
   ).subscribe();
 }
 
-
 function switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages: Observable<[Message[], TypingUpdate]>) {
   return newInterruptingUserMessages.pipe(
     switchMap(([messages, typingUpdate]) => {

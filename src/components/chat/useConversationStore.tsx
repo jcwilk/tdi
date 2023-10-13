@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Conversation, ConversationMode, createConversation, getLastMessage, teardownConversation } from "../../chat/conversation";
 import { ConversationDB, ConversationMessages, MessageDB } from '../../chat/conversationDb';
-import { BehaviorSubject, Observable, Subject, Subscription, debounceTime, filter, from, map, merge, of, switchMap, tap } from 'rxjs';
+import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, debounceTime, filter, from, map, merge, mergeMap, of, scan, switchMap, tap } from 'rxjs';
 import { FunctionOption } from '../../openai_api';
 import { addAssistant } from '../../chat/aiAgent';
 import { v4 as uuidv4 } from 'uuid';
@@ -64,8 +64,8 @@ export const MessageAndConversationProvider: React.FC<React.PropsWithChildren> =
   );
 }
 
-function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-3.5-turbo", functionOptions: FunctionOption[] = []): Conversation {
-  return addAssistant(createConversation(messages, model, functionOptions), db);
+async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-3.5-turbo", functionOptions: FunctionOption[] = []): Promise<Conversation> {
+  return addAssistant(await createConversation(db, messages, model, functionOptions), db);
 }
 
 function createConversationSlot(id: string, messagesStore: ConversationDB): ConversationSlot {
@@ -77,10 +77,33 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
   const asyncSwitchedInput = new Subject<Observable<Conversation>>();
 
   asyncSwitchedInput.pipe(
-    switchMap((conversationObservable) => conversationObservable),
+    /* /// The below clusterfuck is to make certain that we teardown conversations we're not using /// */
+
+    // pair the observable up with an index so we can detect out-of-order responses
+    scan((acc, innerObservable) => [acc[0] + 1, innerObservable] as [number, Observable<Conversation>], [0, new Subject<Conversation>().asObservable()] as [number, Observable<Conversation>]),
+    mergeMap(([index, conversationObservable]) => conversationObservable.pipe(map(conversation => [index, conversation] as [number, Conversation]))),
+
+    // scan for out-of-order messages - if we get one then teardown the conversation and don't emit it
+    scan(([lastIndex, _lastConversation], [index, conversation]) => {
+      if (index < lastIndex) {
+        teardownConversation(conversation);
+        return [lastIndex, undefined] as [number, undefined];
+      }
+
+      return [index, conversation] as [number, Conversation];
+    }, [-1, undefined] as [number, Conversation | undefined]),
+    map(([_index, conversation]) => conversation),
+
+    // filter out removed conversations
+    filter((conversation): conversation is Conversation => conversation !== undefined),
+
+    // events that get here are legit, so teardown the old value if it exists
+    tap(conversation => currentConversation.value && currentConversation.value.conversation !== conversation && teardownConversation(currentConversation.value.conversation)),
+
+    /* /// end teardown management clusterfuck /// */
+
     map(conversation => ({id, conversation} as RunningConversation)),
-    tap((runningConversation) => currentConversation.value && currentConversation.value.conversation !== runningConversation.conversation && teardownConversation(currentConversation.value.conversation)),
-    tap((runningConversation) => console.log("tap check", runningConversation)),
+    tap(runningConversation => console.log("tap check", runningConversation)),
   ).subscribe(currentConversation);
 
   return {
@@ -92,6 +115,7 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
           console.log("resolvedSpec", resolvedSpec)
           return messagesStore.getConversationFromLeafMessage(resolvedSpec.tail).then(conversation => [conversation, resolvedSpec] as [ConversationMessages, ConversationSpec]);
         }).then(([messages, resolvedSpec]) => {
+          // TODO: somewhere around here might be a good place to do message reprocessing, if we want messages to not be immutable
           console.log("messages", messages)
           if (!overwrite && currentConversation.value) {
             return currentConversation.value.conversation;
