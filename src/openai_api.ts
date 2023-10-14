@@ -154,6 +154,8 @@ export async function getEmbedding(
   const OPENAI_KEY = APIKeyFetcher();
   if (!OPENAI_KEY) throw new Error("API Key not found");
 
+  console.log("Getting embedding!", inputText, model)
+
   const payload = {
     input: inputText,
     model: model

@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Conversation, ConversationMode, createConversation, getLastMessage, teardownConversation } from "../../chat/conversation";
 import { ConversationDB, ConversationMessages, MessageDB } from '../../chat/conversationDb';
-import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, debounceTime, filter, from, map, merge, mergeMap, of, scan, switchMap, tap } from 'rxjs';
+import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, debounceTime, filter, finalize, from, map, merge, mergeMap, of, scan, switchMap, tap } from 'rxjs';
 import { FunctionOption } from '../../openai_api';
 import { addAssistant } from '../../chat/aiAgent';
 import { v4 as uuidv4 } from 'uuid';
@@ -99,6 +99,9 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
 
     // events that get here are legit, so teardown the old value if it exists
     tap(conversation => currentConversation.value && currentConversation.value.conversation !== conversation && teardownConversation(currentConversation.value.conversation)),
+
+    // make sure to teardown the conversation when the slot gets torndown as well
+    finalize(() => currentConversation.value && teardownConversation(currentConversation.value.conversation)),
 
     /* /// end teardown management clusterfuck /// */
 

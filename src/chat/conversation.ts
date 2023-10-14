@@ -72,7 +72,7 @@ interface ScanState {
 }
 
 export async function createConversation(db: ConversationDB, loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Promise<Conversation> {
-  const newLeafMessage = await reprocessMessagesStartingFrom(loadedMessages);
+  const newLeafMessage = await reprocessMessagesStartingFrom(model, loadedMessages);
 
   if (newLeafMessage.hash !== loadedMessages[loadedMessages.length - 1].hash) {
     loadedMessages = await db.getConversationFromLeafMessage(newLeafMessage);
@@ -98,7 +98,7 @@ export async function createConversation(db: ConversationDB, loadedMessages: Con
       if (isNewMessageEvent(event) || isErrorMessageEvent(event)) {
         const currentParentHashes = acc.lastProcessedHash ? [acc.lastProcessedHash] : [];
 
-        const persistedMessage = await processMessagesWithHashing(event.payload, currentParentHashes);
+        const persistedMessage = await processMessagesWithHashing(model, event.payload, currentParentHashes);
 
         return {
           lastProcessedHash: persistedMessage.hash,
@@ -149,7 +149,7 @@ export function sendSystemMessage(conversation: Conversation, message: string) {
 }
 
 export function teardownConversation(conversation: Conversation) {
-  console.log("TEARDOWN");
+  console.log("TEARDOWNCONVO");
   conversation.newMessagesInput.complete();
 }
 

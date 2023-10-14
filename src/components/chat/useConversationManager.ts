@@ -209,7 +209,7 @@ export function useConversationsManager(db: ConversationDB) {
 
     const lastMessage = getLastMessage(runningConversation.conversation);
 
-    const newLeafMessage = await editConversation(lastMessage, messageToEdit, {role: newRole, content: newContent});
+    const newLeafMessage = await editConversation(runningConversation.conversation.model, lastMessage, messageToEdit, {role: newRole, content: newContent});
     if(newLeafMessage.hash === lastMessage.hash) return;
 
     await openMessage(newLeafMessage);
@@ -220,7 +220,7 @@ export function useConversationsManager(db: ConversationDB) {
 
     const lastMessage = getLastMessage(runningConversation.conversation);
 
-    const newLeafMessage = await pruneConversation(lastMessage, message);
+    const newLeafMessage = await pruneConversation(runningConversation.conversation.model, lastMessage, message);
     if(newLeafMessage.hash == lastMessage.hash) return;
 
     openMessage(newLeafMessage);

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box } from '@mui/material';
+import { Badge, Box } from '@mui/material';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import PruneButton from './pruneButton';
@@ -16,6 +16,7 @@ import { useLiveQuery } from "dexie-react-hooks"
 import CornerButton from './cornerButton';
 import InfoIcon from '@mui/icons-material/Info';
 import MessageDetails from './messageDetails';
+import PauseIcon from '@mui/icons-material/Pause';
 
 type MessageProps = {
   message: MaybePersistedMessage;
@@ -38,6 +39,14 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
 
     return db.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
   }, [message], []);
+
+  const incompletePersistence: boolean = useLiveQuery(() => {
+    if (!isMessageDB(message)) {
+      return false;
+    }
+
+    return db.getEmbeddingByHash(message.hash).then(embedding => !embedding);
+  }, [message], false);
 
   const siblingPos = isMessageDB(message) ? siblings.findIndex((sibling) => sibling.hash === message.hash) + 1 : 0;
   const leftSibling = isMessageDB(message) ? siblings[siblingPos - 2] ?? null : null;
@@ -98,7 +107,13 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
             // Additional styles for the icon
           }}
         >
-          {icon}
+          {
+            incompletePersistence
+            ?
+            <Badge badgeContent={<PauseIcon fontSize='inherit' />} color="primary">{icon}</Badge>
+            :
+            icon
+          }
         </Box>
         <Box
           component="span"
@@ -171,7 +186,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
         </Box>
       </Box>
       { isMessageDB(message) &&
-        <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} openOtherHash={openOtherHash} />
+        <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} openOtherHash={openOtherHash} incompletePersistence={incompletePersistence} />
       }
     </Box>
   );

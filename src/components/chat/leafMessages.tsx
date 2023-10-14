@@ -93,7 +93,7 @@ const LeafMessages: React.FC<{
   }, [version, runningConversations]);
 
   const handleNewConversation = useCallback(async () => {
-    const firstMessage = await processMessagesWithHashing(mainSystemMessage);
+    const firstMessage = await processMessagesWithHashing('paused', mainSystemMessage);
     openMessage(firstMessage);
   }, [openMessage]);
 
