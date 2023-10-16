@@ -1,4 +1,4 @@
-import { ConversationDB, MaybePersistedMessage, MessageDB, MessageSpec, MetadataHandlers, isMessageDB } from './conversationDb';
+import { ConversationDB, MaybePersistedMessage, MessageDB, MessageSpec, MetadataHandlers, isMessageDB, rootMessageHash } from './conversationDb';
 import { Conversation, ConversationMode, Message } from './conversation';
 import { getEmbedding } from '../openai_api';
 
@@ -32,6 +32,7 @@ export async function processMessagesWithHashing(
   message: MaybePersistedMessage,
   currentParentHashes: string[] = []
 ): Promise<MessageDB> {
+  if (!currentParentHashes[0]) currentParentHashes = [rootMessageHash, ...currentParentHashes.slice(1)];
   const hash = await hashFunction(message, currentParentHashes);
 
   let messageToSave: MessageDB | MessageSpec;
@@ -42,7 +43,8 @@ export async function processMessagesWithHashing(
   } else {
     messageToSave = {
       ...message,
-      hash: hash,
+      timestamp: undefined,
+      hash,
       parentHash: currentParentHashes[0]
     };
   }
@@ -60,38 +62,6 @@ export async function processMessagesWithHashing(
   } : {};
 
   return (await conversationDB.saveMessage(messageToSave, metadataHandlers))[0];
-};
-
-
-export async function processMessagesWithHashing2(
-  conversationMode: ConversationMode,
-  message: MaybePersistedMessage,
-  currentParentHashes: string[] = []
-): Promise<MessageDB> {
-  const hash = await hashFunction(message, currentParentHashes);
-  if (isMessageDB(message) && message.hash === hash) {
-    return message;
-  }
-
-  const conversationDB = new ConversationDB();
-  const messageDB: MessageSpec = {
-    ...message,
-    hash: hash,
-    parentHash: currentParentHashes[0]
-  };
-
-  const metadataHandlers: MetadataHandlers<'messageEmbedding'> = conversationMode !== 'paused' ? {
-    messageEmbedding: async () => {
-      const embedding = await getEmbedding(message.content);
-      return {
-        hash: messageDB.hash,
-        embedding: embedding,
-        type: 'messageEmbedding'
-      };
-    }
-  } : {};
-
-  return (await conversationDB.saveMessage(messageDB, metadataHandlers))[0];
 };
 
 const identifyMessagesForReprocessing = (conversation: MessageDB[], startIndex: number): Message[] => {

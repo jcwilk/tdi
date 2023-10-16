@@ -76,16 +76,16 @@ const LeafMessages: React.FC<{
   }, [runningConversations, version]);
 
   useEffect(() => {
-    const subscription = db.getLeafMessages()
-    .pipe(
-      // Aggregate messages into an ever-growing array
-      scan((acc, message) => insertSortedByTimestamp(acc, message), [] as MessageDB[]),
-      // Debounce the aggregated message array emission
-      debounceTime(10), // Adjust the debounce time as needed
-      tap(aggregatedMessages => {
-        setLeafMessages(aggregatedMessages);
-      })
-    ).subscribe();
+    const subscription = db.getLeafMessagesFrom(null)
+      .pipe(
+        // Aggregate messages into an ever-growing array
+        scan((acc, message) => insertSortedByTimestamp(acc, message), [] as MessageDB[]),
+        // Debounce the aggregated message array emission
+        debounceTime(10), // Adjust the debounce time as needed
+        tap(aggregatedMessages => {
+          setLeafMessages(aggregatedMessages);
+        })
+      ).subscribe();
 
     return () => {
       subscription.unsubscribe();

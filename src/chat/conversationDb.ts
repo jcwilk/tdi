@@ -3,21 +3,21 @@
 import Dexie from 'dexie';
 import { ParticipantRole } from './participantSubjects';
 import { Message } from './conversation';
-import { Observable } from 'rxjs';
+import { EMPTY, Observable, from, merge, mergeMap, of } from 'rxjs';
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {
   content: string;
   role: ParticipantRole;
   hash: string;
-  parentHash: string | null;
+  parentHash: string;
 }
 
 export type MessageDB = MessageSpec & {
   content: string;
   role: ParticipantRole;
   hash: string;
-  parentHash: string | null;
+  parentHash: string;
   timestamp: number;
 }
 
@@ -40,14 +40,19 @@ export type EmbeddingDB = EmbeddingSpec & {
 
 export type MetadataType = 'messageEmbedding';
 
+export const rootMessageHash = 'root';
+
 export function isMessageDB(message: MaybePersistedMessage | MessageSpec): message is MessageDB {
   return (message as MessageDB).timestamp !== undefined;
 }
 
-
 export type MetadataHandlers<T extends string> = {
   [K in T]?: () => Promise<EmbeddingSpec>; // TODO: this will need to cover summaries eventually too
 };
+
+function hasParent(message: MessageSpec) {
+  return message.parentHash && message.parentHash !== rootMessageHash;
+}
 
 export class ConversationDB extends Dexie {
   messages: Dexie.Table<MessageDB, string>;
@@ -79,7 +84,7 @@ export class ConversationDB extends Dexie {
         const existingMessage = await this.getMessageByHash(messageSpec.hash);
 
         // Check if the hash exists but with a different parent hash
-        if (existingMessage && (existingMessage.parentHash || messageSpec.parentHash) && existingMessage.parentHash !== messageSpec.parentHash) {
+        if (existingMessage && (hasParent(existingMessage) || hasParent(messageSpec)) && existingMessage.parentHash !== messageSpec.parentHash) {
           throw new Error(`Message with hash: ${messageSpec.hash} exists but with a different parent hash.`);
         }
 
@@ -89,7 +94,7 @@ export class ConversationDB extends Dexie {
         }
 
         // Constraint to ensure that the parentHash exists in the DB (if not a root message)
-        if (messageSpec.parentHash && !(await this.getMessageByHash(messageSpec.parentHash))) {
+        if (hasParent(messageSpec) && !(await this.getMessageByHash(messageSpec.parentHash))) {
           throw new Error(`Parent hash: ${messageSpec.parentHash} does not exist in the database.`);
         }
 
@@ -166,7 +171,7 @@ export class ConversationDB extends Dexie {
       if (!message) break;
 
       conversation.push(message);
-      currentHash = message.parentHash;
+      currentHash = hasParent(message) ? message.parentHash : null;
     }
 
     return conversation.reverse();
@@ -174,7 +179,7 @@ export class ConversationDB extends Dexie {
 
   async getConversationFromLeafMessage(leafMessage: MessageDB): Promise<ConversationMessages> {
     const conversation: ConversationMessages = [leafMessage];
-    if (!leafMessage.parentHash) return conversation;
+    if (!hasParent(leafMessage)) return conversation;
 
     const parentMessage = await this.getMessageByHash(leafMessage.parentHash);
     if (!parentMessage) return conversation;
@@ -182,34 +187,23 @@ export class ConversationDB extends Dexie {
     return [...await this.getConversationFromLeafMessage(parentMessage), ...conversation];
   }
 
-  getLeafMessages(): Observable<MessageDB> {
-    return new Observable(subscriber => {
+  // NB: concat/concatMap could be used instead of merge/mergeMap which would mean that only the events which are emitted will induce
+  // queries to the database. However, this would mean that the database queries would be performed sequentially rather than in parallel.
+  // Instead, we're using merge/mergeMap which means that the database queries will be performed in parallel and if we don't consume all
+  // the events, we'll have wasted some queries. Because it's indexeddb, this doesn't matter, so we're going with the more aggressive option.
+  getLeafMessagesFrom(message: MessageDB | null): Observable<MessageDB> {
+    const directChildren = this.messages.where('parentHash').equals(message ? message.hash : rootMessageHash).reverse().sortBy('timestamp');
 
-      const dfs = async (message: MessageDB) => {
-        // Find child messages of the current message
-        const children = await this.messages.where('parentHash').equals(message.hash).reverse().sortBy('timestamp');
-
+    return from(directChildren).pipe(
+      mergeMap(children => {
         if (children.length === 0) {
-          // If the current message has no children, broadcast it
-          subscriber.next(message);
+          return message ? of(message) : EMPTY;
         } else {
-          // Otherwise, continue the DFS with the child messages
-          for (const child of children) {
-            await dfs(child);
-          }
+          const childObservables = children.map(child => this.getLeafMessagesFrom(child));
+          return merge(...childObservables);
         }
-      };
-
-      // Start the DFS from the root messages
-      this.messages.filter(message => message.parentHash == null).reverse().sortBy('timestamp').then(async rootMessages => {
-        for (const root of rootMessages) {
-          await dfs(root);
-        }
-        subscriber.complete();
-      }).catch(err => {
-        subscriber.error(err);
-      });
-    });
+      })
+    );
   }
 
   async searchEmbedding(embedding: number[], limit: number): Promise<string[]> {

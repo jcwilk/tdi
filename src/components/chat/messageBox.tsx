@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Avatar, Badge, Box, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItem, ListItemAvatar, ListItemButton, ListItemText, ToggleButton, ToggleButtonGroup, Toolbar, Typography } from '@mui/material';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
@@ -21,6 +21,7 @@ import KeyboardIcon from '@mui/icons-material/Keyboard';
 import ShortTextIcon from '@mui/icons-material/ShortText';
 import SubjectIcon from '@mui/icons-material/Subject';
 import { getTypingStatus } from '../../chat/conversation';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 
 type MessageProps = {
   message: MaybePersistedMessage;
@@ -162,6 +163,14 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
     return db.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
   }, [message], []);
 
+  const otherSiblings = useMemo(() => {
+    if (!isMessageDB(message)) {
+      return [];
+    }
+
+    return siblings.filter((sibling) => sibling.hash !== message.hash);
+  }, [message, siblings]);
+
   const incompletePersistence: boolean = useLiveQuery(() => {
     if (!isMessageDB(message)) {
       return false;
@@ -264,12 +273,13 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
             gap: '2px',
           }}
         >
-          { isMessageDB(message) && (siblings.length > 0) &&
+          { isMessageDB(message) && (siblings.length > 1) &&
             <>
               <CornerButton
                 onClick={() => setOpenSiblings(true)}
                 icon={
                   <>
+                    <CompareArrowsIcon fontSize='inherit' />
                     {siblingPos}/{siblings.length}
                     {Object.keys(siblingsTyping).length > 0 && <KeyboardIcon fontSize="inherit" />}
                   </>
@@ -294,7 +304,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
       { isMessageDB(message) &&
         <>
           <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} openOtherHash={openOtherHash} incompletePersistence={incompletePersistence} />
-          <SiblingsDialog open={openSiblings} onClose={() => setOpenSiblings(false)} onSelectMessage={openMessage} switchToConversation={switchToConversation} messages={siblings} siblingsTyping={siblingsTyping} />
+          <SiblingsDialog open={openSiblings} onClose={() => setOpenSiblings(false)} onSelectMessage={openMessage} switchToConversation={switchToConversation} messages={otherSiblings} siblingsTyping={siblingsTyping} />
         </>
       }
     </Box>
