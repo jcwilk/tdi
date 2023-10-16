@@ -3,7 +3,7 @@
 import Dexie from 'dexie';
 import { ParticipantRole } from './participantSubjects';
 import { Message } from './conversation';
-import { EMPTY, Observable, from, merge, mergeMap, of } from 'rxjs';
+import { EMPTY, Observable, defer, delay, from, merge, mergeMap, of } from 'rxjs';
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {
@@ -192,9 +192,7 @@ export class ConversationDB extends Dexie {
   // Instead, we're using merge/mergeMap which means that the database queries will be performed in parallel and if we don't consume all
   // the events, we'll have wasted some queries. Because it's indexeddb, this doesn't matter, so we're going with the more aggressive option.
   getLeafMessagesFrom(message: MessageDB | null): Observable<MessageDB> {
-    const directChildren = this.messages.where('parentHash').equals(message ? message.hash : rootMessageHash).reverse().sortBy('timestamp');
-
-    return from(directChildren).pipe(
+    return defer(() => this.getDirectChildren(message)).pipe(
       mergeMap(children => {
         if (children.length === 0) {
           return message ? of(message) : EMPTY;
@@ -204,6 +202,10 @@ export class ConversationDB extends Dexie {
         }
       })
     );
+  }
+
+  private getDirectChildren(message: MessageDB | null) {
+    return this.messages.where('parentHash').equals(message ? message.hash : rootMessageHash).reverse().sortBy('timestamp');
   }
 
   async searchEmbedding(embedding: number[], limit: number): Promise<string[]> {
