@@ -1,11 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Conversation, ConversationMode, createConversation, getLastMessage, teardownConversation } from "../../chat/conversation";
+import { Conversation, ConversationMode, createConversation, getLastMessage, observeNewMessages, observeTypingUpdates, teardownConversation } from "../../chat/conversation";
 import { ConversationDB, ConversationMessages, MessageDB } from '../../chat/conversationDb';
-import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, debounceTime, filter, finalize, from, map, merge, mergeMap, of, scan, switchMap, tap } from 'rxjs';
+import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, concatMap, debounceTime, distinct, filter, finalize, from, map, merge, mergeMap, of, scan, switchMap, tap, withLatestFrom } from 'rxjs';
 import { FunctionOption } from '../../openai_api';
 import { addAssistant } from '../../chat/aiAgent';
 import { v4 as uuidv4 } from 'uuid';
 import { observeNew } from '../../chat/rxjsUtilities';
+import KeyboardIcon from '@mui/icons-material/Keyboard';
 
 export type RunningConversation = {
   conversation: Conversation,
@@ -159,15 +160,21 @@ function getOrCreateSlot(conversationStore: BehaviorSubject<ConversationStore>, 
   return storedSlot;
 }
 
-// This is for monitoring and interacting with a single conversation slot
-// Using it will induce a new conversation slot if one does not exist for the given key
-export function useConversationSlot(key: string) {
+function getStores() {
   const conversationStore = useContext(ConversationStoreContext);
   const messagesStore = useContext(MessageStoreContext);
 
   if (!conversationStore || !messagesStore) {
     throw new Error('useConversationStore must be used within a ConversationStoreProvider and a MessageStoreProvider');
   }
+
+  return {conversationStore, messagesStore};
+}
+
+// This is for monitoring and interacting with a single conversation slot
+// Using it will induce a new conversation slot if one does not exist for the given key
+export function useConversationSlot(key: string) {
+  const {conversationStore, messagesStore} = getStores();
 
   const [runningConversation, setRunningConversation] = useState<RunningConversation | undefined>(undefined);
 
@@ -228,12 +235,7 @@ function conversationStoreToRunningConversations(conversationStore: Conversation
 
 // This is for monitoring all conversation slots in the form of RunningConversations
 export function useConversationStore() {
-  const conversationStore = useContext(ConversationStoreContext);
-  const messagesStore = useContext(MessageStoreContext);
-
-  if (!conversationStore || !messagesStore) {
-    throw new Error('useConversationStore must be used within a ConversationStoreProvider and a MessageStoreProvider');
-  }
+  const {conversationStore} = getStores();
 
   const [runningConversations, setRunningConversations] = useState<RunningConversation[]>(conversationStoreToRunningConversations(conversationStore.value));
 
@@ -265,4 +267,60 @@ export function useConversationStore() {
 
   return runningConversations;
 }
+
+function observeTypingReplies(conversationStore: BehaviorSubject<ConversationStore>, filterFunction: (messageToUpdate: MessageDB) => boolean) {
+  return conversationStore.pipe(
+    mergeMap(conversationStore => conversationStoreToRunningConversations(conversationStore)),
+    distinct(({conversation}) => conversation),
+    mergeMap(runningConversation => {
+      const typingUpdates = observeTypingUpdates(runningConversation.conversation, "assistant").pipe(
+        withLatestFrom(observeNewMessages(runningConversation.conversation, true)),
+        catchError(() => EMPTY),
+        filter(([typing, messageToUpdate]) => {
+          return filterFunction(messageToUpdate) || typing.length === 0;
+        }),
+        map(([typing, _message]) => {
+          return {typing, runningConversation} as const;
+        })
+      )
+
+      return concat(typingUpdates, of({typing: "", runningConversation} as const));
+    }),
+
+    scan((acc, {typing, runningConversation}) => {
+      const newAcc = {...acc};
+      if (typing.length > 0) {
+        newAcc[runningConversation.id] = {typing, runningConversation};
+      } else {
+        delete newAcc[runningConversation.id];
+      }
+
+      return newAcc;
+    }, {} as Record<string, {typing: string, runningConversation: RunningConversation}>),
+  )
+}
+
+export function useTypingWatcher(referenceMessage: MessageDB, relationship: "children" | "siblings") {
+  const {conversationStore} = getStores();
+
+  const [mapping, setMapping] = useState<Record<string, {typing: string, runningConversation: RunningConversation}>>({});
+
+  const filterFunction = relationship === "children"
+    ? (messageToUpdate: MessageDB) => messageToUpdate.hash === referenceMessage.hash
+    : (messageToUpdate: MessageDB) => messageToUpdate.hash === referenceMessage.parentHash;
+
+  useEffect(() => {
+    const subscription = observeTypingReplies(conversationStore, filterFunction).pipe(
+      tap(setMapping)
+    ).subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    }
+  }, [conversationStore, referenceMessage, relationship]);
+
+  return mapping;
+}
+
+
 

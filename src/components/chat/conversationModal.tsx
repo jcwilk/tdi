@@ -19,6 +19,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
 import { ParticipantRole } from '../../chat/participantSubjects';
+import { RunningConversation } from './useConversationStore';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -30,13 +31,14 @@ type ConversationModalProps = {
   openMessage: (message: MessageDB) => void; // Callback for opening a message in the editor
   onNewModel: (model: ConversationMode) => void;
   onFunctionsChange: (updatedFunctions: FunctionOption[]) => void;
+  switchToConversation: (runningConversation: RunningConversation) => void;
 };
 
 const db = new ConversationDB();
 
 const noopF = () => { };
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, minimize, editMessage, pruneMessage, openSha, openMessage, onNewModel, onFunctionsChange }) => {
+const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, minimize, editMessage, pruneMessage, openSha, openMessage, onNewModel, onFunctionsChange, switchToConversation }) => {
   const [messages, setMessages] = useState<(MessageDB)[]>(getAllMessages(conversation));
   const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
@@ -190,6 +192,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             openOtherHash={openSha}
             openMessage={openMessage}
             isTail={index === messages.length - 1 && !assistantTyping}
+            switchToConversation={switchToConversation}
           />
         ))}
         {assistantTyping && (
@@ -201,6 +204,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             openOtherHash={openSha}
             openMessage={noopF}
             isTail={false}
+            switchToConversation={noopF}
           />
         )}
         <Box
@@ -211,6 +215,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           }}
         >
           {availableChild ?
+            // TODO: Add typing watching indicator via useTypingWatcher
             renderExpander(<KeyboardArrowDownIcon fontSize="inherit" />, availableChild, openMessage)
             :
             renderExpander(<KeyboardArrowDownIcon fontSize="inherit" />)

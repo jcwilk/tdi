@@ -57,6 +57,7 @@ const Client: React.FC = () => {
             openSha={openSha}
             onNewModel={changeModel}
             onFunctionsChange={changeFunctions}
+            switchToConversation={switchToConversation}
           />
           :
           <LeafMessages db={db} openMessage={openMessage} switchToConversation={switchToConversation} />

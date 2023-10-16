@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Badge, Box } from '@mui/material';
+import { Avatar, Badge, Box, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItem, ListItemAvatar, ListItemButton, ListItemText, ToggleButton, ToggleButtonGroup, Toolbar, Typography } from '@mui/material';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import PruneButton from './pruneButton';
@@ -10,13 +10,17 @@ import UserIcon from '@mui/icons-material/Person';
 import SystemIcon from '@mui/icons-material/Dns';
 import FunctionIcon from '@mui/icons-material/Functions';
 import EmojiShaButton from './emojiShaButton';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useLiveQuery } from "dexie-react-hooks"
 import CornerButton from './cornerButton';
 import InfoIcon from '@mui/icons-material/Info';
 import MessageDetails from './messageDetails';
 import PauseIcon from '@mui/icons-material/Pause';
+import { RunningConversation, useTypingWatcher } from './useConversationStore';
+import { emojiSha } from '../../chat/emojiSha';
+import KeyboardIcon from '@mui/icons-material/Keyboard';
+import ShortTextIcon from '@mui/icons-material/ShortText';
+import SubjectIcon from '@mui/icons-material/Subject';
+import { getTypingStatus } from '../../chat/conversation';
 
 type MessageProps = {
   message: MaybePersistedMessage;
@@ -25,11 +29,129 @@ type MessageProps = {
   openOtherHash: (hash: string) => void;
   openMessage: (message: MessageDB) => void;
   isTail: boolean;
+  switchToConversation: (runningConversation: RunningConversation) => void;
 };
 
 const db = new ConversationDB();
 
-const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage, isTail }) => {
+function SiblingsDialog(props: {
+  onSelectMessage: (message: MessageDB) => void,
+  switchToConversation: (RunningConversation: RunningConversation) => void,
+  onClose: () => void,
+  open: boolean,
+  messages: MessageDB[],
+  siblingsTyping: RunningConversation[]
+}) {
+  const { onClose, open, messages, onSelectMessage, switchToConversation, siblingsTyping } = props;
+
+  const [expand, setExpand] = useState(false);
+
+  const handleListItemClick = (message: MessageDB) => {
+    onSelectMessage(message);
+    onClose();
+  };
+
+  const handleExpand = (
+    _event: React.MouseEvent<HTMLElement>,
+    newExpand: boolean | null,
+  ) => {
+    if (newExpand !== null) {
+      setExpand(newExpand);
+    }
+  };
+
+  // TODO: This could definitely use some cleaning up, but it's a fairly niche interface so not worth spending a lot of time on for now
+  return (
+    <Dialog onClose={onClose} open={open}>
+      <Toolbar>
+        <ToggleButtonGroup
+          value={expand}
+          exclusive
+          onChange={handleExpand}
+          aria-label="text alignment"
+        >
+          <ToggleButton value={false} aria-label="collapse">
+            <ShortTextIcon />
+          </ToggleButton>
+          <ToggleButton value={true} aria-label="expand">
+            <SubjectIcon />
+          </ToggleButton>
+        </ToggleButtonGroup>
+        <DialogTitle>Siblings</DialogTitle>
+      </Toolbar>
+      <DialogContent>
+        { siblingsTyping.length > 0 &&
+          <>
+            <Typography variant="h6">
+              {siblingsTyping.length} Being Typed
+            </Typography>
+            <List sx={{ pt: 0 }} dense>
+              {siblingsTyping.map((runningConversation) => (
+                // TODO: handle user/function/system too? probably not useful, but wouldn't be difficult if needed someday
+                <ListItem disableGutters key={runningConversation.id}>
+                  <ListItemButton onClick={() => switchToConversation(runningConversation)}>
+                    <ListItemAvatar>
+                      <AssistantIcon />
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={getTypingStatus(runningConversation.conversation, 'assistant')}
+                      primaryTypographyProps={
+                        expand
+                        ?
+                        {}
+                        :
+                        {
+                          sx: {
+                            display: '-webkit-box',
+                            WebkitBoxOrient: 'vertical',
+                            WebkitLineClamp: 3,
+                            overflow: 'hidden'
+                          }
+                        }
+                      }
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          </>
+        }
+        <Typography variant="h6">
+          {messages.length} Persisted
+        </Typography>
+        <List sx={{ pt: 0 }} dense>
+          {messages.map((message) => (
+            <ListItem disableGutters key={message.hash}>
+              <ListItemButton onClick={() => handleListItemClick(message)} sx={{padding: 0}}>
+                <ListItemText
+                  sx={{padding: 0}}
+                  secondary={ emojiSha(message.hash, 5) }
+                  primary={message.content}
+                  primaryTypographyProps={
+                    expand
+                    ?
+                    {}
+                    :
+                    {
+                      sx: {
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: 3,
+                        overflow: 'hidden'
+                      }
+                    }
+                  }
+                />
+              </ListItemButton>
+            </ListItem>
+          ))}
+        </List>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage, isTail, switchToConversation }) => {
   const [openDetails, setOpenDetails] = useState(false);
 
   const siblings: MessageDB[] = useLiveQuery(() => {
@@ -49,10 +171,10 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
   }, [message], false);
 
   const siblingPos = isMessageDB(message) ? siblings.findIndex((sibling) => sibling.hash === message.hash) + 1 : 0;
-  const leftSibling = isMessageDB(message) ? siblings[siblingPos - 2] ?? null : null;
-  const rightSibling = isMessageDB(message) ? siblings[siblingPos] ?? null : null;
 
-  console.log("siblings", siblings, siblingPos, leftSibling, rightSibling)
+  const [openSiblings, setOpenSiblings] = useState(false);
+
+  const siblingsTyping = isMessageDB(message) ? Object.values(useTypingWatcher(message, "siblings")).map(({runningConversation}) => runningConversation) : [];
 
   // Define styles
   let backgroundColor: string;
@@ -142,33 +264,17 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
             gap: '2px',
           }}
         >
-          { isMessageDB(message) && (leftSibling || rightSibling) &&
+          { isMessageDB(message) && (siblings.length > 0) &&
             <>
-              {leftSibling ?
-                <CornerButton
-                  onClick={() => openMessage(leftSibling)}
-                  icon={<ChevronLeftIcon fontSize="inherit" />}
-                />
-                :
-                <CornerButton
-                  onClick={() => {}}
-                  icon={<ChevronLeftIcon fontSize="inherit" />}
-                  disabled
-                />
-              }
-              {siblingPos}/{siblings.length}
-              {rightSibling ?
-                <CornerButton
-                  onClick={() => openMessage(rightSibling)}
-                  icon={<ChevronRightIcon fontSize="inherit" />}
-                />
-                :
-                <CornerButton
-                  onClick={() => {}}
-                  icon={<ChevronRightIcon fontSize="inherit" />}
-                  disabled
-                />
-              }
+              <CornerButton
+                onClick={() => setOpenSiblings(true)}
+                icon={
+                  <>
+                    {siblingPos}/{siblings.length}
+                    {Object.keys(siblingsTyping).length > 0 && <KeyboardIcon fontSize="inherit" />}
+                  </>
+                }
+              />
             </>
           }
         </Box>
@@ -186,7 +292,10 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
         </Box>
       </Box>
       { isMessageDB(message) &&
-        <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} openOtherHash={openOtherHash} incompletePersistence={incompletePersistence} />
+        <>
+          <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} openOtherHash={openOtherHash} incompletePersistence={incompletePersistence} />
+          <SiblingsDialog open={openSiblings} onClose={() => setOpenSiblings(false)} onSelectMessage={openMessage} switchToConversation={switchToConversation} messages={siblings} siblingsTyping={siblingsTyping} />
+        </>
       }
     </Box>
   );
