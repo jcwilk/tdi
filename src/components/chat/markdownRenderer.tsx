@@ -116,7 +116,7 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
               children={String(children).trim()}
               language={match[1]}
               style={dracula}
-              wrapLongLines={true}
+              wrapLongLines
             />
           ) : (
             <code {...props} className={className} style={{ whiteSpace: 'pre-wrap' }}>

@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Avatar, Badge, Box, Dialog, DialogActions, DialogContent, DialogTitle, List, ListItem, ListItemAvatar, ListItemButton, ListItemText, ToggleButton, ToggleButtonGroup, Toolbar, Typography } from '@mui/material';
+import React, { useMemo, useState } from 'react';
+import { Badge, Box } from '@mui/material';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import PruneButton from './pruneButton';
@@ -16,12 +16,9 @@ import InfoIcon from '@mui/icons-material/Info';
 import MessageDetails from './messageDetails';
 import PauseIcon from '@mui/icons-material/Pause';
 import { RunningConversation, useTypingWatcher } from './useConversationStore';
-import { emojiSha } from '../../chat/emojiSha';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
-import ShortTextIcon from '@mui/icons-material/ShortText';
-import SubjectIcon from '@mui/icons-material/Subject';
-import { getTypingStatus } from '../../chat/conversation';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import { SiblingsDialog } from './messageBoxDialogs';
 
 type MessageProps = {
   message: MaybePersistedMessage;
@@ -34,123 +31,6 @@ type MessageProps = {
 };
 
 const db = new ConversationDB();
-
-function SiblingsDialog(props: {
-  onSelectMessage: (message: MessageDB) => void,
-  switchToConversation: (RunningConversation: RunningConversation) => void,
-  onClose: () => void,
-  open: boolean,
-  messages: MessageDB[],
-  siblingsTyping: RunningConversation[]
-}) {
-  const { onClose, open, messages, onSelectMessage, switchToConversation, siblingsTyping } = props;
-
-  const [expand, setExpand] = useState(false);
-
-  const handleListItemClick = (message: MessageDB) => {
-    onSelectMessage(message);
-    onClose();
-  };
-
-  const handleExpand = (
-    _event: React.MouseEvent<HTMLElement>,
-    newExpand: boolean | null,
-  ) => {
-    if (newExpand !== null) {
-      setExpand(newExpand);
-    }
-  };
-
-  // TODO: This could definitely use some cleaning up, but it's a fairly niche interface so not worth spending a lot of time on for now
-  return (
-    <Dialog onClose={onClose} open={open}>
-      <Toolbar>
-        <ToggleButtonGroup
-          value={expand}
-          exclusive
-          onChange={handleExpand}
-          aria-label="text alignment"
-        >
-          <ToggleButton value={false} aria-label="collapse">
-            <ShortTextIcon />
-          </ToggleButton>
-          <ToggleButton value={true} aria-label="expand">
-            <SubjectIcon />
-          </ToggleButton>
-        </ToggleButtonGroup>
-        <DialogTitle>Siblings</DialogTitle>
-      </Toolbar>
-      <DialogContent>
-        { siblingsTyping.length > 0 &&
-          <>
-            <Typography variant="h6">
-              {siblingsTyping.length} Being Typed
-            </Typography>
-            <List sx={{ pt: 0 }} dense>
-              {siblingsTyping.map((runningConversation) => (
-                // TODO: handle user/function/system too? probably not useful, but wouldn't be difficult if needed someday
-                <ListItem disableGutters key={runningConversation.id}>
-                  <ListItemButton onClick={() => switchToConversation(runningConversation)}>
-                    <ListItemAvatar>
-                      <AssistantIcon />
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={getTypingStatus(runningConversation.conversation, 'assistant')}
-                      primaryTypographyProps={
-                        expand
-                        ?
-                        {}
-                        :
-                        {
-                          sx: {
-                            display: '-webkit-box',
-                            WebkitBoxOrient: 'vertical',
-                            WebkitLineClamp: 3,
-                            overflow: 'hidden'
-                          }
-                        }
-                      }
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </>
-        }
-        <Typography variant="h6">
-          {messages.length} Persisted
-        </Typography>
-        <List sx={{ pt: 0 }} dense>
-          {messages.map((message) => (
-            <ListItem disableGutters key={message.hash}>
-              <ListItemButton onClick={() => handleListItemClick(message)} sx={{padding: 0}}>
-                <ListItemText
-                  sx={{padding: 0}}
-                  secondary={ emojiSha(message.hash, 5) }
-                  primary={message.content}
-                  primaryTypographyProps={
-                    expand
-                    ?
-                    {}
-                    :
-                    {
-                      sx: {
-                        display: '-webkit-box',
-                        WebkitBoxOrient: 'vertical',
-                        WebkitLineClamp: 3,
-                        overflow: 'hidden'
-                      }
-                    }
-                  }
-                />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage, isTail, switchToConversation }) => {
   const [openDetails, setOpenDetails] = useState(false);

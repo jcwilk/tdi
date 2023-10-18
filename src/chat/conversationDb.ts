@@ -7,17 +7,11 @@ import { EMPTY, Observable, defer, delay, from, merge, mergeMap, of } from 'rxjs
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {
-  content: string;
-  role: ParticipantRole;
   hash: string;
   parentHash: string;
 }
 
 export type MessageDB = MessageSpec & {
-  content: string;
-  role: ParticipantRole;
-  hash: string;
-  parentHash: string;
   timestamp: number;
 }
 
@@ -48,6 +42,11 @@ export function isMessageDB(message: MaybePersistedMessage | MessageSpec): messa
 
 export type MetadataHandlers<T extends string> = {
   [K in T]?: () => Promise<EmbeddingSpec>; // TODO: this will need to cover summaries eventually too
+};
+
+export type LeafPath = {
+  message: MessageDB,
+  pathLength: number
 };
 
 function hasParent(message: MessageSpec) {
@@ -191,13 +190,14 @@ export class ConversationDB extends Dexie {
   // queries to the database. However, this would mean that the database queries would be performed sequentially rather than in parallel.
   // Instead, we're using merge/mergeMap which means that the database queries will be performed in parallel and if we don't consume all
   // the events, we'll have wasted some queries. Because it's indexeddb, this doesn't matter, so we're going with the more aggressive option.
-  getLeafMessagesFrom(message: MessageDB | null): Observable<MessageDB> {
+  getLeafMessagesFrom(message: MessageDB | null, pathLength: number = 0): Observable<LeafPath> {
     return defer(() => this.getDirectChildren(message)).pipe(
       mergeMap(children => {
         if (children.length === 0) {
-          return message ? of(message) : EMPTY;
-        } else {
-          const childObservables = children.map(child => this.getLeafMessagesFrom(child));
+          return message ? of({message, pathLength}) : EMPTY;
+        }
+        else {
+          const childObservables = children.map(child => this.getLeafMessagesFrom(child, pathLength + 1));
           return merge(...childObservables);
         }
       })

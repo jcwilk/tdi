@@ -60,7 +60,7 @@ const Client: React.FC = () => {
             switchToConversation={switchToConversation}
           />
           :
-          <LeafMessages db={db} openMessage={openMessage} switchToConversation={switchToConversation} />
+          <LeafMessages openMessage={openMessage} switchToConversation={switchToConversation} />
       }
     </ThemeProvider>
   );

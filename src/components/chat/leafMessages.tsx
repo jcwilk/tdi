@@ -6,7 +6,7 @@ import { Box, Button, List, ListItemButton, ListItemText, Paper, Typography } fr
 import { styled } from '@mui/material/styles';
 import { emojiSha } from '../../chat/emojiSha';
 import { debounceTime, scan, tap } from 'rxjs';
-import { RunningConversation, useConversationStore } from './useConversationStore';
+import { RunningConversation, useConversationStore, useLeafMessageTracker } from './useConversationStore';
 
 // Define the striped styling
 const StripedListItem = styled(ListItemButton)`
@@ -30,67 +30,36 @@ const mainSystemMessage: Message = {
   `.trim(),
 }
 
-function insertSortedByTimestamp(messages: MessageDB[], message: MessageDB): MessageDB[] {
-  // Find the index where the message should be inserted
-  const index = messages.findIndex(msg => msg.timestamp < message.timestamp);
-
-  if (index === -1) {
-    // If no such index is found, the message is the latest and is added to the end of the array
-    return [...messages, message];
-  } else {
-    // Otherwise, insert the message at the correct index to maintain the sorted order
-    return [...messages.slice(0, index), message, ...messages.slice(index)];
-  }
-}
-
 const LeafMessages: React.FC<{
-  db: ConversationDB,
   openMessage: (message: MessageDB) => void,
   switchToConversation: (runningConversation: RunningConversation) => void
-}> = ({ db, openMessage, switchToConversation }) => {
-  const [leafMessages, setLeafMessages] = useState<MessageDB[]>([]);
-  const [version, setVersion] = useState(0);
-
+}> = ({ openMessage, switchToConversation }) => {
+  const leafMessages = useLeafMessageTracker(null);
   const runningConversations = useConversationStore();
+  const [runningLeafMessages, setRunningLeafMessages] = useState<RunningConversationOption[]>([]);
 
   useEffect(() => {
+    function updateConvos() {
+      const runningLeaves = runningConversations
+        .map(runningConversation => ({ runningConversation, message: getLastMessage(runningConversation.conversation)}))
+        .sort((a, b) => b.message.timestamp - a.message.timestamp)
+
+      setRunningLeafMessages(runningLeaves)
+    }
+
+    updateConvos();
+
     const subscriptions = runningConversations.map(({conversation}) =>
-      observeNewMessages(conversation).subscribe(() => {
-        setVersion(prevVersion => prevVersion + 1);
-      })
+      observeNewMessages(conversation, false).pipe(
+        debounceTime(0),
+        tap(updateConvos),
+      ).subscribe()
     );
 
     return () => {
       subscriptions.forEach(sub => sub.unsubscribe());
     };
   }, [runningConversations]);
-
-  const runningLeafMessages = useMemo(() => {
-    const messages: RunningConversationOption[] = [];
-    runningConversations.forEach(runningConversation => {
-      const lastOne = getLastMessage(runningConversation.conversation);
-
-      if(lastOne) messages.push({runningConversation, message: lastOne});
-    });
-    return messages;
-  }, [runningConversations, version]);
-
-  useEffect(() => {
-    const subscription = db.getLeafMessagesFrom(null)
-      .pipe(
-        // Aggregate messages into an ever-growing array
-        scan((acc, message) => insertSortedByTimestamp(acc, message), [] as MessageDB[]),
-        // Debounce the aggregated message array emission
-        debounceTime(10), // Adjust the debounce time as needed
-        tap(aggregatedMessages => {
-          setLeafMessages(aggregatedMessages);
-        })
-      ).subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [version, runningConversations]);
 
   const handleNewConversation = useCallback(async () => {
     const firstMessage = await processMessagesWithHashing('paused', mainSystemMessage);
@@ -130,7 +99,7 @@ const LeafMessages: React.FC<{
           Saved Conversations
         </Typography>
         <List>
-          {leafMessages.map((message) => (
+          {leafMessages.map(({message}) => (
             <StripedListItem key={message.hash} onClick={() => openMessage(message)}>
               <ListItemText primary={emojiSha(message.hash, 5) + " " + message.content} primaryTypographyProps={{ noWrap: true }} />
             </StripedListItem>

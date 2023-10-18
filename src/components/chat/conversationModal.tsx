@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, ReactNode } from 'react';
+import React, { useEffect, useState, useRef, useCallback, ReactNode, useMemo } from 'react';
 import { Box, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
 import { Conversation, ConversationMode, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
@@ -20,6 +20,8 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
 import { ParticipantRole } from '../../chat/participantSubjects';
 import { RunningConversation } from './useConversationStore';
+import { LeafDescendantsDialog } from './messageBoxDialogs';
+import { defaultIfEmpty, filter, firstValueFrom, map } from 'rxjs';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -45,8 +47,13 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
   const [isFuncMgmtOpen, setFuncMgmtOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
+  const [openDescendants, setOpenDescendants] = useState<boolean>(false);
 
-  const currentLeafHash = messages[messages.length - 1]?.hash; // no need for useMemo because it's a primitive
+  const currentLeafMessage = useMemo(() => {
+    return messages[messages.length - 1];
+  }, [messages]);
+
+  const currentLeafHash = currentLeafMessage?.hash; // no need for useMemo because it's a primitive
 
   const availableChild: MessageDB | null | undefined = useLiveQuery(() => {
     const message = messages[messages.length - 1];
@@ -54,11 +61,17 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
     return db.messages.where('parentHash').equals(message.hash).sortBy('timestamp').then(children => children[0] ?? null);
   }, [messages], undefined);
 
-  const availableDescendent: MessageDB | null = useLiveQuery(() => {
-    const message = messages[messages.length - 1];
+  const availableIndirectDescendent = useLiveQuery(async () => {
+    const indirectDescendents = db.getLeafMessagesFrom(currentLeafMessage).pipe(
+      // filter out the current leaf and its direct children
+      filter(({pathLength}) => pathLength > 1),
+      map(({message}) => message),
 
-    return db.getLeafMessageFromAncestor(message).then(leaf => leaf.hash === message.hash ? null : leaf);
-  }, [messages], null);
+      // we want the promise to get a value either way so it doesn't fail, null works
+      defaultIfEmpty(null)
+    );
+    return !!(await firstValueFrom(indirectDescendents));
+  }, [currentLeafMessage], undefined);
 
   useEffect(() => {
     const messageEnd = messagesEndRef.current;
@@ -90,7 +103,19 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
     onNewModel(newModel);
   }, [onNewModel]);
 
-  const renderExpander = useCallback((icon: ReactNode, message?: MessageDB, callback?: (message: MessageDB) => void) => {
+  const handleOpenAvailableChild = useMemo(() => {
+    if (!availableChild) return null;
+
+    return () => openMessage(availableChild);
+  }, [availableChild, openMessage]);
+
+  const handleOpenDescendants = useMemo(() => {
+    if (!availableIndirectDescendent) return null;
+
+    return () => setOpenDescendants(true);
+  }, [availableIndirectDescendent]);
+
+  const renderExpander = useCallback((icon: ReactNode, callback: null | (() => void)) => {
     const disabled = !callback;
 
     return (
@@ -102,7 +127,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           color: disabled ? '#424242' : '#E0E0E0', // Lighter text color for dark mode
           padding: '4px 8px',
         }}
-        onClick={() => callback && message && callback(message)}
+        onClick={() => callback && callback()}
         disabled={disabled}
       >
         {icon}
@@ -214,17 +239,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             justifyContent: 'center',
           }}
         >
-          {availableChild ?
-            // TODO: Add typing watching indicator via useTypingWatcher
-            renderExpander(<KeyboardArrowDownIcon fontSize="inherit" />, availableChild, openMessage)
-            :
-            renderExpander(<KeyboardArrowDownIcon fontSize="inherit" />)
-          }
-          {availableDescendent && availableChild && availableChild.hash !== availableDescendent.hash ?
-            renderExpander(<KeyboardDoubleArrowDownIcon fontSize="inherit" />, availableDescendent, openMessage)
-            :
-            renderExpander(<KeyboardDoubleArrowDownIcon fontSize="inherit" />)
-          }
+          {renderExpander(<KeyboardArrowDownIcon fontSize="inherit" />, handleOpenAvailableChild)}
+          {renderExpander(<KeyboardDoubleArrowDownIcon fontSize="inherit" />, handleOpenDescendants)}
         </Box>
         <div ref={messagesEndRef} />
       </Box>
@@ -244,6 +260,12 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           fieldName='Content'
         />
       }
+      <LeafDescendantsDialog
+        open={openDescendants}
+        onClose={() => setOpenDescendants(false)}
+        onSelectMessage={openMessage}
+        ancestor={currentLeafMessage}
+      />
       <MessageEntry
         conversation={conversation}
         autoScroll={autoScroll}

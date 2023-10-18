@@ -1,12 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Conversation, ConversationMode, createConversation, getLastMessage, observeNewMessages, observeTypingUpdates, teardownConversation } from "../../chat/conversation";
-import { ConversationDB, ConversationMessages, MessageDB } from '../../chat/conversationDb';
-import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, concatMap, debounceTime, distinct, filter, finalize, from, map, merge, mergeMap, of, scan, switchMap, tap, withLatestFrom } from 'rxjs';
+import { ConversationDB, ConversationMessages, LeafPath, MessageDB } from '../../chat/conversationDb';
+import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, concatMap, debounceTime, distinct, filter, finalize, from, lastValueFrom, map, merge, mergeMap, of, reduce, scan, switchMap, takeUntil, tap, withLatestFrom } from 'rxjs';
 import { FunctionOption } from '../../openai_api';
 import { addAssistant } from '../../chat/aiAgent';
 import { v4 as uuidv4 } from 'uuid';
 import { observeNew } from '../../chat/rxjsUtilities';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 export type RunningConversation = {
   conversation: Conversation,
@@ -322,5 +323,50 @@ export function useTypingWatcher(referenceMessage: MessageDB, relationship: "chi
   return mapping;
 }
 
+function insertSortedByTimestamp(paths: LeafPath[], path: LeafPath): LeafPath[] {
+  const index = paths.findIndex(({message}) => message.timestamp < path.message.timestamp);
+  if (index === -1) {
+    return [...paths, path];
+  }
+  else {
+    return [...paths.slice(0, index), path, ...paths.slice(index)];
+  }
+}
 
+export const useLeafMessageTracker = (root: MessageDB | null) => {
+  const [leafPaths, setLeafPaths] = useState<LeafPath[]>([]);
+  const { messagesStore } = getStores();
+  const runningNewQuery = new Subject<void>;
+
+  // TODO: generalize this into a useLiveQueryEffect hook? Could be super useful
+  // for other database-dependent streaming UIs if it comes up again
+  useLiveQuery(() => {
+    runningNewQuery.next();
+
+    const observable = messagesStore.getLeafMessagesFrom(root).pipe(
+      // while it's still running, only update the UI with prior-unfound messages
+      tap(tappedPath => setLeafPaths(paths => {
+        return (paths.findIndex(({message}) => message.hash === tappedPath.message.hash) === -1)
+          ?
+          insertSortedByTimestamp(paths, tappedPath)
+          :
+          paths
+      })),
+
+      // if a new query gets triggered, we want to abort this one so it stops processing
+      takeUntil(runningNewQuery),
+
+      // if and when the query is able to finish completely, we want to replace the UI with all messages found in this run
+      // so that stale messages from prior queries will get removed
+      reduce((acc, path) => insertSortedByTimestamp(acc, path), [] as LeafPath[]),
+      tap(aggregatedMessages => {
+        setLeafPaths(aggregatedMessages);
+      })
+    );
+
+    return lastValueFrom(observable);
+  }, [root]);
+
+  return leafPaths;
+};
 
