@@ -19,6 +19,7 @@ import { RunningConversation, useTypingWatcher } from './useConversationStore';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { SiblingsDialog } from './messageBoxDialogs';
+import PinButton from './pinButton';
 
 type MessageProps = {
   message: MaybePersistedMessage;
@@ -176,6 +177,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
         >
           {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
           {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
+          {isMessageDB(message) && <PinButton message={message} />}
           <CopyButton contentToCopy={message.content} />
           {isMessageDB(message) && <CornerButton onClick={() => setOpenDetails(true)} icon={<InfoIcon fontSize="inherit" />} />}
           {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} activeLink={!isTail} />}

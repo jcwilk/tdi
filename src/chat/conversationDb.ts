@@ -1,9 +1,6 @@
-// TODO: rename file (?) and type from MessageDB to PersistedMessage (?)
-
 import Dexie from 'dexie';
-import { ParticipantRole } from './participantSubjects';
 import { Message } from './conversation';
-import { EMPTY, Observable, defer, delay, from, merge, mergeMap, of } from 'rxjs';
+import { EMPTY, Observable, defer, merge, mergeMap, of } from 'rxjs';
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {
@@ -32,6 +29,12 @@ export type EmbeddingDB = EmbeddingSpec & {
   timestamp: number;
 }
 
+export type PinDB = {
+  hash: string;
+  timestamp: number;
+  version: number;
+};
+
 export type MetadataType = 'messageEmbedding';
 
 export const rootMessageHash = 'root';
@@ -56,18 +59,21 @@ function hasParent(message: MessageSpec) {
 export class ConversationDB extends Dexie {
   messages: Dexie.Table<MessageDB, string>;
   embeddings: Dexie.Table<EmbeddingDB, string>;
+  pins: Dexie.Table<PinDB, string>;
 
   constructor() {
     super('ConversationDatabase');
 
-    this.version(9).stores({
+    this.version(10).stores({
       messages: '&hash,timestamp,parentHash,role,content',
-      embeddings: '&hash,timestamp,type,embedding'
+      embeddings: '&hash,timestamp,type,embedding',
+      pins: '&hash,timestamp,version'
     });
 
     // Define tables
     this.messages = this.table('messages');
     this.embeddings = this.table('embeddings');
+    this.pins = this.table('pins');
   }
 
   async saveMessage<T extends MetadataType>(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers<T>): Promise<[MessageDB, Record<T, EmbeddingSpec>]> {
@@ -258,5 +264,29 @@ export class ConversationDB extends Dexie {
     }
     // Recurse with the oldest child
     return this.getLeafMessageFromAncestor(children[0]);
+  }
+
+  async addPin(message: MessageDB): Promise<void> {
+    const pin: PinDB = {
+      hash: message.hash,
+      timestamp: Date.now(),
+      version: 1
+    };
+    await this.pins.add(pin);
+  }
+
+  async removePin(message: MessageDB): Promise<void> {
+    await this.pins.where('hash').equals(message.hash).delete();
+  }
+
+  async hasPin(message: MessageDB): Promise<boolean> {
+    const pin = await this.pins.get(message.hash);
+    return !!pin;
+  }
+
+  async getPinnedMessages(): Promise<MessageDB[]> {
+    const pins = await this.pins.toArray();
+    const pinnedMessages = await Promise.all(pins.map(pin => this.getMessageByHash(pin.hash)));
+    return pinnedMessages.filter((message): message is MessageDB => !!message);
   }
 }

@@ -3,6 +3,10 @@ import { Conversation, Message, NewMessageEvent, TypingUpdate, TypingUpdateEvent
 export type TyperRole = 'user' | 'assistant'; // we don't currently have support for typing events for system/function
 export type ParticipantRole = TyperRole | 'system' | 'function';
 
+export function isParticipantRole(role: string): role is ParticipantRole {
+  return ['user', 'assistant', 'system', 'function'].includes(role);
+}
+
 export function isTyperRole(role: ParticipantRole): role is TyperRole {
   return role === 'user' || role === 'assistant';
 }

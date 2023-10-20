@@ -440,3 +440,125 @@ export async function getEdit(sourceText: string): Promise<{ finishEdit: () => P
   return { finishEdit };
 }
 
+export type TrainingLineItem = {
+  prompt: string;
+  completion: string;
+};
+
+export type FileRecord = {
+  id: string;
+  object: string;
+  bytes: number;
+  created_at: number;
+  filename: string;
+  purpose: string;
+  status: string;
+};
+
+export async function uploadFile(
+  data: TrainingLineItem[],
+  filename: string
+): Promise<FileRecord> {
+  const OPENAI_KEY = APIKeyFetcher();
+  if (!OPENAI_KEY) throw new Error("API Key not found");
+
+  const jsonl = data.map(item => JSON.stringify(item)).join('\n');
+  const file = new Blob([jsonl], { type: "application/json" });
+  const formData = new FormData();
+
+  formData.append("purpose", "fine-tune");
+  formData.append("file", file, filename);
+
+  const response = await fetch('https://api.openai.com/v1/files', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_KEY}`
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to upload file: ${error}`);
+  }
+
+  const responseData: FileRecord = await response.json();
+  return responseData;
+}
+
+export async function fetchFiles(): Promise<FileRecord[]> {
+  const OPENAI_KEY = APIKeyFetcher();
+  if (!OPENAI_KEY) throw new Error("API Key not found");
+
+  const response = await fetch('https://api.openai.com/v1/files', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to fetch files: ${error}`);
+  }
+
+  const responseData = await response.json();
+  return responseData.data.map((file: any): FileRecord => ({
+    id: file.id,
+    object: file.object,
+    bytes: file.bytes,
+    created_at: file.created_at,
+    filename: file.filename,
+    purpose: file.purpose,
+    status: file.status,
+  }));
+}
+
+export async function fetchFileContent(data: FileRecord): Promise<TrainingLineItem[]> {
+  const OPENAI_KEY = APIKeyFetcher();
+  if (!OPENAI_KEY) throw new Error("API Key not found");
+
+  const url = `https://api.openai.com/v1/files/${data.id}/content`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_KEY}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to fetch file content: ${error}`);
+  }
+
+  const text = await response.text();
+  const lines = text.split('\n').map(line => line.trim()).filter(line => line);  // Split by newline and filter out empty lines
+  return lines.map(line => JSON.parse(line) as TrainingLineItem);  // Parse each line as JSON and cast to TrainingLineItem
+}
+
+type DeleteFileResponse = {
+  id: string;
+  object: string;
+  deleted: boolean;
+};
+
+export async function deleteFile(file: FileRecord): Promise<DeleteFileResponse> {
+  const OPENAI_KEY = APIKeyFetcher();
+  if (!OPENAI_KEY) throw new Error("API Key not found");
+
+  const response = await fetch(`https://api.openai.com/v1/files/${file.id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${OPENAI_KEY}`
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to delete file: ${error}`);
+  }
+
+  const responseData: DeleteFileResponse = await response.json();
+  return responseData;
+}

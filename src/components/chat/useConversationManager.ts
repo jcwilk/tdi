@@ -10,6 +10,8 @@ import { editConversation, pruneConversation } from '../../chat/messagePersisten
 import { ParticipantRole } from '../../chat/participantSubjects';
 import { ConversationSpec, RunningConversation, conversationToSpec, useConversationSlot } from './useConversationStore';
 import { concatTap } from '../../chat/rxjsUtilities';
+import { mirrorPinsToDB } from '../../chat/convoPinning';
+import usePinSyncing from './usePinSyncing';
 
 type NavigateState = {
   activeConversation?: string; // uuid
@@ -85,6 +87,8 @@ export function useConversationsManager(db: ConversationDB) {
 
   const [leafMessage, setLeafMessage] = useState<MessageDB | undefined>(undefined);
 
+  usePinSyncing(1000 * 60);
+
   const currentConversationSpec = useMemo(() => {
     if (!runningConversation || !leafMessage) return undefined;
 
@@ -93,40 +97,44 @@ export function useConversationsManager(db: ConversationDB) {
     return conversationToSpec(runningConversation.conversation);
   }, [runningConversation, leafMessage]);
 
+  // This handles receiving nav events (PUSH/POP) and adjusting or creating a conversation slot to match
   useEffect(() => {
     console.log("manager setup!")
 
-    const subscription = routerStream.pipe(
-      tap(routerState => console.log("router state", routerState)),
-      filter(routerState => routerState.historyAction !== "REPLACE"),
-      debounceTime(0),
-      concatMap(async routerState => {
-        const conversationSpec = await routerStateToConversationSpec(db, routerState);
+    // Process any pending pins first, then start interpreting nav events afterwards
+    const subscriptionPromise = mirrorPinsToDB(db).then(() => {
+      return routerStream.pipe(
+        tap(routerState => console.log("router state", routerState)),
+        filter(routerState => routerState.historyAction !== "REPLACE"),
+        debounceTime(0),
+        concatMap(async routerState => {
+          const conversationSpec = await routerStateToConversationSpec(db, routerState);
 
-        return [routerState, conversationSpec] as [RouterState, ConversationSpec | undefined];
-      }),
-      // This sets our slot to match the nav event for push and pop
-      tap(([routerState, _conversationSpec]) => {
-        const slotId = routerStateToSlotId(routerState);
-        console.log("setting active conversation id", slotId);
-        setActiveConversationId(slotId);
-      }),
+          return [routerState, conversationSpec] as [RouterState, ConversationSpec | undefined];
+        }),
+        // This sets our slot to match the nav event for push and pop
+        tap(([routerState, _conversationSpec]) => {
+          const slotId = routerStateToSlotId(routerState);
+          console.log("setting active conversation id", slotId);
+          setActiveConversationId(slotId);
+        }),
 
-      filter((args): args is [RouterState, ConversationSpec] => {
-        const [routerState, conversationSpec] = args;
-        return !!conversationSpec && routerState.historyAction === "POP"
-      }),
+        filter((args): args is [RouterState, ConversationSpec] => {
+          const [routerState, conversationSpec] = args;
+          return !!conversationSpec && routerState.historyAction === "POP"
+        }),
 
-      // This changes the conversation in the slot to match the nav event for pop
-      concatTap(([routerState, conversationSpec]) => {
-        const slotId = routerStateToSlotId(routerState);
-        return from(setConversation(conversationSpec, slotId));
-      })
-    ).subscribe();
+        // This changes the conversation in the slot to match the nav event for pop
+        concatTap(([routerState, conversationSpec]) => {
+          const slotId = routerStateToSlotId(routerState);
+          return from(setConversation(conversationSpec, slotId));
+        })
+      ).subscribe();
+    });
 
     return () => {
       console.log("manager teardown!")
-      subscription.unsubscribe();
+      subscriptionPromise.then(subscription => subscription.unsubscribe());
     }
   }, []);
 

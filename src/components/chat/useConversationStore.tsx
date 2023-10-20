@@ -161,7 +161,7 @@ function getOrCreateSlot(conversationStore: BehaviorSubject<ConversationStore>, 
   return storedSlot;
 }
 
-function getStores() {
+export function getStores() {
   const conversationStore = useContext(ConversationStoreContext);
   const messagesStore = useContext(MessageStoreContext);
 

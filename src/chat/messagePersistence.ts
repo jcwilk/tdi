@@ -1,6 +1,7 @@
-import { ConversationDB, MaybePersistedMessage, MessageDB, MessageSpec, MetadataHandlers, isMessageDB, rootMessageHash } from './conversationDb';
+import { ConversationDB, ConversationMessages, MaybePersistedMessage, MessageDB, MessageSpec, MetadataHandlers, isMessageDB, rootMessageHash } from './conversationDb';
 import { Conversation, ConversationMode, Message } from './conversation';
 import { getEmbedding } from '../openai_api';
+import { isAtLeastOne } from '../tsUtils';
 
 const hashFunction = async (message: Message, parentHashes: string[]): Promise<string> => {
   // Extract the required fields
@@ -71,14 +72,15 @@ const identifyMessagesForReprocessing = (conversation: MessageDB[], startIndex: 
   }));
 };
 
-export async function reprocessMessagesStartingFrom(conversationMode: ConversationMode, messagesForReprocessing: Message[], parentMessage?: MessageDB): Promise<MessageDB> {
-  if (messagesForReprocessing.length === 0) {
-    throw new Error("No messages to reprocess");
-  }
-
+export async function reprocessMessagesStartingFrom(conversationMode: ConversationMode, messagesForReprocessing: [MaybePersistedMessage, ...MaybePersistedMessage[]], parentMessage?: MessageDB): Promise<MessageDB> {
   if (!parentMessage) {
     parentMessage = await processMessagesWithHashing(conversationMode, messagesForReprocessing[0]);
-    messagesForReprocessing = messagesForReprocessing.slice(1);
+    const remainingMessages = messagesForReprocessing.slice(1);
+    const [nextRemainingMessage, ...subsequentRemainingMessages]: [MaybePersistedMessage?, ...MaybePersistedMessage[]] = remainingMessages;
+    if (nextRemainingMessage === undefined) {
+      return parentMessage;
+    }
+    messagesForReprocessing = [nextRemainingMessage, ...subsequentRemainingMessages];
   }
 
   return messagesForReprocessing.reduce<Promise<MessageDB>>(
@@ -120,11 +122,10 @@ export async function editConversation(
   const parentMessage = precedingMessages[precedingMessages.length - 1] ?? undefined;
 
   // We'll need to reprocess the message at the given index and any subsequent messages.
-  const messagesForReprocessing = identifyMessagesForReprocessing(allMessages, index);
-  //console.log("messagesForReprocessing: ", messagesForReprocessing);
-  messagesForReprocessing[0] = newMessage;  // Replace the message at the given index with the new message
+  const originalMessagesForReprocessing = identifyMessagesForReprocessing(allMessages, index);
 
-  return reprocessMessagesStartingFrom(conversationMode, messagesForReprocessing, parentMessage);
+  // Replace the message at the given index with the new message
+  return reprocessMessagesStartingFrom(conversationMode, [newMessage, ...originalMessagesForReprocessing.slice(1)], parentMessage);
 };
 
 export async function pruneConversation(
@@ -159,7 +160,7 @@ export async function pruneConversation(
   // Identify the messages for reprocessing starting from the first excluded message index
   const messagesForReprocessing = identifyMessagesForReprocessing(allMessages, firstExcludedIndex + 1);
 
-  if (messagesForReprocessing.length > 0) {
+  if (isAtLeastOne(messagesForReprocessing)) {
     return reprocessMessagesStartingFrom(conversationMode, messagesForReprocessing, parentMessage);
   }
 

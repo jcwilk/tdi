@@ -7,6 +7,7 @@ import { styled } from '@mui/material/styles';
 import { emojiSha } from '../../chat/emojiSha';
 import { debounceTime, scan, tap } from 'rxjs';
 import { RunningConversation, useConversationStore, useLeafMessageTracker } from './useConversationStore';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 // Define the striped styling
 const StripedListItem = styled(ListItemButton)`
@@ -32,11 +33,16 @@ const mainSystemMessage: Message = {
 
 const LeafMessages: React.FC<{
   openMessage: (message: MessageDB) => void,
-  switchToConversation: (runningConversation: RunningConversation) => void
-}> = ({ openMessage, switchToConversation }) => {
+  switchToConversation: (runningConversation: RunningConversation) => void,
+  db: ConversationDB
+}> = ({ openMessage, switchToConversation, db }) => {
   const leafMessages = useLeafMessageTracker(null);
   const runningConversations = useConversationStore();
   const [runningLeafMessages, setRunningLeafMessages] = useState<RunningConversationOption[]>([]);
+
+  const pinnedMessages: MessageDB[] = useLiveQuery(() => {
+    return db.getPinnedMessages();
+  }, [db], []);
 
   useEffect(() => {
     function updateConvos() {
@@ -70,6 +76,20 @@ const LeafMessages: React.FC<{
     <Box
     >
       <Paper elevation={3} sx={{ padding: '20px' }}>
+        { pinnedMessages.length > 0 &&
+          <>
+            <Typography variant="h4" align="center" gutterBottom>
+              Pinned Messages
+            </Typography>
+            <List>
+              {pinnedMessages.map(message => (
+                <StripedListItem key={message.hash} onClick={() => openMessage(message)}>
+                  <ListItemText primary={emojiSha(message.hash, 5) + " " + message.content} primaryTypographyProps={{ noWrap: true }} />
+                </StripedListItem>
+              ))}
+            </List>
+          </>
+        }
         <Typography variant="h4" align="center" gutterBottom>
           Running Conversations
         </Typography>
