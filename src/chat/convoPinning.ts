@@ -47,8 +47,8 @@ export async function pinConversationByLeaf(leafMessage: MessageDB, messagesStor
   const messages = await messagesStore.getConversationFromLeafMessage(leafMessage);
   const trainingData = transformMessagesToTrainingItems(messages);
   const leafNode = messages[messages.length - 1];
-  await uploadFile(trainingData, messageToFilename(leafNode));
-  await messagesStore.addPin(leafMessage);
+  const file = await uploadFile(trainingData, messageToFilename(leafNode));
+  await messagesStore.addPin(leafMessage, file.created_at);
 }
 
 export async function unpinConversationByLeaf(leafMessage: MessageDB, messagesStore: ConversationDB) {
@@ -75,7 +75,7 @@ export async function mirrorPinsToDB(db: ConversationDB): Promise<void> {
       const messages = transformTrainingItemsToMessages(trainingItems);
       if (isAtLeastOne(messages)) {
         const persistedMessage = await reprocessMessagesStartingFrom("paused", messages);
-        await db.addPin(persistedMessage);
+        await db.addPin(persistedMessage, file.created_at);
       }
     }
   }));

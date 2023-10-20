@@ -33,6 +33,7 @@ export type PinDB = {
   hash: string;
   timestamp: number;
   version: number;
+  remoteTimestamp: number;
 };
 
 export type MetadataType = 'messageEmbedding';
@@ -64,10 +65,10 @@ export class ConversationDB extends Dexie {
   constructor() {
     super('ConversationDatabase');
 
-    this.version(10).stores({
+    this.version(11).stores({
       messages: '&hash,timestamp,parentHash,role,content',
       embeddings: '&hash,timestamp,type,embedding',
-      pins: '&hash,timestamp,version'
+      pins: '&hash,timestamp,version,remoteTimestamp'
     });
 
     // Define tables
@@ -266,11 +267,12 @@ export class ConversationDB extends Dexie {
     return this.getLeafMessageFromAncestor(children[0]);
   }
 
-  async addPin(message: MessageDB): Promise<void> {
+  async addPin(message: MessageDB, remoteTimestamp: number): Promise<void> {
     const pin: PinDB = {
       hash: message.hash,
       timestamp: Date.now(),
-      version: 1
+      version: 1,
+      remoteTimestamp: remoteTimestamp
     };
     await this.pins.add(pin);
   }
@@ -287,6 +289,6 @@ export class ConversationDB extends Dexie {
   async getPinnedMessages(): Promise<MessageDB[]> {
     const pins = await this.pins.toArray();
     const pinnedMessages = await Promise.all(pins.map(pin => this.getMessageByHash(pin.hash)));
-    return pinnedMessages.filter((message): message is MessageDB => !!message);
+    return pinnedMessages.filter((message): message is MessageDB => !!message).sort((a, b) => a.timestamp - b.timestamp);
   }
 }
