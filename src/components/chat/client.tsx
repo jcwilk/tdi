@@ -21,9 +21,6 @@ const Client: React.FC = () => {
   const darkTheme = createTheme({
     palette: {
       mode: 'dark',
-      primary: {
-        main: '#1976d2',
-      },
     },
   });
 

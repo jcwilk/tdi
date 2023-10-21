@@ -190,7 +190,7 @@ export function getLastMessage(conversation: Conversation): MessageDB {
   return messages[messages.length - 1];
 }
 
-export function getAllMessages(conversation: Conversation): MessageDB[] {
+export function getAllMessages(conversation: Conversation): ConversationMessages {
   return conversation.outgoingMessageStream.value.messages;
 }
 

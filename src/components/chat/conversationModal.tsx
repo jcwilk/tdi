@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback, ReactNode, useMemo } from 'react';
-import { Box, AppBar, Toolbar, IconButton, Typography, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
+import { Box, AppBar, Toolbar, IconButton, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
 import { Conversation, ConversationMode, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
-import { ConversationDB, MessageDB } from '../../chat/conversationDb';
+import { ConversationDB, ConversationMessages, MessageDB } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
-import { emojiSha } from '../../chat/emojiSha';
 import { FunctionOption } from '../../openai_api';
 import BoxPopup from '../box_popup';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
@@ -22,6 +21,7 @@ import { ParticipantRole } from '../../chat/participantSubjects';
 import { RunningConversation } from './useConversationStore';
 import { LeafDescendantsDialog } from './messageBoxDialogs';
 import { defaultIfEmpty, filter, firstValueFrom, map } from 'rxjs';
+import ShareGptButton from './shareGptButton';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -41,7 +41,7 @@ const db = new ConversationDB();
 const noopF = () => { };
 
 const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, minimize, editMessage, pruneMessage, openSha, openMessage, onNewModel, onFunctionsChange, switchToConversation }) => {
-  const [messages, setMessages] = useState<(MessageDB)[]>(getAllMessages(conversation));
+  const [messages, setMessages] = useState<ConversationMessages>(getAllMessages(conversation));
   const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
   const [isFuncMgmtOpen, setFuncMgmtOpen] = useState(false);
@@ -148,46 +148,46 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
       }}
     >
       <AppBar sx={{ position: 'relative' }}>
-        <Toolbar>
-          <IconButton
-            edge="start"
-            color="inherit"
-            onClick={onClose}
-            aria-label="close"
-          >
-            <CloseIcon />
-          </IconButton>
-          <IconButton
-            edge="start"
-            color="inherit"
-            onClick={minimize}
-            aria-label="close"
-          >
-            <MinimizeIcon />
-          </IconButton>
-          <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-            {currentLeafHash && emojiSha(currentLeafHash, 5)}
-          </Typography>
-
-          <IconButton
-            color="inherit"
-            onClick={() => setFuncMgmtOpen(true)}
-            aria-label="function-management"
-          >
-            <FunctionsIcon />
-          </IconButton>
-
-          <ToggleButtonGroup
-            color="primary"
-            value={conversation.model}
-            exclusive
-            onChange={handleModelChange} // Assuming you have handleModelChange method
-            aria-label="Platform"
-          >
-            <ToggleButton value="paused"><PauseIcon /></ToggleButton>
-            <ToggleButton value="gpt-3.5-turbo"><DirectionsRunIcon /></ToggleButton>
-            <ToggleButton value="gpt-4"><DirectionsWalkIcon /></ToggleButton>
-          </ToggleButtonGroup>
+        <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', overflow: 'auto' }}>
+            <IconButton
+              edge="start"
+              color="inherit"
+              onClick={onClose}
+              aria-label="close"
+            >
+              <CloseIcon />
+            </IconButton>
+            <IconButton
+              edge="start"
+              color="inherit"
+              onClick={minimize}
+              aria-label="close"
+            >
+              <MinimizeIcon />
+            </IconButton>
+          </Box>
+          <Box sx={{ display: 'flex', overflow: 'auto' }}>
+            <ShareGptButton messages={messages} />
+            <IconButton
+              color="inherit"
+              onClick={() => setFuncMgmtOpen(true)}
+              aria-label="function-management"
+            >
+              <FunctionsIcon />
+            </IconButton>
+            <ToggleButtonGroup
+              color="primary"
+              value={conversation.model}
+              exclusive
+              onChange={handleModelChange} // Assuming you have handleModelChange method
+              aria-label="Platform"
+            >
+              <ToggleButton value="paused"><PauseIcon /></ToggleButton>
+              <ToggleButton value="gpt-3.5-turbo"><DirectionsRunIcon /></ToggleButton>
+              <ToggleButton value="gpt-4"><DirectionsWalkIcon /></ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
         </Toolbar>
       </AppBar>
 
