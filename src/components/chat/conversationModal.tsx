@@ -8,7 +8,6 @@ import { FunctionOption } from '../../openai_api';
 import BoxPopup from '../box_popup';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
-import FunctionsIcon from '@mui/icons-material/Functions';
 import { FunctionManagement } from './functionManagement';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 import MessageEntry from './messageEntry';
@@ -44,7 +43,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
   const [messages, setMessages] = useState<ConversationMessages>(getAllMessages(conversation));
   const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
   const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
-  const [isFuncMgmtOpen, setFuncMgmtOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
   const [openDescendants, setOpenDescendants] = useState<boolean>(false);
@@ -169,13 +167,11 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           </Box>
           <Box sx={{ display: 'flex', overflow: 'auto' }}>
             <ShareGptButton messages={messages} />
-            <IconButton
-              color="inherit"
-              onClick={() => setFuncMgmtOpen(true)}
-              aria-label="function-management"
-            >
-              <FunctionsIcon />
-            </IconButton>
+            <FunctionManagement
+              availableFunctions={getAllFunctionOptions()} // Replace with your array of available functions
+              selectedFunctions={conversation.functions} // Replace with your current selected functions
+              onUpdate={onFunctionsChange}
+            />
             <ToggleButtonGroup
               color="primary"
               value={conversation.model}
@@ -190,15 +186,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           </Box>
         </Toolbar>
       </AppBar>
-
-      {isFuncMgmtOpen &&
-        <FunctionManagement
-          availableFunctions={getAllFunctionOptions()} // Replace with your array of available functions
-          selectedFunctions={conversation.functions} // Replace with your current selected functions
-          onUpdate={onFunctionsChange}
-          onClose={() => setFuncMgmtOpen(false)}
-        />
-      }
 
       <Box
         sx={{
