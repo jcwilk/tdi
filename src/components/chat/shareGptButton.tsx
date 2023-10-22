@@ -24,21 +24,34 @@ type ShareGptResponse = {
   id: string;
 }
 
-function convertMessage(message: Message): ShareGptMessage {
-  if (message.role === 'user') {
-    return {
-      from: 'human',
-      value: message.content,
-    };
-  }
-  if (message.role === 'assistant') {
-    return {
-      from: 'gpt',
-      value: message.content,
-    };
-  }
+function escapeHtml(unsafe: string) {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-  const value = `Role: ${message.role}\n\n${message.content}`
+function convertMessage(message: Message): ShareGptMessage {
+  const content = escapeHtml(message.content);
+
+  // Annoying... it has special formatting for user vs assistant, so we need
+  // to force it to always be assistant so that it renders HTML.
+  // if (message.role === 'user') {
+  //   return {
+  //     from: 'human',
+  //     value: content,
+  //   };
+  // }
+  // if (message.role === 'assistant') {
+  //   return {
+  //     from: 'gpt',
+  //     value: content,
+  //   };
+  // }
+
+  const value = `<strong>${message.role}</strong>\n\n${content}`
   return {
     from: 'gpt',
     value,
