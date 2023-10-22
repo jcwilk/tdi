@@ -4,7 +4,6 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import CopyButton from './copyButton';
 import { emojiSha } from '../../chat/emojiSha';
-import { Link } from '@mui/material';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import PillButton from './pillButton';
 
@@ -40,6 +39,14 @@ const parseContent = (content: string, openOtherHash: (hash: string) => void) =>
   }, []);
 };
 
+function processChildren<T, U>(children: T | T[], operation: (child: T) => U): U | U[] {
+  if (Array.isArray(children)) {
+    return children.map(operation);
+  } else {
+    return operation(children);
+  }
+}
+
 const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string) => void }> = ({ content, openOtherHash }) => {
   return (
     <ReactMarkdown
@@ -54,7 +61,7 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
         },
         p({ node, children, ...props }) {
           //console.log("p", node, children, props);
-          children = children.map((child) => {
+          children = processChildren(children, (child) => {
             if (typeof(child) === "string") {
               return parseContent(child, openOtherHash)
             }
@@ -71,7 +78,7 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
             return <li children={children} {...props} />;
           }
 
-          children = children.map((child) => {
+          children = processChildren(children, (child) => {
             if (!child || typeof(child) === "number" || typeof(child) === "boolean") {
               return child;
             }
@@ -99,7 +106,10 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
           //console.log("ul", node, children, props);
           return <ul {...props} style={{ marginBlockStart: '0', marginBlockEnd: '0' }} children={children} />;
         },
-        code({ node, inline, className, children, ...props }) {
+        code({ node, className, children, ...props }) {
+          if(!node) return null;
+          const inline = node.tagName === 'pre';
+
           if (inline) {
             return (
               <code {...props} className={className} style={{ whiteSpace: 'pre-wrap' }}>
@@ -110,9 +120,11 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
 
           const match = /language-(\w+)/.exec(className || '');
 
+          const { ref, ...otherProps } = props;
+
           return match ? (
             <SyntaxHighlighter
-              {...props}
+              {...otherProps}
               children={String(children).trim()}
               language={match[1]}
               style={dracula}

@@ -9,6 +9,11 @@ import { Message } from '../../chat/conversation';
 import ShareIcon from '@mui/icons-material/Share';
 import copy from 'copy-to-clipboard';
 import { IconButton } from '@mui/material';
+import rehypeSanitize from 'rehype-sanitize'
+import rehypeStringify from 'rehype-stringify'
+import remarkParse from 'remark-parse'
+import remarkRehype from 'remark-rehype'
+import {unified} from 'unified'
 
 type ShareGptMessage = {
   from: 'gpt' | 'human';
@@ -24,6 +29,21 @@ type ShareGptResponse = {
   id: string;
 }
 
+async function markdownToHtmlString(markdown: string): Promise<string> {
+  return String(
+    await unified()
+      .use(remarkParse)
+      .use(remarkRehype)
+      .use(rehypeSanitize)
+      .use(rehypeStringify)
+      .process(markdown)
+  );
+}
+
+// An alternative approach - this works better for non-markdown content
+// Ideally, we'd automatically figure out what the best way to represent
+// the message is, but that's substantially more work than I want to put
+// into the share feature at this time.
 function escapeHtml(unsafe: string) {
   return unsafe
     .replace(/&/g, "&amp;")
@@ -33,25 +53,16 @@ function escapeHtml(unsafe: string) {
     .replace(/'/g, "&#039;");
 }
 
-function convertMessage(message: Message): ShareGptMessage {
-  const content = escapeHtml(message.content);
+function capitalizeFirstLetter(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+async function convertMessage(message: Message): Promise<ShareGptMessage> {
+  const content = message.content;
 
   // Annoying... it has special formatting for user vs assistant, so we need
   // to force it to always be assistant so that it renders HTML.
-  // if (message.role === 'user') {
-  //   return {
-  //     from: 'human',
-  //     value: content,
-  //   };
-  // }
-  // if (message.role === 'assistant') {
-  //   return {
-  //     from: 'gpt',
-  //     value: content,
-  //   };
-  // }
-
-  const value = `<strong>${message.role}</strong>\n\n${content}`
+  const value = `<strong>${capitalizeFirstLetter(message.role)}</strong>\n\n${await markdownToHtmlString(content)}`
   return {
     from: 'gpt',
     value,
@@ -72,7 +83,7 @@ const ShareGptButton: React.FC<{ messages: [Message, ...Message[]] }> = ({ messa
   const handleShare = async () => {
     const payload: ShareGptPayload = {
       avatarUrl: '',
-      items: messages.map(convertMessage) as [ShareGptMessage, ...ShareGptMessage[]],
+      items: (await Promise.all(messages.map(convertMessage))) as [ShareGptMessage, ...ShareGptMessage[]],
     };
     const response = await fetch('https://sharegpt.com/api/conversations', {
       method: 'POST',
