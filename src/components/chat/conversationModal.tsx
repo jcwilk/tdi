@@ -21,6 +21,7 @@ import { RunningConversation } from './useConversationStore';
 import { LeafDescendantsDialog } from './messageBoxDialogs';
 import { defaultIfEmpty, filter, firstValueFrom, map } from 'rxjs';
 import ShareGptButton from './shareGptButton';
+import { JsonEditorButton } from './jsonEditorButton';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -167,6 +168,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           </Box>
           <Box sx={{ display: 'flex', overflow: 'auto' }}>
             <ShareGptButton messages={messages} />
+            <JsonEditorButton messages={messages} onNewLeaf={openMessage} />
             <FunctionManagement
               availableFunctions={getAllFunctionOptions()} // Replace with your array of available functions
               selectedFunctions={conversation.functions} // Replace with your current selected functions
