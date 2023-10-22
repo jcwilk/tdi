@@ -14,6 +14,11 @@ import rehypeStringify from 'rehype-stringify'
 import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
 import {unified} from 'unified'
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormControl from '@mui/material/FormControl';
+import FormLabel from '@mui/material/FormLabel';
 
 type ShareGptMessage = {
   from: 'gpt' | 'human';
@@ -40,10 +45,6 @@ async function markdownToHtmlString(markdown: string): Promise<string> {
   );
 }
 
-// An alternative approach - this works better for non-markdown content
-// Ideally, we'd automatically figure out what the best way to represent
-// the message is, but that's substantially more work than I want to put
-// into the share feature at this time.
 function escapeHtml(unsafe: string) {
   return unsafe
     .replace(/&/g, "&amp;")
@@ -57,12 +58,16 @@ function capitalizeFirstLetter(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-async function convertMessage(message: Message): Promise<ShareGptMessage> {
-  const content = message.content;
+async function convertMessage(message: Message, conversionType: string): Promise<ShareGptMessage> {
+  let content = message.content;
 
-  // Annoying... it has special formatting for user vs assistant, so we need
-  // to force it to always be assistant so that it renders HTML.
-  const value = `<strong>${capitalizeFirstLetter(message.role)}</strong>\n\n${await markdownToHtmlString(content)}`
+  if (conversionType === "markdown") {
+    content = await markdownToHtmlString(content);
+  } else if (conversionType === "escape") {
+    content = escapeHtml(content);
+  }
+
+  const value = `<strong>${capitalizeFirstLetter(message.role)}</strong>\n\n${content}`
   return {
     from: 'gpt',
     value,
@@ -71,6 +76,7 @@ async function convertMessage(message: Message): Promise<ShareGptMessage> {
 
 const ShareGptButton: React.FC<{ messages: [Message, ...Message[]] }> = ({ messages }) => {
   const [open, setOpen] = useState(false);
+  const [conversionType, setConversionType] = useState('markdown');
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -83,7 +89,7 @@ const ShareGptButton: React.FC<{ messages: [Message, ...Message[]] }> = ({ messa
   const handleShare = async () => {
     const payload: ShareGptPayload = {
       avatarUrl: '',
-      items: (await Promise.all(messages.map(convertMessage))) as [ShareGptMessage, ...ShareGptMessage[]],
+      items: (await Promise.all(messages.map(message => convertMessage(message, conversionType)))) as [ShareGptMessage, ...ShareGptMessage[]],
     };
     const response = await fetch('https://sharegpt.com/api/conversations', {
       method: 'POST',
@@ -93,8 +99,14 @@ const ShareGptButton: React.FC<{ messages: [Message, ...Message[]] }> = ({ messa
       body: JSON.stringify(payload),
     });
     const { id } = (await response.json()) as ShareGptResponse;
-    copy(`https://shareg.pt/${id}`);
-    handleClose();
+    const link = `https://shareg.pt/${id}`;
+
+    copy(link);
+    window.open(link, '_blank');
+  };
+
+  const handleConversionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setConversionType((event.target as HTMLInputElement).value);
   };
 
   return (
@@ -113,9 +125,22 @@ const ShareGptButton: React.FC<{ messages: [Message, ...Message[]] }> = ({ messa
         aria-describedby="alert-dialog-description"
       >
         <DialogTitle id="alert-dialog-title">
-          {"Share this conversation"}
+          Share this conversation
         </DialogTitle>
         <DialogContent>
+          <FormControl>
+            <FormLabel id="conversion-type">Conversion Type</FormLabel>
+            <RadioGroup
+              aria-labelledby="conversion-type"
+              name="conversion-type"
+              value={conversionType}
+              onChange={handleConversionChange}
+            >
+              <FormControlLabel value="markdown" control={<Radio />} label="Convert markdown to HTML (Recommended)" />
+              <FormControlLabel value="escape" control={<Radio />} label="Only escape HTML (Markdown syntax won't get parsed)" />
+              <FormControlLabel value="none" control={<Radio />} label="Neither (HTML tags may get removed by ShareGPT)" />
+            </RadioGroup>
+          </FormControl>
           <DialogContentText id="alert-dialog-description">
             WARNING: This conversation will be made public via ShareGPT and a link will be copied to your clipboard.
           </DialogContentText>
