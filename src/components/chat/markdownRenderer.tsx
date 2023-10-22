@@ -84,7 +84,7 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
             }
 
             if (typeof(child) === "string") {
-              return parseContent(child.trim(), openOtherHash)
+              return parseContent(child, openOtherHash)
             }
 
             if (React.isValidElement(child)) {
