@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import { Message } from './conversation';
-import { EMPTY, Observable, defer, merge, mergeMap, of } from 'rxjs';
+import { EMPTY, Observable, defer, filter, map, merge, mergeMap, of, reduce } from 'rxjs';
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {
@@ -19,13 +19,11 @@ export type ConversationMessages = [MessageDB, ...MessageDB[]];
 export interface EmbeddingSpec {
   hash: string;
   embedding: number[];
-  type: MetadataType & 'messageEmbedding';
 }
 
 export type EmbeddingDB = EmbeddingSpec & {
   hash: string;
   embedding: number[];
-  type: MetadataType & 'messageEmbedding';
   timestamp: number;
 }
 
@@ -36,57 +34,103 @@ export type PinDB = {
   remoteTimestamp: number;
 };
 
-export type MetadataType = 'messageEmbedding';
-
 export const rootMessageHash = 'root';
 
 export function isMessageDB(message: MaybePersistedMessage | MessageSpec): message is MessageDB {
   return (message as MessageDB).timestamp !== undefined;
 }
 
-export type MetadataHandlers<T extends string> = {
-  [K in T]?: () => Promise<EmbeddingSpec>; // TODO: this will need to cover summaries eventually too
-};
+// require messageSummary to be defined when summaryEmbedding is defined
+export type MetadataHandlers = {
+  'messageEmbedding'?: () => Promise<EmbeddingSpec>;
+  'messageSummary'?: () => Promise<MessageSummarySpec>;
+  'summaryEmbedding'?: (summary: MessageSummaryDB) => Promise<SummaryEmbeddingSpec>;
+}
 
 export type LeafPath = {
   message: MessageDB,
   pathLength: number
 };
 
+export type MessageSummarySpec = {
+  hash: string;
+  summary: string;
+}
+
+export type MessageSummaryDB = MessageSummarySpec & {
+  hash: string;
+  summary: string;
+  timestamp: number;
+}
+
+export interface SummaryEmbeddingSpec {
+  hash: string;
+  embedding: number[];
+}
+
+export type SummaryEmbeddingDB = SummaryEmbeddingSpec & {
+  hash: string;
+  embedding: number[];
+  timestamp: number;
+}
+
+const METADATA_TYPES = ['messageEmbedding', 'messageSummary', 'summaryEmbedding'] as const;
+export type MetadataType = typeof METADATA_TYPES[number];
+
 function hasParent(message: MessageSpec) {
   return message.parentHash && message.parentHash !== rootMessageHash;
+}
+
+export type MetadataRecords = {
+  'messageEmbedding'?: EmbeddingDB;
+  'messageSummary'?: MessageSummaryDB;
+  'summaryEmbedding'?: SummaryEmbeddingDB;
+};
+
+function assertKeysMatch<T extends MetadataType>(handlers: MetadataHandlers, records: MetadataRecords): asserts records is Record<T, EmbeddingSpec | MessageSummarySpec | SummaryEmbeddingSpec> {
+  for (const key in handlers) {
+    if (!(key in records)) {
+      throw new Error(`Key ${key} is missing in metadata records.`);
+    }
+  }
 }
 
 export class ConversationDB extends Dexie {
   messages: Dexie.Table<MessageDB, string>;
   embeddings: Dexie.Table<EmbeddingDB, string>;
+  summaries: Dexie.Table<MessageSummaryDB, string>;
+  summaryEmbeddings: Dexie.Table<SummaryEmbeddingDB, string>;
   pins: Dexie.Table<PinDB, string>;
 
   constructor() {
     super('ConversationDatabase');
 
-    this.version(11).stores({
+    this.version(13).stores({
       messages: '&hash,timestamp,parentHash,role,content',
-      embeddings: '&hash,timestamp,type,embedding',
+      embeddings: '&hash,timestamp,embedding',
+      summaries: '&hash,timestamp,summary',
+      summaryEmbeddings: '&hash,timestamp,embedding',
       pins: '&hash,timestamp,version,remoteTimestamp'
     });
 
-    // Define tables
     this.messages = this.table('messages');
     this.embeddings = this.table('embeddings');
+    this.summaries = this.table('summaries');
+    this.summaryEmbeddings = this.table('summaryEmbeddings');
     this.pins = this.table('pins');
   }
 
-  async saveMessage<T extends MetadataType>(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers<T>): Promise<[MessageDB, Record<T, EmbeddingSpec>]> {
+  // TODO: this method could probably use some love, but keeping it flat and plain until there's a reason to add more types of metadata
+  async saveMessage(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers): Promise<[MessageDB, MetadataRecords]> {
     console.log("saving messagedb!")
     console.log("Available tables: ", this.tables.map(table => table.name));
-    let persistedMessage: MessageDB;
+    let persistedMessagePromise: Promise<MessageDB>;
     if (isMessageDB(message)) {
-      persistedMessage = message;
+      persistedMessagePromise = Promise.resolve(message);
     }
     else {
       const messageSpec = message;
-      persistedMessage = await this.transaction('rw', this.messages, async (): Promise<MessageDB> => {
+      persistedMessagePromise = this.transaction('rw', this.messages, async (): Promise<MessageDB> => {
         const existingMessage = await this.getMessageByHash(messageSpec.hash);
 
         // Check if the hash exists but with a different parent hash
@@ -110,31 +154,98 @@ export class ConversationDB extends Dexie {
       });
     }
 
-    const metadataRecords: Record<T, EmbeddingSpec> = {} as Record<T, EmbeddingSpec>;
+    // Not the most elegant way to do this, but fancier ways to make the typing work would be nearly illegible
+    let messageSummaryDBPromise: Promise<MessageSummaryDB> | undefined;
+    let summaryEmbeddingDBPromise: Promise<SummaryEmbeddingDB> | undefined;
+    let messageEmbeddingDBPromise: Promise<EmbeddingDB> | undefined;
 
-    for (const metadataType in metadataHandlers) {
-      const handler = metadataHandlers[metadataType];
-      if (!handler) continue;
+    if (metadataHandlers['messageSummary']) {
+      const enclosedHandler = metadataHandlers['messageSummary'];
+      messageSummaryDBPromise = this.getSummaryByHash(message.hash).then(summary => {
+        if (summary) return summary;
 
-      // Check if a matching embedding already exists in the database
-      const existingEmbedding = await this.getEmbeddingByHash(message.hash);
-      if (existingEmbedding) {
-        metadataRecords[metadataType] = {
-          hash: existingEmbedding.hash,
-          embedding: existingEmbedding.embedding,
-          type: existingEmbedding.type
-        };
-        continue;  // Skip the rest and move to the next metadataType
-      }
-
-      const metadataSpec = await handler();
-      metadataRecords[metadataType] = metadataSpec;
-      // Save the metadata spec to the database
-      // You'll need to implement this based on how you want to store the metadata specs
-      await this.saveMetadata(metadataSpec);
+        return enclosedHandler().then(summarySpec => this.saveSummary(summarySpec));
+      });
     }
 
+    if (metadataHandlers['summaryEmbedding']) {
+      if (!messageSummaryDBPromise) {
+        throw new Error('MessageSummary must be specified when SummaryEmbedding is specified.');
+      }
+
+      const enclosedMessageSummaryDBPromise = messageSummaryDBPromise;
+      const enclosedHandler = metadataHandlers['summaryEmbedding'];
+      summaryEmbeddingDBPromise = this.getSummaryEmbeddingByHash(message.hash).then(async embedding => {
+        if (embedding) return embedding;
+
+        const summary = await enclosedMessageSummaryDBPromise;
+        const embeddingSpec = await enclosedHandler(summary);
+        return this.saveSummaryEmbedding(embeddingSpec);
+      });
+    }
+
+    if (metadataHandlers['messageEmbedding']) {
+      const enclosedHandler = metadataHandlers['messageEmbedding'];
+      messageEmbeddingDBPromise = this.getEmbeddingByHash(message.hash).then(async embedding => {
+        if (embedding) return embedding;
+
+        const embeddingSpec = await enclosedHandler();
+        return this.saveMetadata(embeddingSpec);
+      });
+    }
+
+    const [persistedMessage, messageSummary, summaryEmbedding, messageEmbedding] = await Promise.all(
+      [persistedMessagePromise, messageSummaryDBPromise, summaryEmbeddingDBPromise, messageEmbeddingDBPromise]
+    );
+
+    const metadataRecords: MetadataRecords = {
+      messageEmbedding,
+      messageSummary,
+      summaryEmbedding,
+    };
+
+    assertKeysMatch(metadataHandlers, metadataRecords);
     return [persistedMessage, metadataRecords];
+  }
+
+  async getSummaryByHash(hash: string): Promise<MessageSummaryDB | undefined> {
+    return this.summaries.get(hash);
+  }
+
+  async saveSummary(spec: MessageSummarySpec): Promise<MessageSummaryDB> {
+    return this.transaction('rw', [this.messages, this.summaries], async () => {
+      const existingSummary = await this.getSummaryByHash(spec.hash);
+
+      if (existingSummary) {
+        return existingSummary;
+      }
+
+      if (!(await this.getMessageByHash(spec.hash))) {
+        throw new Error(`Hash: ${spec.hash} does not exist in the database.`);
+      }
+
+      const summaryDB: MessageSummaryDB = { ...spec, timestamp: Date.now() };
+      await this.summaries.add(summaryDB);
+      return summaryDB;
+    });
+  }
+
+  async saveSummaryEmbedding(spec: SummaryEmbeddingSpec): Promise<SummaryEmbeddingDB> {
+    return this.transaction('rw', [this.messages, this.summaryEmbeddings], async () => {
+      const existingSummaryEmbedding = await this.getSummaryEmbeddingByHash(spec.hash);
+
+      if (existingSummaryEmbedding) {
+        return existingSummaryEmbedding;
+      }
+
+      if (!(await this.getMessageByHash(spec.hash))) {
+        throw new Error(`Hash: ${spec.hash} does not exist in the database.`);
+      }
+
+      const summaryEmbeddingDB: SummaryEmbeddingDB = { ...spec, timestamp: Date.now() };
+      await this.summaryEmbeddings.add(summaryEmbeddingDB);
+      return summaryEmbeddingDB;
+    });
   }
 
   async saveMetadata(spec: EmbeddingSpec): Promise<EmbeddingDB> {
@@ -168,6 +279,10 @@ export class ConversationDB extends Dexie {
     return this.embeddings.get(hash);
   }
 
+  getSummaryEmbeddingByHash(hash: string): Promise<EmbeddingDB | undefined> {
+    return this.summaryEmbeddings.get(hash);
+  }
+
   async getConversationFromLeaf(leafHash: string): Promise<MessageDB[]> {
     const conversation: MessageDB[] = [];
     let currentHash: string | null = leafHash;
@@ -197,51 +312,64 @@ export class ConversationDB extends Dexie {
   // queries to the database. However, this would mean that the database queries would be performed sequentially rather than in parallel.
   // Instead, we're using merge/mergeMap which means that the database queries will be performed in parallel and if we don't consume all
   // the events, we'll have wasted some queries. Because it's indexeddb, this doesn't matter, so we're going with the more aggressive option.
-  getLeafMessagesFrom(message: MessageDB | null, pathLength: number = 0): Observable<LeafPath> {
+  getMessagesFrom(message: MessageDB | null, pathLength: number = 0, callback: (message: MessageDB, children: MessageDB[]) => boolean = () => true): Observable<LeafPath> {
     return defer(() => this.getDirectChildren(message)).pipe(
       mergeMap(children => {
-        if (children.length === 0) {
-          return message ? of({message, pathLength}) : EMPTY;
+        const childObservables = children.map(child => this.getMessagesFrom(child, pathLength + 1, callback));
+        if (message && callback(message, children)) {
+          childObservables.unshift(of({message, pathLength}));
         }
-        else {
-          const childObservables = children.map(child => this.getLeafMessagesFrom(child, pathLength + 1));
-          return merge(...childObservables);
-        }
+        return merge(...childObservables);
       })
     );
+  }
+
+  getLeafMessagesFrom(message: MessageDB | null, pathLength: number = 0): Observable<LeafPath> {
+    return this.getMessagesFrom(message, pathLength, (_message, children) => children.length === 0);
   }
 
   private getDirectChildren(message: MessageDB | null) {
     return this.messages.where('parentHash').equals(message ? message.hash : rootMessageHash).reverse().sortBy('timestamp');
   }
 
-  async searchEmbedding(embedding: number[], limit: number): Promise<string[]> {
-    const embeddingsArray = await this.embeddings.toArray();
-    const batchDurationMs = 50; // Adjust this value to control the max duration for each batch
+  async searchEmbedding(embedding: number[], limit: number, table: 'embeddings' | 'summaryEmbeddings', rootMessageHash?: string): Promise<string[]> {
+    let rootMessage: null | MessageDB = null;
+
+    if (rootMessageHash) {
+      rootMessage = await this.getMessageByHash(rootMessageHash) ?? null;
+      if (!rootMessage) {
+        // TODO: somehow this isn't finding messages by hash at all..?
+        const messages = await this.messages.toArray();
+        const manualFind = messages.find(message => message.hash === rootMessageHash);
+
+        console.log("searchembedding message not found!", JSON.stringify(rootMessageHash), rootMessage, manualFind, messages);
+        return [];
+      }
+    }
+
+    const embeddingsObservable = this.getMessagesFrom(rootMessage).pipe(
+      mergeMap(leafPath => {
+        const getEmbeddingPromise = table === 'embeddings' ? this.getEmbeddingByHash(leafPath.message.hash) : this.getSummaryEmbeddingByHash(leafPath.message.hash);
+        return getEmbeddingPromise.then(embedding => embedding ? {embedding, leafPath} : null);
+      }),
+      filter(Boolean)
+    );
+
     let closestEmbeddings: { hash: string, distance: number }[] = [];
 
     return new Promise<string[]>((resolve) => {
-      const processBatch = (startIndex: number) => {
-        const startTime = Date.now();
-
-        while (startIndex < embeddingsArray.length && Date.now() - startTime < batchDurationMs) {
-          closestEmbeddings.push({
-            hash: embeddingsArray[startIndex].hash,
-            distance: this.cosineSimilarity(embedding, embeddingsArray[startIndex].embedding),
-          });
-          startIndex++;
-        }
-
-        if (startIndex < embeddingsArray.length) {
-          setTimeout(() => processBatch(startIndex), 0);
-        } else {
-          closestEmbeddings = closestEmbeddings.sort((a, b) => b.distance - a.distance);
-          const result = closestEmbeddings.slice(0, limit).map(embedding => embedding.hash);
-          resolve(result);
-        }
-      };
-
-      processBatch(0); // Start the batch processing
+      embeddingsObservable.subscribe(data => {
+        closestEmbeddings.push({
+          hash: data.leafPath.message.hash,
+          distance: this.cosineSimilarity(embedding, data.embedding.embedding),
+        });
+        closestEmbeddings = closestEmbeddings.sort((a, b) => b.distance - a.distance).slice(0, limit);
+      },
+      null,
+      () => {
+        const result = closestEmbeddings.map(embedding => embedding.hash);
+        resolve(result);
+      });
     });
   }
 

@@ -16,9 +16,10 @@ interface MessageDialogProps {
   message: MessageDB;
   openOtherHash: (hash: string) => void;
   incompletePersistence: boolean;
+  summary: string;
 }
 
-const MessageDetails: FC<MessageDialogProps> = ({ open, onClose, message, openOtherHash, incompletePersistence = false }) => {
+const MessageDetails: FC<MessageDialogProps> = ({ open, onClose, message, openOtherHash, incompletePersistence = false, summary = '' }) => {
   const date = new Date(message.timestamp);
   const dateString = date.toLocaleDateString();
   const timeString = date.toLocaleTimeString();
@@ -29,10 +30,12 @@ const MessageDetails: FC<MessageDialogProps> = ({ open, onClose, message, openOt
       <DialogContent>
         {/* <p>Summary: {message.summary}</p> */}
         <p>Sha: {<EmojiShaButton hash={message.hash} openConversation={openOtherHash} />}</p>
-        <TruncateText>Content Preview: {message.content}</TruncateText>
         <p>Has Embedding: { incompletePersistence ? "No" : "Yes" }</p>
+        <p>Has Summary Embedding: { incompletePersistence ? "No" : "Yes" }</p>
         <p>Created At: {dateString} {timeString}</p>
         <p>Parent Sha: {message.parentHash ? <EmojiShaButton hash={message.parentHash} openConversation={openOtherHash} /> : "ROOT"}</p>
+        <p>Content: {message.content}</p>
+        <p>Summary: {summary}</p>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} color="primary">

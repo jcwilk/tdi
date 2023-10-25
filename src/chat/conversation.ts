@@ -1,7 +1,7 @@
 import { BehaviorSubject, Observable, Subject, concatMap, distinctUntilChanged, filter, from, map, of, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
 import { ConversationDB, ConversationMessages, MessageDB } from './conversationDb';
-import { processMessagesWithHashing, reprocessMessagesStartingFrom } from './messagePersistence';
+import { MaybeProcessedMessageResult, processMessagesWithHashing, reprocessMessagesStartingFrom } from './messagePersistence';
 import { FunctionCall, FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
 import { SupportedModels } from './chatStreams';
@@ -67,12 +67,13 @@ export type Conversation = {
 };
 
 interface ScanState {
-  lastProcessedHash: string | null;
+  lastResult: MaybeProcessedMessageResult;
   event: TypingUpdateEvent | ProcessedMessageEvent | null;
 }
 
 export async function createConversation(db: ConversationDB, loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Promise<Conversation> {
-  const newLeafMessage = await reprocessMessagesStartingFrom(model, loadedMessages);
+  const loadedResult = await reprocessMessagesStartingFrom(model, loadedMessages);
+  const newLeafMessage = loadedResult.message;
 
   if (newLeafMessage.hash !== loadedMessages[loadedMessages.length - 1].hash) {
     loadedMessages = await db.getConversationFromLeafMessage(newLeafMessage);
@@ -91,24 +92,20 @@ export async function createConversation(db: ConversationDB, loadedMessages: Con
     }
   })
 
-  const lastMessage = loadedMessages[loadedMessages.length - 1];
-
   const aggregatedOutput = conversation.newMessagesInput.pipe(
     scanAsync<ConversationEvent, ScanState>(async (acc: ScanState, event: ConversationEvent) => {
       if (isNewMessageEvent(event) || isErrorMessageEvent(event)) {
-        const currentParentHashes = acc.lastProcessedHash ? [acc.lastProcessedHash] : [];
-
-        const persistedMessage = await processMessagesWithHashing(model, event.payload, currentParentHashes);
+        const result = await processMessagesWithHashing(model, event.payload, acc.lastResult);
 
         return {
-          lastProcessedHash: persistedMessage.hash,
-          event: { type: 'processedMessage', payload: persistedMessage } as ProcessedMessageEvent,
+          lastResult: result,
+          event: { type: 'processedMessage', payload: result.message } as ProcessedMessageEvent,
         };
       }
       else {
         return { ...acc, event };
       }
-    }, { lastProcessedHash: lastMessage?.hash ?? null, event: null }),
+    }, { lastResult: loadedResult, event: null }),
     map((state) => state.event),
     filter<ConversationEvent | null, ConversationEvent>((event): event is ConversationEvent => event !== null),
     scan(

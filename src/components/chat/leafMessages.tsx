@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Message, getLastMessage, observeNewMessages } from '../../chat/conversation';
-import { processMessagesWithHashing } from '../../chat/messagePersistence';
+import { processMessagesWithHashing, reprocessMessagesStartingFrom } from '../../chat/messagePersistence';
 import { Box, Button, List, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { emojiSha } from '../../chat/emojiSha';
@@ -68,7 +68,7 @@ const LeafMessages: React.FC<{
   }, [runningConversations]);
 
   const handleNewConversation = useCallback(async () => {
-    const firstMessage = await processMessagesWithHashing('paused', mainSystemMessage);
+    const firstMessage = (await reprocessMessagesStartingFrom('paused', [mainSystemMessage])).message;
     openMessage(firstMessage);
   }, [openMessage]);
 

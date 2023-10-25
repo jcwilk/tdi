@@ -18,7 +18,7 @@ import PauseIcon from '@mui/icons-material/Pause';
 import { RunningConversation, useTypingWatcher } from './useConversationStore';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
-import { SiblingsDialog } from './messageBoxDialogs';
+import { MessageWithSummary, SiblingsDialog } from './messageBoxDialogs';
 import PinButton from './pinButton';
 
 type MessageProps = {
@@ -36,31 +36,37 @@ const db = new ConversationDB();
 const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage, isTail, switchToConversation }) => {
   const [openDetails, setOpenDetails] = useState(false);
 
-  const siblings: MessageDB[] = useLiveQuery(() => {
+  const siblings: MessageWithSummary[] = useLiveQuery(async () => {
     if (!isMessageDB(message)) {
       return [];
     }
 
-    return db.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
+    const messages = await db.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
+    const pairPromises = messages.map(async message => {
+      const summary = await db.summaries.get(message.hash);
+      return {
+        message,
+        summary: summary?.summary ?? null
+      }
+    })
+    return await Promise.all(pairPromises)
   }, [message], []);
 
-  const otherSiblings = useMemo(() => {
+  const [incompletePersistence, summary]: [boolean | undefined, string | undefined] = useLiveQuery(async () => {
     if (!isMessageDB(message)) {
-      return [];
+      return [undefined, undefined];
     }
 
-    return siblings.filter((sibling) => sibling.hash !== message.hash);
-  }, [message, siblings]);
+    const [summary, embedding, summaryEmbedding] = await Promise.all([
+      db.getSummaryByHash(message.hash),
+      db.getEmbeddingByHash(message.hash),
+      db.getSummaryEmbeddingByHash(message.hash),
+    ]);
 
-  const incompletePersistence: boolean = useLiveQuery(() => {
-    if (!isMessageDB(message)) {
-      return false;
-    }
+    return [!(summary && embedding && summaryEmbedding), summary?.summary ?? ""] as [boolean, string];
+  }, [message], [undefined, undefined]);
 
-    return db.getEmbeddingByHash(message.hash).then(embedding => !embedding);
-  }, [message], false);
-
-  const siblingPos = isMessageDB(message) ? siblings.findIndex((sibling) => sibling.hash === message.hash) + 1 : 0;
+  const siblingPos = isMessageDB(message) ? siblings.findIndex((sibling) => sibling.message.hash === message.hash) + 1 : 0;
 
   const [openSiblings, setOpenSiblings] = useState(false);
 
@@ -185,8 +191,10 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
       </Box>
       { isMessageDB(message) &&
         <>
-          <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} openOtherHash={openOtherHash} incompletePersistence={incompletePersistence} />
-          <SiblingsDialog open={openSiblings} onClose={() => setOpenSiblings(false)} onSelectMessage={openMessage} switchToConversation={switchToConversation} messages={otherSiblings} siblingsTyping={siblingsTyping} />
+          { incompletePersistence !== undefined && summary !== undefined &&
+            <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} openOtherHash={openOtherHash} incompletePersistence={incompletePersistence} summary={summary} />
+          }
+          <SiblingsDialog open={openSiblings} onClose={() => setOpenSiblings(false)} onSelectMessage={openMessage} switchToConversation={switchToConversation} messagesWithSummaries={siblings} siblingsTyping={siblingsTyping} />
         </>
       }
     </Box>

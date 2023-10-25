@@ -25,14 +25,14 @@ function concatWithEllipses(str: string, maxLength: number): string {
   return str.length > maxLength ? str.substring(0, maxLength - 3) + "..." : str;
 }
 
-const functionSpecs: FunctionSpec[] = [
-  {
-    name: "concept_search",
-    description: "Searches for the most similar messages to the provided query via embedding cosine similarity.",
-    implementation: async (utils = {db: ConversationDB}, query: string, limit: number) => {
+function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name: string, description: string) {
+  return {
+    name,
+    description,
+    implementation: async (utils: {db: ConversationDB}, query: string, limit: number, ancestor?: string) => {
       const { db } = utils;
       const embedding = await getEmbedding(query);
-      const shaResults: string[] = await db.searchEmbedding(embedding, limit); // TODO: stream of results instead?
+      const shaResults: string[] = await db.searchEmbedding(embedding, limit, table, ancestor); // TODO: stream of results instead?
       if (shaResults.length === 0) {
         return "No results found.";
       }
@@ -59,9 +59,28 @@ const functionSpecs: FunctionSpec[] = [
         type: "number",
         description: "The maximum number of message results to return.",
         required: true
+      },
+      {
+        name: "descendedFromSHA",
+        type: "string",
+        description: "Optional - when provided, only searches messages descended from the message with the provided SHA. Do not include quotes.",
+        required: false
       }
     ]
-  },
+  }
+}
+
+const functionSpecs: FunctionSpec[] = [
+  sharedSearchSpecBuilder(
+    'embeddings',
+    'direct_message_embedding_search',
+    "Compares the embedding of the search `query` with the embeddings of the contents of messages using cosine similarity. Returns 'limit' number of closest matching messages."
+  ),
+  sharedSearchSpecBuilder(
+    'summaryEmbeddings',
+    'summary_message_embedding_search',
+    "Compares the embedding of the search `query` with the embeddings of the summaries of conversations terminating with potential message results using cosine similarity. Returns 'limit' number of closest matching messages."
+  ),
   {
     name: "alert",
     description: "Displays a browser alert with the provided message.",
@@ -177,7 +196,11 @@ export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils:
   // Construct the ordered arguments list
   const args = funcSpec.parameters.map(param => {
     if (param.name in functionCall.parameters) {
-      return JSON.stringify(functionCall.parameters[param.name]); // Ensuring strings are properly quoted
+      const value = functionCall.parameters[param.name];
+      if (param.type === "number") return Number(value);
+      if (param.type === "boolean") return Boolean(value);
+      if (param.type === "string") return String(value);
+      else throw new Error(`Unsupported parameter type "${param.type}" for parameter "${param.name}".`); // Just add handling for the unknown type directly above this line
     } else if (param.required) {
       throw new Error(`Required parameter "${param.name}" missing in function call.`);
     } else {

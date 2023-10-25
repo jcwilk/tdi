@@ -323,7 +323,7 @@ export function useTypingWatcher(referenceMessage: MessageDB, relationship: "chi
   return mapping;
 }
 
-function insertSortedByTimestamp(paths: LeafPath[], path: LeafPath): LeafPath[] {
+function insertSortedByTimestamp(paths: SummarizedLeafPath[], path: SummarizedLeafPath): SummarizedLeafPath[] {
   const index = paths.findIndex(({message}) => message.timestamp < path.message.timestamp);
   if (index === -1) {
     return [...paths, path];
@@ -333,8 +333,14 @@ function insertSortedByTimestamp(paths: LeafPath[], path: LeafPath): LeafPath[] 
   }
 }
 
-export const useLeafMessageTracker = (root: MessageDB | null) => {
-  const [leafPaths, setLeafPaths] = useState<LeafPath[]>([]);
+export type SummarizedLeafPath = {
+  message: MessageDB,
+  summary: string | null,
+  pathLength: number
+}
+
+export function useLeafMessageTracker(root: MessageDB | null): SummarizedLeafPath[] {
+  const [leafPaths, setLeafPaths] = useState<SummarizedLeafPath[]>([]);
   const { messagesStore } = getStores();
   const runningNewQuery = new Subject<void>;
 
@@ -344,6 +350,12 @@ export const useLeafMessageTracker = (root: MessageDB | null) => {
     runningNewQuery.next();
 
     const observable = messagesStore.getLeafMessagesFrom(root).pipe(
+      mergeMap<LeafPath,Promise<SummarizedLeafPath>>(async ({message, pathLength}) => {
+        const summaryRecord = await messagesStore.getSummaryByHash(message.hash);
+        const summary = summaryRecord?.summary ?? null;
+        return {message, pathLength, summary}
+      }),
+
       // while it's still running, only update the UI with prior-unfound messages
       tap(tappedPath => setLeafPaths(paths => {
         return (paths.findIndex(({message}) => message.hash === tappedPath.message.hash) === -1)
@@ -358,7 +370,7 @@ export const useLeafMessageTracker = (root: MessageDB | null) => {
 
       // if and when the query is able to finish completely, we want to replace the UI with all messages found in this run
       // so that stale messages from prior queries will get removed
-      reduce((acc, path) => insertSortedByTimestamp(acc, path), [] as LeafPath[]),
+      reduce((acc, path) => insertSortedByTimestamp(acc, path), [] as SummarizedLeafPath[]),
       tap(aggregatedMessages => {
         setLeafPaths(aggregatedMessages);
       })
