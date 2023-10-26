@@ -66,8 +66,10 @@ export const MessageAndConversationProvider: React.FC<React.PropsWithChildren> =
   );
 }
 
-async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-3.5-turbo", functionOptions: FunctionOption[] = []): Promise<Conversation> {
-  return addAssistant(await createConversation(db, messages, model, functionOptions), db);
+export async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-3.5-turbo", functionOptions: FunctionOption[] = []): Promise<Conversation> {
+  const conversation = await createConversation(db, messages, model, functionOptions);
+  console.log("test5.5")
+  return addAssistant(conversation, db);
 }
 
 function createConversationSlot(id: string, messagesStore: ConversationDB): ConversationSlot {

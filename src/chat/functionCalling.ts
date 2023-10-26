@@ -1,7 +1,11 @@
 import { FunctionCall, FunctionOption, getEmbedding } from "../openai_api";
-import { Conversation, sendFunctionCall } from "./conversation";
+import { Conversation, Message, NewMessageEvent, createConversation, observeNewMessages, sendFunctionCall, teardownConversation } from "./conversation";
 import { ConversationDB, MessageDB } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
+import { reprocessMessagesStartingFrom } from "./messagePersistence";
+import { filter, firstValueFrom, map, tap } from "rxjs";
+import { buildParticipatedConversation } from "../components/chat/useConversationStore";
+import { isAtLeastOne } from "../tsUtils";
 
 type FunctionParameter = {
   name: string;
@@ -81,6 +85,70 @@ const functionSpecs: FunctionSpec[] = [
     'summary_message_embedding_search',
     "Compares the embedding of the search `query` with the embeddings of the summaries of conversations terminating with potential message results using cosine similarity. Returns 'limit' number of closest matching messages."
   ),
+  {
+    name: "append_user_reply",
+    description: "Appends the provided message content as a user reply to the message specified by the SHA.",
+    implementation: async (utils: {db: ConversationDB}, content: string, rawRole?: string, sha?: string) => {
+      rawRole ||= "user";
+      if (rawRole !== "user" && rawRole !== "system") throw new Error(`Invalid role "${rawRole}". Must be either "user" or "system".`);
+      const role = rawRole as "user" | "system";
+
+      let messages: MessageDB[] = [];
+
+      if(sha) {
+        const leafMessage = await utils.db.getMessageByHash(sha);
+        if (!leafMessage) throw new Error(`Message with SHA ${sha} not found.`);
+
+        messages = await utils.db.getConversationFromLeafMessage(leafMessage);
+      }
+
+      const newMessage: Message = {
+        role,
+        content
+      };
+      const newMessages = sha ? [...messages, newMessage] : [newMessage];
+      if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached.");
+
+      const newLeafMessage = await reprocessMessagesStartingFrom("gpt-4", newMessages);
+
+      const persistedMessages = await utils.db.getConversationFromLeafMessage(newLeafMessage.message);
+
+      const conversation = await buildParticipatedConversation(utils.db, persistedMessages, "gpt-4", []);
+      const observeReplies = observeNewMessages(conversation).pipe(
+        tap(event => console.log("new message event", event)),
+        filter(({role}  ) => role === "assistant")
+      );
+
+      const reply = await firstValueFrom(observeReplies);
+
+      teardownConversation(conversation);
+      return `
+Reply SHA: ${reply.hash}
+
+Content: ${reply.content}
+      `.trim();
+    },
+    parameters: [
+      {
+        name: "content",
+        type: "string",
+        description: "The content of the new message.",
+        required: true
+      },
+      {
+        name: "role",
+        type: "string",
+        description: "Must be one of either 'user' or 'system'. (defaults to 'user')",
+        required: false
+      },
+      {
+        name: "sha",
+        type: "string",
+        description: "The SHA of the message to append a user reply to. (defaults to starting a new conversation from the root rather than replying to an existing message)",
+        required: false
+      }
+    ]
+  },
   {
     name: "alert",
     description: "Displays a browser alert with the provided message.",
