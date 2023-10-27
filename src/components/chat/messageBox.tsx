@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Badge, Box } from '@mui/material';
 import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';

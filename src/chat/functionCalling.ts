@@ -1,9 +1,9 @@
 import { FunctionCall, FunctionOption, getEmbedding } from "../openai_api";
-import { Conversation, Message, NewMessageEvent, createConversation, observeNewMessages, sendFunctionCall, teardownConversation } from "./conversation";
+import { Conversation, Message, observeNewMessages, sendFunctionCall, teardownConversation } from "./conversation";
 import { ConversationDB, MessageDB } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
-import { filter, firstValueFrom, map, tap } from "rxjs";
+import { filter, firstValueFrom, tap } from "rxjs";
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
 import { isAtLeastOne } from "../tsUtils";
 
@@ -106,8 +106,8 @@ const functionSpecs: FunctionSpec[] = [
         role,
         content
       };
-      const newMessages = sha ? [...messages, newMessage] : [newMessage];
-      if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached.");
+      const newMessages = [...messages, newMessage];
+      if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached."); // compilershutup for typing
 
       const newLeafMessage = await reprocessMessagesStartingFrom("gpt-4", newMessages);
 
@@ -229,7 +229,7 @@ ${result}
 \`\`\`
       `.trim();
 
-      sendFunctionCall(conversation, functionCall, content);
+      sendFunctionCall(conversation, content);
     }
     else {
       const uuid = uuidv4();
@@ -238,7 +238,7 @@ Call: ${prettifiedCall}
 
 Result: (pending: ${uuid})
         `.trim();
-      sendFunctionCall(conversation, functionCall, initialContent);
+      sendFunctionCall(conversation, initialContent);
       const resultString = await result;
       const finalContent = `
 Result (${uuid}):
@@ -246,7 +246,7 @@ Result (${uuid}):
 ${resultString}
 \`\`\`
         `.trim();
-      sendFunctionCall(conversation, functionCall, finalContent);
+      sendFunctionCall(conversation, finalContent);
     }
   } catch (error) {
     console.error("caught error in callFunction", error);

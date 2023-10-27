@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import { Message } from './conversation';
-import { EMPTY, Observable, defer, filter, map, merge, mergeMap, of, reduce } from 'rxjs';
+import { Observable, defer, filter, merge, mergeMap, of } from 'rxjs';
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {

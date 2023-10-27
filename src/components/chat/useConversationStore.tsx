@@ -1,12 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Conversation, ConversationMode, createConversation, getLastMessage, observeNewMessages, observeTypingUpdates, teardownConversation } from "../../chat/conversation";
 import { ConversationDB, ConversationMessages, LeafPath, MessageDB } from '../../chat/conversationDb';
-import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, concatMap, debounceTime, distinct, filter, finalize, from, lastValueFrom, map, merge, mergeMap, of, reduce, scan, switchMap, takeUntil, tap, withLatestFrom } from 'rxjs';
+import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, debounceTime, distinct, filter, finalize, from, lastValueFrom, map, merge, mergeMap, of, reduce, scan, switchMap, takeUntil, tap, withLatestFrom } from 'rxjs';
 import { FunctionOption } from '../../openai_api';
 import { addAssistant } from '../../chat/aiAgent';
 import { v4 as uuidv4 } from 'uuid';
 import { observeNew } from '../../chat/rxjsUtilities';
-import KeyboardIcon from '@mui/icons-material/Keyboard';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 export type RunningConversation = {

@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Message, getLastMessage, observeNewMessages } from '../../chat/conversation';
-import { processMessagesWithHashing, reprocessMessagesStartingFrom } from '../../chat/messagePersistence';
+import { reprocessMessagesStartingFrom } from '../../chat/messagePersistence';
 import { Box, Button, List, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { emojiSha } from '../../chat/emojiSha';
-import { debounceTime, scan, tap } from 'rxjs';
+import { debounceTime, tap } from 'rxjs';
 import { RunningConversation, useConversationStore, useLeafMessageTracker } from './useConversationStore';
 import { useLiveQuery } from 'dexie-react-hooks';
 

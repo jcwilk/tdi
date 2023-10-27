@@ -1,8 +1,8 @@
-import { BehaviorSubject, Observable, Subject, concatMap, distinctUntilChanged, filter, from, map, of, scan } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, concatMap, distinctUntilChanged, filter, from, map, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
 import { ConversationDB, ConversationMessages, MessageDB } from './conversationDb';
 import { MaybeProcessedMessageResult, processMessagesWithHashing, reprocessMessagesStartingFrom } from './messagePersistence';
-import { FunctionCall, FunctionOption } from '../openai_api';
+import { FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
 import { SupportedModels } from './chatStreams';
 
@@ -172,7 +172,7 @@ export function sendError(conversation: Conversation, error: unknown) {
   });
 }
 
-export function sendFunctionCall(conversation: Conversation, functionCall: FunctionCall, content: string): void {
+export function sendFunctionCall(conversation: Conversation, content: string): void {
   conversation.newMessagesInput.next({
     type: 'newMessage',
     payload: {
