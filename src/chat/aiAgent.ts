@@ -25,6 +25,13 @@ const interruptionFunctions: FunctionOption[] = [
   }
 ]
 
+// This is an odd solution to a very tricky problem with vanilla cold observables.
+// Cold observables don't start consuming their source until they get a subscriber,
+// and each subscriber leads to a new execution context, which means any side effects get duplicated.
+// Instead, this immediately "connects" to a new Subject and uses that as a bus of sorts between
+// all the different subscribers, if any.
+// Beware that any buffered/queued/replayed/behaviorsubject'd pending values may be lost, but that's
+// sometimes better than the alternative of subscriptions causing a side effect on the source observable
 function hotShare<T>(): UnaryFunction<Observable<T>, Observable<T>> {
   return share({
     connector: () => new Subject(),
@@ -134,7 +141,7 @@ function switchedOutputStreamsFromRespondableMessages(
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
     switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, model, 1000, functions)),
-    hotShare() // TODO: come back to whether this is the right way to do this
+    hotShare() // NB: necessary to avoid inducing a separate stream for each subscriber
   )
 }
 
@@ -215,7 +222,7 @@ The ONLY scenario where you should not call a function is if the latest user mes
     }),
     filter(([gptMessage, _typingUpdate]) => isGPTFunctionCall(gptMessage)),
     map(([gptMessage, typingUpdate]) => [gptMessage, typingUpdate] as [GPTFunctionCall, TypingUpdate]),
-    hotShare()
+    hotShare() // NB: Neccesary to avoid rerunning the api stream for multiple subscribers
   )
 }
 

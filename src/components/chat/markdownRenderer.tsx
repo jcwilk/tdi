@@ -39,11 +39,11 @@ const parseContent = (content: string, openOtherHash: (hash: string) => void) =>
   }, []);
 };
 
-function processChildren<T, U>(children: T | T[], operation: (child: T) => U): U | U[] {
+function processChildren<T, U>(children: T | T[], operation: (child: T, index: number, total: number) => U): U | U[] {
   if (Array.isArray(children)) {
-    return children.map(operation);
+    return children.map((element, index) => operation(element, index, children.length));
   } else {
-    return operation(children);
+    return operation(children, 0, 1);
   }
 }
 
@@ -78,23 +78,35 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
             return <li children={children} {...props} />;
           }
 
-          children = processChildren(children, (child) => {
+          function processLeafChild<T>(child: T, index: number, total: number) {
             if (!child || typeof(child) === "number" || typeof(child) === "boolean") {
               return child;
             }
 
             if (typeof(child) === "string") {
-              return parseContent(child, openOtherHash)
+              if(index === 0) child = (child.replace(/^\s+/, "") as T & string);
+              if(index === total - 1) child = ((child as string).replace(/\s+$/, "") as T & string);
+
+              return parseContent(child as T & string, openOtherHash)
             }
 
+            console.log("unknown li child!", child, typeof(child))
+            return child;
+          }
+
+          children = processChildren(children, (child, index, total) => {
             if (React.isValidElement(child)) {
+              console.log("unknown react", child, typeof(child))
               const props = child.props;
 
               if (props && props.node?.tagName === "p") {
-                return child.props.children
+                console.log("unknown p")
+                return processLeafChild(child.props.children, index, total);
               }
             }
-            return child;
+            console.log("unknown non-react", child, typeof(child))
+
+            return processLeafChild(child, index, total);
           });
           return <li {...props} children={children} />;
         },
