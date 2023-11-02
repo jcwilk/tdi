@@ -68,8 +68,9 @@ const LeafMessages: React.FC<{
   }, [runningConversations]);
 
   const handleNewConversation = useCallback(async () => {
-    const firstMessage = (await reprocessMessagesStartingFrom('paused', [mainSystemMessage])).message;
-    openMessage(firstMessage);
+    const newMessages = await reprocessMessagesStartingFrom("paused", [mainSystemMessage]);
+    const newLeaf = newMessages[newMessages.length - 1].message;
+    openMessage(newLeaf);
   }, [openMessage]);
 
   return (

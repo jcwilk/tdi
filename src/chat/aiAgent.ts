@@ -3,8 +3,8 @@ import { Conversation, Message, TypingUpdate, sendError, sendSystemMessage } fro
 import { sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTSentMessage, SupportedModels } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
-import { callFunction } from "./functionCalling";
-import { ConversationDB } from "./conversationDb";
+import { callFunction, possiblyEmbellishedMessageToMarkdown } from "./functionCalling";
+import { ConversationDB, isMessageDB } from "./conversationDb";
 
 const interruptionFunctions: FunctionOption[] = [
   {
@@ -39,6 +39,18 @@ function hotShare<T>(): UnaryFunction<Observable<T>, Observable<T>> {
     resetOnComplete: false,
     resetOnRefCountZero: false
   });
+}
+
+async function messagesToConversationMessages(db: ConversationDB, messages: Message[]): Promise<ChatMessage[]> {
+  const convertedMessagesPromises = messages.map(message => {
+    if (!isMessageDB(message)) return Promise.resolve(message);
+
+    // TODO: Human-oriented markdown may not be the most appropriate format for the assistant to use internally.
+    // However, it's a good starting point for now and we can come back to this as time permits.
+    return possiblyEmbellishedMessageToMarkdown(db, message).then(content => ({role: message.role, content}));
+  });
+
+  return Promise.all(convertedMessagesPromises);
 }
 
 function rateLimiter<T>(maxCalls: number, windowSize: number): (source: Observable<T>) => Observable<T> {
@@ -83,7 +95,7 @@ export function addAssistant(
     map(([messages, _typing]) => messages)
   );
 
-  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, conversation.model, conversation.functions)
+  const typingAndSending = switchedOutputStreamsFromRespondableMessages(db, newRespondableMessages, conversation.model, conversation.functions)
     .pipe(
       catchError(err => {
         console.log("Error from before handleGptMessages!", err);
@@ -96,7 +108,7 @@ export function addAssistant(
 
   // TODO: The way that I'm using naming to constrain which stream contains what data seems wrong. It'd be worth exploring
   // whether there's a way to leverage the type system to make this less brittle.
-  const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages)
+  const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(db, newInterruptingUserMessages)
     .pipe(
       catchError(err => {
         console.log("Error from before sendSystemMessagesForInterruptions!", err);
@@ -134,13 +146,19 @@ function filterByIsUninterruptedUserMessage(messagesAndTyping: Observable<[Messa
 }
 
 function switchedOutputStreamsFromRespondableMessages(
+  db: ConversationDB,
   newRespondableMessages: Observable<Message[]>,
   model?: SupportedModels,
-  functions?: FunctionOption[]
+  functions?: FunctionOption[],
 ) {
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
-    switchMap(messages => chatCompletionMetaStream(messages.map(({role, content}) => ({role, content})), 0.1, model, 1000, functions)),
+    switchMap(messages => {
+      const convertedMessagesPromise = messagesToConversationMessages(db, messages);
+      return from(convertedMessagesPromise).pipe(
+        concatMap(convertedMessages => chatCompletionMetaStream(convertedMessages, 0.1, model, 1000, functions))
+      )
+    }),
     hotShare() // NB: necessary to avoid inducing a separate stream for each subscriber
   )
 }
@@ -200,10 +218,10 @@ function handleGptMessages(conversation: Conversation, typingAndSending: Observa
   ).subscribe();
 }
 
-function switchedOutputStreamsFromInterruptingUserMessages(newInterruptingUserMessages: Observable<[Message[], TypingUpdate]>) {
+function switchedOutputStreamsFromInterruptingUserMessages(db: ConversationDB, newInterruptingUserMessages: Observable<[Message[], TypingUpdate]>) {
   return newInterruptingUserMessages.pipe(
     switchMap(([messages, typingUpdate]) => {
-      const convertedMessages: ChatMessage[] = messages.filter(({ role }) => role !== "system").map(({ role, content }) => ({ role, content }));
+      const convertedMessagesPromise = messagesToConversationMessages(db, messages.filter(({ role }) => role !== "system"));
       const systemInstructions: ChatMessage = { role: "system", content: `
 You are a text generation monitor. The user has sent new messages while the text generation of the assistant was still in progress. The text generation in progress was:
 \`\`\`
@@ -214,9 +232,9 @@ The only way to take the newest messages from the user into account is to either
 
 The ONLY scenario where you should not call a function is if the latest user messages are already fully addressed by the message in progress. Return a blank string (\`""\`) in this case.
       `.trim() };
-      // TODO: the conversation should be presented to GPT all in one message so it can differentiate the flow of the text generation monitoring conversation from the user conversation.
-      // also would be easier to do few-shot examples of function call decisions if the conversation was presented to GPT all in one message.
-      return chatCompletionMetaStream([systemInstructions, ...convertedMessages], 0.1, "gpt-3.5-turbo-0613", 100, interruptionFunctions).pipe(
+
+      return from(convertedMessagesPromise).pipe(
+        concatMap(convertedMessages => chatCompletionMetaStream([systemInstructions, ...convertedMessages], 0.1, "gpt-3.5-turbo-0613", 100, interruptionFunctions)), // TODO: consider restructuring how this is presented to the assistant
         map(gptMessage => [gptMessage, typingUpdate] as [GPTMessage, TypingUpdate])
       )
     }),
@@ -233,7 +251,7 @@ function sendSystemMessagesForInterruptions(conversation: Conversation, interrup
   ).subscribe();
 
   interruptingFunctionCalls.pipe(
-    filter(([{ functionCall }, typingUpdate]) => functionCall.name === "append"),
+    filter(([{ functionCall }, _typingUpdate]) => functionCall.name === "append"),
     tap(([_, typingUpdate]) => sendSystemMessage(conversation, `Assistant was interrupted by the user. The message in progress was:
 \`\`\`
 ${typingUpdate.content}

@@ -74,8 +74,9 @@ export async function mirrorPinsToDB(db: ConversationDB): Promise<void> {
       const trainingItems = await fetchFileContent(file);
       const messages = transformTrainingItemsToMessages(trainingItems);
       if (isAtLeastOne(messages)) {
-        const persistedMessage = (await reprocessMessagesStartingFrom("paused", messages)).message;
-        await db.addPin(persistedMessage, file.created_at);
+        const processedMessages = await reprocessMessagesStartingFrom("paused", messages);
+        const newLeafMessage = processedMessages[processedMessages.length - 1].message;
+        await db.addPin(newLeafMessage, file.created_at);
       }
     }
   }));

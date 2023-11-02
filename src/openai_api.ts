@@ -1,5 +1,6 @@
 import { Configuration, OpenAIApi } from 'openai';
 import { APIKeyFetcher } from './api_key_storage';
+import { deserializeFunctionMessageContent } from './chat/functionCalling';
 
 const getClient = function(): OpenAIApi | null {
   const apiKey = APIKeyFetcher();
@@ -61,7 +62,7 @@ type ChatCompletionPayload = {
   function_call?: "none" | "auto"
 }
 
-type FunctionParameters = { [key: string]: any }
+export type FunctionParameters = { [key: string]: any }
 
 export type FunctionCall = {
   name: string,
@@ -115,7 +116,7 @@ export async function getChatCompletion(
   if (!OPENAI_KEY) return;
 
   const payload: ChatCompletionPayload = {
-    messages: messages.map((message: ChatMessage) => message.role === "function" ? { ...message, name: "TODO" } : message ),
+    messages: messages.map((message: ChatMessage) => message.role === "function" ? { ...message, name: deserializeFunctionMessageContent(message.content)?.name || "(unknown)" } : message ),
     model,
     max_tokens: maxTokens,
     temperature,

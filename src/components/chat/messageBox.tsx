@@ -20,6 +20,20 @@ import KeyboardIcon from '@mui/icons-material/Keyboard';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { MessageWithSummary, SiblingsDialog } from './messageBoxDialogs';
 import PinButton from './pinButton';
+import { possiblyEmbellishedMessageToMarkdown } from '../../chat/functionCalling';
+
+const db = new ConversationDB();
+
+const ContentRenderer: React.FC<{ message: MaybePersistedMessage; openOtherHash: (hash: string) => void }> = ({ message, openOtherHash }) => {
+  const content = useLiveQuery(async () => {
+    if (!isMessageDB(message)) {
+      return message.content;
+    }
+    return possiblyEmbellishedMessageToMarkdown(db, message);
+  }, [message], message.content);
+
+  return <MarkdownRenderer content={content} openOtherHash={openOtherHash ?? (() => {})} />;
+};
 
 type MessageProps = {
   message: MaybePersistedMessage;
@@ -30,8 +44,6 @@ type MessageProps = {
   isTail: boolean;
   switchToConversation: (runningConversation: RunningConversation) => void;
 };
-
-const db = new ConversationDB();
 
 const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage, isTail, switchToConversation }) => {
   const [openDetails, setOpenDetails] = useState(false);
@@ -140,7 +152,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
             whiteSpace: 'pre-wrap',
           }}
         >
-          <MarkdownRenderer content={message.content} openOtherHash={openOtherHash ?? (() => {})} />
+          <ContentRenderer message={message} openOtherHash={openOtherHash} />
         </Box>
       </Box>
       <Box

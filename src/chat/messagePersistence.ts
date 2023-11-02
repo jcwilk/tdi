@@ -4,6 +4,7 @@ import { getEmbedding } from '../openai_api';
 import { isAtLeastOne } from '../tsUtils';
 import { chatCompletionMetaStream, isGPTSentMessage } from './chatStreams';
 import { filter, firstValueFrom, map } from 'rxjs';
+import { embellishFunctionMessage } from './functionCalling';
 
 const hashFunction = async (message: Message, parentHashes: string[]): Promise<string> => {
   // Extract the required fields
@@ -149,7 +150,8 @@ export async function processMessagesWithHashing(
   const metadataHandlers: MetadataHandlers = conversationMode === 'paused' ? unconditionalHandlers : { ...unconditionalHandlers, ...unpausedHandlers };
 
   const [persistedMessage, metadataRecords] = (await conversationDB.saveMessage(messageToSave, metadataHandlers));
-  return { message: persistedMessage, metadataRecords };
+  const possiblyEmbellishedMessage = (await embellishFunctionMessage(conversationDB, persistedMessage)) || persistedMessage;
+  return { message: possiblyEmbellishedMessage, metadataRecords };
 };
 
 const identifyMessagesForReprocessing = (conversation: MessageDB[], startIndex: number): Message[] => {
@@ -159,24 +161,20 @@ const identifyMessagesForReprocessing = (conversation: MessageDB[], startIndex: 
   }));
 };
 
-export async function reprocessMessagesStartingFrom(conversationMode: ConversationMode, messagesForReprocessing: [MaybePersistedMessage, ...MaybePersistedMessage[]]): Promise<ProcessedMessageResult> {
-  const initialResult = await processMessagesWithHashing(conversationMode, messagesForReprocessing[0], NULL_OBJECT_PROCESSED_MESSAGE_RESULT);
+export async function reprocessMessagesStartingFrom(conversationMode: ConversationMode, messagesForReprocessing: [MaybePersistedMessage, ...MaybePersistedMessage[]]): Promise<[ProcessedMessageResult, ...ProcessedMessageResult[]]> {
+  let accResult = await processMessagesWithHashing(conversationMode, messagesForReprocessing[0], NULL_OBJECT_PROCESSED_MESSAGE_RESULT);
+  const results: [ProcessedMessageResult, ...ProcessedMessageResult[]] = [accResult];
+
   const remainingMessages = messagesForReprocessing.slice(1);
 
-  if(!isAtLeastOne(remainingMessages)) return initialResult;
+  if(!isAtLeastOne(remainingMessages)) return results;
 
-  return remainingMessages.reduce<Promise<ProcessedMessageResult>>(
-    (acc, message) => {
-      return acc.then(accResult => {
-        return processMessagesWithHashing(
-          conversationMode,
-          message,
-          accResult
-        )
-      })
-    },
-    Promise.resolve(initialResult)
-  );
+  for (const message of remainingMessages) {
+    accResult = await processMessagesWithHashing(conversationMode, message, accResult);
+    results.push(accResult);
+  }
+
+  return results;
 }
 
 export async function editConversation(
@@ -211,7 +209,8 @@ export async function editConversation(
   }
 
   // Replace the message at the given index with the new message
-  return reprocessMessagesStartingFrom(conversationMode, fullMessagesForReprocessing).then(result => result.message);
+  const newMessages = await reprocessMessagesStartingFrom(conversationMode, fullMessagesForReprocessing);
+  return newMessages[newMessages.length - 1].message;
 };
 
 export async function pruneConversation(
@@ -249,5 +248,6 @@ export async function pruneConversation(
     return precedingMessages[precedingMessages.length - 1];
   }
 
-  return reprocessMessagesStartingFrom(conversationMode, fullMessagesForReprocessing).then(result => result.message);
+  const newMessages = await reprocessMessagesStartingFrom(conversationMode, fullMessagesForReprocessing);
+  return newMessages[newMessages.length - 1].message;
 };

@@ -74,6 +74,35 @@ export type SummaryEmbeddingDB = SummaryEmbeddingSpec & {
   timestamp: number;
 }
 
+type FunctionResultWithResult = {
+  uuid: string;
+  timestamp: number;
+  functionName: string;
+  result: string;
+  id: number;
+  completed: false;
+}
+
+type FunctionResultWithCompletion = {
+  uuid: string;
+  timestamp: number;
+  functionName: string;
+  result?: never;
+  id: number;
+  completed: true;
+}
+
+export type FunctionResultDB = FunctionResultWithResult | FunctionResultWithCompletion;
+
+// This type is exclusively used internally in the dexie class to sidestep type awkwardness around
+// not getting the auto-inc id until it's persisted, but not being able to persist without an id.
+type FunctionResultDBMaybeId = Partial<Pick<FunctionResultDB, 'id'>> & Omit<FunctionResultDB, 'id'>;
+
+type FunctionResultSpecWithResult = Omit<FunctionResultWithResult, 'timestamp' | 'id'>;
+type FunctionResultSpecWithCompletion = Omit<FunctionResultWithCompletion, 'timestamp' | 'id'>;
+
+export type FunctionResultSpec = FunctionResultSpecWithResult | FunctionResultSpecWithCompletion;
+
 const METADATA_TYPES = ['messageEmbedding', 'messageSummary', 'summaryEmbedding'] as const;
 export type MetadataType = typeof METADATA_TYPES[number];
 
@@ -101,16 +130,18 @@ export class ConversationDB extends Dexie {
   summaries: Dexie.Table<MessageSummaryDB, string>;
   summaryEmbeddings: Dexie.Table<SummaryEmbeddingDB, string>;
   pins: Dexie.Table<PinDB, string>;
+  functionResults: Dexie.Table<FunctionResultDBMaybeId, number>;
 
   constructor() {
     super('ConversationDatabase');
 
-    this.version(13).stores({
+    this.version(15).stores({
       messages: '&hash,timestamp,parentHash,role,content',
       embeddings: '&hash,timestamp,embedding',
       summaries: '&hash,timestamp,summary',
       summaryEmbeddings: '&hash,timestamp,embedding',
-      pins: '&hash,timestamp,version,remoteTimestamp'
+      pins: '&hash,timestamp,version,remoteTimestamp',
+      functionResults: '++id,*uuid,timestamp,functionName,result,completed',
     });
 
     this.messages = this.table('messages');
@@ -118,9 +149,9 @@ export class ConversationDB extends Dexie {
     this.summaries = this.table('summaries');
     this.summaryEmbeddings = this.table('summaryEmbeddings');
     this.pins = this.table('pins');
+    this.functionResults = this.table('functionResults');
   }
 
-  // TODO: this method could probably use some love, but keeping it flat and plain until there's a reason to add more types of metadata
   async saveMessage(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers): Promise<[MessageDB, MetadataRecords]> {
     console.log("saving messagedb!")
     console.log("Available tables: ", this.tables.map(table => table.name));
@@ -418,5 +449,19 @@ export class ConversationDB extends Dexie {
     const pins = await this.pins.toArray();
     const pinnedMessages = await Promise.all(pins.map(pin => this.getMessageByHash(pin.hash)));
     return pinnedMessages.filter((message): message is MessageDB => !!message).sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  async saveFunctionResult(spec: FunctionResultSpec): Promise<FunctionResultDB> {
+    const functionResultDB: FunctionResultDBMaybeId = {
+      ...spec,
+      timestamp: Date.now()
+    };
+    const id = await this.functionResults.add(functionResultDB);
+    return { ...functionResultDB, id } as FunctionResultDB;
+  }
+
+  async getFunctionResultsByUUID(uuid: string): Promise<FunctionResultDB[]> {
+    const results = await this.functionResults.where('uuid').equals(uuid).sortBy('id');
+    return results as FunctionResultDB[];
   }
 }

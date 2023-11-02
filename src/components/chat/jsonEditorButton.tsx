@@ -50,7 +50,8 @@ const JsonEditorDialog: React.FC<JsonEditorDialogProps> = ({ messages, open, onC
   const handleSave = async () => {
     try {
       const updatedMessages = stringToMessages(currentText);
-      const newLeaf = (await reprocessMessagesStartingFrom("paused", updatedMessages)).message;
+      const newMessages = await reprocessMessagesStartingFrom("paused", updatedMessages);
+      const newLeaf = newMessages[newMessages.length - 1].message;
       await onNewLeaf(newLeaf);
       onClose();
     } catch (err) {

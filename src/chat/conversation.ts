@@ -5,6 +5,7 @@ import { MaybeProcessedMessageResult, processMessagesWithHashing, reprocessMessa
 import { FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
 import { SupportedModels } from './chatStreams';
+import { isAtLeastOne } from '../tsUtils';
 
 export type Message = {
   role: ParticipantRole;
@@ -72,12 +73,11 @@ interface ScanState {
 }
 
 export async function createConversation(db: ConversationDB, loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Promise<Conversation> {
-  const loadedResult = await reprocessMessagesStartingFrom(model, loadedMessages);
-  const newLeafMessage = loadedResult.message;
+  const processedResults = await reprocessMessagesStartingFrom(model, loadedMessages);
 
-  if (newLeafMessage.hash !== loadedMessages[loadedMessages.length - 1].hash) {
-    loadedMessages = await db.getConversationFromLeafMessage(newLeafMessage);
-  }
+  const processedMessages = processedResults.map(result => result.message);
+  if (!isAtLeastOne(processedMessages)) throw new Error("No messages in conversation"); // just compilershutup
+  loadedMessages = processedMessages;
 
   const conversation: Conversation = {
     newMessagesInput: new Subject<ConversationEvent>(),
@@ -105,7 +105,7 @@ export async function createConversation(db: ConversationDB, loadedMessages: Con
       else {
         return { ...acc, event };
       }
-    }, { lastResult: loadedResult, event: null }),
+    }, { lastResult: processedResults[processedResults.length - 1], event: null }),
     map((state) => state.event),
     filter<ConversationEvent | null, ConversationEvent>((event): event is ConversationEvent => event !== null),
     scan(

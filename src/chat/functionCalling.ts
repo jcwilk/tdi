@@ -1,9 +1,9 @@
-import { FunctionCall, FunctionOption, getEmbedding } from "../openai_api";
+import { FunctionCall, FunctionOption, FunctionParameters, getEmbedding } from "../openai_api";
 import { Conversation, Message, observeNewMessages, sendFunctionCall, teardownConversation } from "./conversation";
-import { ConversationDB, MessageDB } from "./conversationDb";
+import { ConversationDB, FunctionResultDB, FunctionResultSpec, MessageDB } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
-import { filter, firstValueFrom, tap } from "rxjs";
+import { Observable, OperatorFunction, concatMap, filter, firstValueFrom, from, isObservable, map, tap } from "rxjs";
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
 import { isAtLeastOne } from "../tsUtils";
 
@@ -17,13 +17,40 @@ type FunctionParameter = {
 type FunctionSpec = {
   name: string;
   description: string;
-  implementation: (...args: any[]) => Promise<string> | string;
+  implementation: (...args: any[]) => Observable<string> | Promise<string> | string;
   parameters: FunctionParameter[];
 };
 
 type FunctionUntils = {
   db: ConversationDB;
 }
+
+export type FunctionMessage = MessageDB & {
+  role: 'function'
+}
+
+export function isFunctionMessage(message: Message): message is FunctionMessage {
+  return message.role === "function";
+}
+
+export type EmbellishedFunctionMessage = FunctionMessage & {
+  isComplete: boolean;
+  results: FunctionResultDB[];
+}
+
+export function isEmbellishedFunctionMessage(message: Message): message is EmbellishedFunctionMessage {
+  return isFunctionMessage(message) && "isComplete" in message && "results" in message;
+}
+
+// This is a little unusual, but doing it as an experiment - types which differ only by guard
+// Because the difference is only in the
+export type CompleteFunctionMessage = EmbellishedFunctionMessage & {
+  isComplete: true;
+};
+export type IncompleteFunctionMessage = EmbellishedFunctionMessage & {
+  isComplete: false;
+};
+
 
 function concatWithEllipses(str: string, maxLength: number): string {
   return str.length > maxLength ? str.substring(0, maxLength - 3) + "..." : str;
@@ -33,23 +60,24 @@ function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name
   return {
     name,
     description,
-    implementation: async (utils: {db: ConversationDB}, query: string, limit: number, ancestor?: string) => {
+    implementation: (utils: {db: ConversationDB}, query: string, limit: number, ancestor?: string): Observable<string> => {
       const { db } = utils;
-      const embedding = await getEmbedding(query);
-      const shaResults: string[] = await db.searchEmbedding(embedding, limit, table, ancestor); // TODO: stream of results instead?
-      if (shaResults.length === 0) {
-        return "No results found.";
-      }
-      else {
-        const results: MessageDB[] = [];
-        for (const sha of shaResults) {
-          const message = await db.getMessageByHash(sha);
-          if (message) {
-            results.push(message);
-          }
+
+      const processMessages = async () => {
+        const embedding = await getEmbedding(query);
+        const shaResults = await db.searchEmbedding(embedding, limit, table, ancestor);
+
+        if (shaResults.length === 0) {
+          return ["No results found."];
+        } else {
+          const messages = (await Promise.all(shaResults.map(sha => db.getMessageByHash(sha)))).filter((message): message is MessageDB => Boolean(message));
+          return messages.map(message => `${message.hash}: ${concatWithEllipses(message.content.replace(/\n/g, ""), 60)}`);
         }
-        return results.map(message => `${message.hash}: ${concatWithEllipses(message.content.replace(/\n/g, ""), 60)}`).join("\n\n");
-      }
+      };
+
+      return from(processMessages()).pipe(
+        concatMap(message => from(message))
+      );
     },
     parameters: [
       {
@@ -109,9 +137,10 @@ const functionSpecs: FunctionSpec[] = [
       const newMessages = [...messages, newMessage];
       if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached."); // compilershutup for typing
 
-      const newLeafMessage = await reprocessMessagesStartingFrom("gpt-4", newMessages);
+      const processedMessages = await reprocessMessagesStartingFrom("gpt-4", newMessages);
+      const newLeafMessage = processedMessages[processedMessages.length - 1].message;
 
-      const persistedMessages = await utils.db.getConversationFromLeafMessage(newLeafMessage.message);
+      const persistedMessages = await utils.db.getConversationFromLeafMessage(newLeafMessage);
 
       const conversation = await buildParticipatedConversation(utils.db, persistedMessages, "gpt-4", []);
       const observeReplies = observeNewMessages(conversation).pipe(
@@ -152,7 +181,7 @@ Content: ${reply.content}
   {
     name: "alert",
     description: "Displays a browser alert with the provided message.",
-    implementation: (_utils, message: string) => {
+    implementation: async (_utils, message: string) => {
       alert(message);
       return "sent alert!"
     },
@@ -215,46 +244,56 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
     const code = generateCodeForFunctionCall(functionCall);
     console.log("eval!", code);
 
+    const uuid = uuidv4();
+    const functionMessageContent: FunctionMessageContent = {
+      ...functionCall,
+      uuid,
+      v: 1,
+    };
+    const initialContent = serializeFunctionMessageContent(functionMessageContent);
+    sendFunctionCall(conversation, initialContent);
+
     const result = code({db});
 
-    const prettifiedCall = `\`${functionCall.name}(${Object.entries(functionCall.parameters).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join(", ")})\``;
+    const saveFunctionResult = async (resultString: string, completed: boolean) => {
+      if (completed) {
+        return db.saveFunctionResult({
+          uuid,
+          functionName: functionCall.name,
+          completed: true
+        })
+      }
 
-    if (typeof result === "string") {
-      const content = `
-Call: ${prettifiedCall}
+      return db.saveFunctionResult({
+        uuid,
+        functionName: functionCall.name,
+        result: resultString,
+        completed: false
+      });
+    };
 
-**Result:**
-\`\`\`
-${result}
-\`\`\`
-      `.trim();
-
-      sendFunctionCall(conversation, content);
+    // observables are a bit different since there's multiple results
+    if (isObservable(result)) {
+      result.subscribe({
+        next: async resultString => {
+          await saveFunctionResult(resultString, false);
+        },
+        complete: async () => {
+          await saveFunctionResult('', true);
+        }
+      });
+      return; // Return early to prevent saving completion spec below
     }
-    else {
-      const uuid = uuidv4();
-      const initialContent = `
-Call: ${prettifiedCall}
 
-Result: (pending: ${uuid})
-        `.trim();
-      sendFunctionCall(conversation, initialContent);
-      const resultString = await result;
-      const finalContent = `
-Result (${uuid}):
-\`\`\`
-${resultString}
-\`\`\`
-        `.trim();
-      sendFunctionCall(conversation, finalContent);
-    }
+    await saveFunctionResult(await result, false);
+    await saveFunctionResult('', true);
   } catch (error) {
     console.error("caught error in callFunction", error);
     throw error;
   }
 }
 
-export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils: FunctionUntils) => string | Promise<string> {
+export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils: FunctionUntils) => string | Promise<string> | Observable<string>{
   // Find the function spec for the called function
   const funcSpec = functionSpecs.find(func => func.name === functionCall.name);
   if (!funcSpec) {
@@ -276,7 +315,115 @@ export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils:
     }
   });
 
-  return (utils: FunctionUntils): string | Promise<string> => {
+  return (utils: FunctionUntils): string | Promise<string> | Observable<string> => {
     return funcSpec.implementation(utils, ...args);
   };
+}
+
+export type FunctionMessageContent = {
+  uuid: string;
+  v: number;
+  name: string;
+  parameters: FunctionParameters;
+}
+
+export function serializeFunctionMessageContent(content: FunctionMessageContent): string {
+  return JSON.stringify(content);
+}
+
+export function deserializeFunctionMessageContent(content: string): FunctionMessageContent | null {
+  try {
+    const parsedContent = JSON.parse(content);
+    if (parsedContent.uuid && parsedContent.v === 1) {
+      return parsedContent;
+    } else {
+      return null;
+    }
+  } catch (error) {
+    return null;
+  }
+}
+
+async function getFunctionResultsFromMessage(db: ConversationDB, message: MessageDB): Promise<FunctionResultDB[] | null> {
+  if (message.role !== 'function') {
+    return null;
+  }
+
+  const functionMessageContent = deserializeFunctionMessageContent(message.content);
+  if (!functionMessageContent) {
+    console.error("Invalid function message content", message.content)
+    return null;
+  }
+
+  return db.getFunctionResultsByUUID(functionMessageContent.uuid);
+}
+
+export async function embellishFunctionMessage(db: ConversationDB, message: MessageDB): Promise<EmbellishedFunctionMessage | null> {
+  const functionResults = await getFunctionResultsFromMessage(db, message);
+  if (functionResults === null) {
+    return null;
+  }
+
+  const functionMessage: EmbellishedFunctionMessage = {
+    ...message,
+    role: 'function', // mostly just to appease the type system
+    isComplete: functionResults.findIndex(({completed}) => completed) !== -1,
+    results: functionResults
+  };
+
+  return functionMessage;
+}
+
+export function embellishFunctionMessages(db: ConversationDB): OperatorFunction<MessageDB, MessageDB> {
+  return (source: Observable<MessageDB>): Observable<MessageDB> => {
+    return source.pipe(
+      concatMap(message => {
+        const promise = embellishFunctionMessage(db, message).then(embellishedMessage => embellishedMessage || message);
+        return from(promise);
+      })
+    );
+  };
+}
+
+function createCodeBlock(text: string): string {
+  // Determine the maximum sequence of backticks in the text
+  const maxBackticks = Math.max(...text.match(/`+/g)?.map(s => s.length) ?? [0]);
+
+  // Check if the text contains new lines
+  const hasNewLines = /\r?\n/.test(text);
+
+  // If the text contains new lines, create a multiline code block
+  if (hasNewLines) {
+    // Multiline code blocks require at least three backticks as delimiters
+    const delimiter = '`'.repeat(Math.max(3, maxBackticks + 1));
+    return `\n${delimiter}\n${text}\n${delimiter}`;
+  } else {
+    // Create a sequence of backticks one longer than the maximum found in the text
+    const delimiter = '`'.repeat(maxBackticks + 1);
+    return `${delimiter}${text}${delimiter}`;
+  }
+}
+
+export async function possiblyEmbellishedMessageToMarkdown(db: ConversationDB, message: MessageDB): Promise<string> {
+  if (!isEmbellishedFunctionMessage(message)) {
+    return message.content;
+  }
+  const invocation = deserializeFunctionMessageContent(message.content);
+  if (!invocation) {
+    return message.content;
+  }
+
+  const results = await db.getFunctionResultsByUUID(invocation.uuid);
+  return `
+**function**: ${createCodeBlock(invocation.name)}
+
+${Object.entries(invocation.parameters).map(([key, value]) => `**${key}**: ${createCodeBlock(typeof(value) === "string" ? value : JSON.stringify(value))}`).join("\n")}
+
+${results.length === 0 ? "Function call incomplete..." : results.map((result) => {
+if (result.completed) return "Function call complete."
+
+const contents = createCodeBlock(result.result);
+return `Result: ${contents}`
+}).join("\n")}
+  `.trim();
 }
