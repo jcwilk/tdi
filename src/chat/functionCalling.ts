@@ -144,7 +144,7 @@ const functionSpecs: FunctionSpec[] = [
 
       const conversation = await buildParticipatedConversation(utils.db, persistedMessages, "gpt-4", []);
       const observeReplies = observeNewMessages(conversation).pipe(
-        tap(event => console.log("new message event", event)),
+        //tap(event => console.log("new message event", event)),
         filter(({role}  ) => role === "assistant")
       );
 
@@ -242,7 +242,7 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
 
   try {
     const code = generateCodeForFunctionCall(functionCall);
-    console.log("eval!", code);
+    //console.log("eval!", code);
 
     const uuid = uuidv4();
     const functionMessageContent: FunctionMessageContent = {

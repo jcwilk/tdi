@@ -67,16 +67,11 @@ export const MessageAndConversationProvider: React.FC<React.PropsWithChildren> =
 
 export async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-3.5-turbo", functionOptions: FunctionOption[] = []): Promise<Conversation> {
   const conversation = await createConversation(db, messages, model, functionOptions);
-  console.log("test5.5")
   return addAssistant(conversation, db);
 }
 
 function createConversationSlot(id: string, messagesStore: ConversationDB): ConversationSlot {
-  console.log("creating slot", id)
   const currentConversation = new BehaviorSubject<RunningConversation | undefined>(undefined);
-
-  currentConversation.subscribe((runningConversation) => console.log("currentConvoUpdated", id, runningConversation));
-
   const asyncSwitchedInput = new Subject<Observable<Conversation>>();
 
   asyncSwitchedInput.pipe(
@@ -109,28 +104,25 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
     /* /// end teardown management clusterfuck /// */
 
     map(conversation => ({id, conversation} as RunningConversation)),
-    tap(runningConversation => console.log("tap check", runningConversation)),
   ).subscribe(currentConversation);
 
   return {
     id,
     currentConversation,
     dispatchNewConvo: (conversationSpec: ConversationSpec | Promise<ConversationSpec>, overwrite: boolean = false) => {
-      console.log("dispatch", conversationSpec)
+      //console.log("dispatch", conversationSpec)
       let promise = ((conversationSpec instanceof Promise) ? conversationSpec : Promise.resolve(conversationSpec)).then(resolvedSpec => {
-          console.log("resolvedSpec", resolvedSpec)
+          //console.log("resolvedSpec", resolvedSpec)
           return messagesStore.getConversationFromLeafMessage(resolvedSpec.tail).then(conversation => [conversation, resolvedSpec] as [ConversationMessages, ConversationSpec]);
         }).then(([messages, resolvedSpec]) => {
           // TODO: somewhere around here might be a good place to do message reprocessing, if we want messages to not be immutable
-          console.log("messages", messages)
+          //console.log("messages", messages)
           if (!overwrite && currentConversation.value) {
             return currentConversation.value.conversation;
           }
 
           return buildParticipatedConversation(messagesStore, messages, resolvedSpec.model, resolvedSpec.functions);
         });
-
-      promise.then((conversation) => console.log("conversation", conversation));
 
       asyncSwitchedInput.next(from(promise));
 
@@ -177,19 +169,13 @@ export function getStores() {
 // Using it will induce a new conversation slot if one does not exist for the given key
 export function useConversationSlot(key: string) {
   const {conversationStore, messagesStore} = getStores();
-
   const [runningConversation, setRunningConversation] = useState<RunningConversation | undefined>(undefined);
-
-  console.log("conversationStore", conversationStore, conversationStore.value)
   const conversationSlot = getOrCreateSlot(conversationStore, key, messagesStore);
 
   useEffect(() => {
     const subscription = conversationSlot.currentConversation.pipe(
       tap(setRunningConversation),
-      tap((runningConversation) => console.log("tap check 2", conversationSlot, runningConversation))
     ).subscribe();
-
-    console.log("new slot!", conversationSlot)
 
     return () => {
       subscription.unsubscribe();

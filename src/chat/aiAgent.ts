@@ -98,7 +98,7 @@ export function addAssistant(
   const typingAndSending = switchedOutputStreamsFromRespondableMessages(db, newRespondableMessages, conversation.model, conversation.functions)
     .pipe(
       catchError(err => {
-        console.log("Error from before handleGptMessages!", err);
+        console.error("Error from before handleGptMessages!", err);
         sendError(conversation, err);
         return EMPTY;
       })
@@ -111,7 +111,7 @@ export function addAssistant(
   const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(db, newInterruptingUserMessages)
     .pipe(
       catchError(err => {
-        console.log("Error from before sendSystemMessagesForInterruptions!", err);
+        console.error("Error from before sendSystemMessagesForInterruptions!", err);
         sendError(conversation, err);
         return EMPTY;
       })
@@ -211,7 +211,7 @@ function handleGptMessages(conversation: Conversation, typingAndSending: Observa
       }
     }),
     catchError(err => {
-      console.log("Error from handleGptMessages catchError!", err);
+      console.error("Error from handleGptMessages catchError!", err);
       sendError(conversation, err);
       return EMPTY;
     })

@@ -76,7 +76,7 @@ export async function getEmbedding(
   const OPENAI_KEY = APIKeyFetcher();
   if (!OPENAI_KEY) throw new Error("API Key not found");
 
-  console.log("Getting embedding!", inputText, model)
+  //console.log("Getting embedding!", inputText, model)
 
   const payload = {
     input: inputText,
@@ -265,12 +265,12 @@ function processChunk(
     return ""; // Reset aggregated contents after calling the onCutoff callback
   }
 
-  console.log("Unknown chunk type:", jsonData)
+  console.error("Unknown chunk type:", jsonData)
   return aggregatedContents;  // If no other conditions met, just return the previous aggregated contents
 }
 
 async function saveAudioInput(): Promise<{ audioBlobPromise: Promise<Blob>, stopRecording: () => void }> {
-  console.log("Please say something...");
+  //console.log("Please say something...");
 
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const mediaRecorder = new MediaRecorder(stream);

@@ -20,7 +20,6 @@ const PinButton: React.FC<PinButtonProps> = ({ message }) => {
 
   const handleClick = useCallback(() => {
     if (isPinned) {
-      console.log("unpinning!")
       unpinConversationByLeaf(message, messagesStore);
     }
     else {

@@ -90,21 +90,21 @@ const MarkdownRenderer: React.FC<{ content: string, openOtherHash: (hash: string
               return parseContent(child as T & string, openOtherHash)
             }
 
-            console.log("unknown li child!", child, typeof(child))
+            //console.log("unknown li child!", child, typeof(child))
             return child;
           }
 
           children = processChildren(children, (child, index, total) => {
             if (React.isValidElement(child)) {
-              console.log("unknown react", child, typeof(child))
+              //console.log("unknown react", child, typeof(child))
               const props = child.props;
 
               if (props && props.node?.tagName === "p") {
-                console.log("unknown p")
+                //console.log("unknown p")
                 return processLeafChild(child.props.children, index, total);
               }
             }
-            console.log("unknown non-react", child, typeof(child))
+            //console.log("unknown non-react", child, typeof(child))
 
             return processLeafChild(child, index, total);
           });

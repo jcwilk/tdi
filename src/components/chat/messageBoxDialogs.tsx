@@ -77,7 +77,6 @@ function ToolbarToggler(props: { title: string, expand: boolean, onToggleExpand:
     event: React.MouseEvent<HTMLElement>,
     newDevices: string[],
   ) => {
-    console.log(newDevices, displayContent)
     if (newDevices.length > 1) {
       onToggleDisplayContent('both');
     }
@@ -179,7 +178,6 @@ export function LeafDescendantsDialog(props: {
   }, [onClose, onSelectMessage]);
 
   const messages = useLeafMessageTracker(ancestor);
-  console.log("descendants", messages)
 
   return (
     <Dialog onClose={onClose} open={open}>

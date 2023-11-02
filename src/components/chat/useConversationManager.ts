@@ -92,8 +92,6 @@ export function useConversationsManager(db: ConversationDB) {
   const currentConversationSpec = useMemo(() => {
     if (!runningConversation || !leafMessage) return undefined;
 
-    console.log("running conversation!", runningConversation, leafMessage)
-
     return conversationToSpec(runningConversation.conversation);
   }, [runningConversation, leafMessage]);
 
@@ -104,7 +102,7 @@ export function useConversationsManager(db: ConversationDB) {
     // Process any pending pins first, then start interpreting nav events afterwards
     const subscriptionPromise = mirrorPinsToDB(db).then(() => {
       return routerStream.pipe(
-        tap(routerState => console.log("router state", routerState)),
+        //tap(routerState => console.log("router state", routerState)),
         filter(routerState => routerState.historyAction !== "REPLACE"),
         debounceTime(0),
         concatMap(async routerState => {
@@ -115,7 +113,7 @@ export function useConversationsManager(db: ConversationDB) {
         // This sets our slot to match the nav event for push and pop
         tap(([routerState, _conversationSpec]) => {
           const slotId = routerStateToSlotId(routerState);
-          console.log("setting active conversation id", slotId);
+          //console.log("setting active conversation id", slotId);
           setActiveConversationId(slotId);
         }),
 
@@ -191,7 +189,7 @@ export function useConversationsManager(db: ConversationDB) {
   const openMessage = useCallback(async (message: MessageDB) => {
     if (!currentConversationSpec) {
       const newRunningConversation = await getNewSlot({ tail: message, ...defaultSpecSettings });
-      console.log("navigating!")
+      //console.log("navigating!")
       navConversation(navigate, newRunningConversation);
       return;
     }
@@ -204,7 +202,7 @@ export function useConversationsManager(db: ConversationDB) {
   }, [navigate, navConversation]);
 
   const changeModel = useCallback(async (model: ConversationMode) => {
-    console.log("changing model!", model)
+    //console.log("changing model!", model)
     remix({model});
   }, [remix]);
 

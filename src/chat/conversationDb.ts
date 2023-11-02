@@ -153,8 +153,6 @@ export class ConversationDB extends Dexie {
   }
 
   async saveMessage(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers): Promise<[MessageDB, MetadataRecords]> {
-    console.log("saving messagedb!")
-    console.log("Available tables: ", this.tables.map(table => table.name));
     let persistedMessagePromise: Promise<MessageDB>;
     if (isMessageDB(message)) {
       persistedMessagePromise = Promise.resolve(message);
@@ -280,8 +278,6 @@ export class ConversationDB extends Dexie {
   }
 
   async saveMetadata(spec: EmbeddingSpec): Promise<EmbeddingDB> {
-    console.log("Saving metadata!")
-    console.log("Available tables: ", this.tables.map(table => table.name));
     return this.transaction('rw', [this.messages, this.embeddings], async () => {
       const existingEmbedding = await this.getEmbeddingByHash(spec.hash);
 
@@ -296,7 +292,6 @@ export class ConversationDB extends Dexie {
       }
 
       const embeddingDB: EmbeddingDB = { ...spec, timestamp: Date.now() };
-      console.log("saving embedding!", embeddingDB)
       await this.embeddings.add(embeddingDB);
       return embeddingDB;
     });
@@ -373,7 +368,7 @@ export class ConversationDB extends Dexie {
         const messages = await this.messages.toArray();
         const manualFind = messages.find(message => message.hash === rootMessageHash);
 
-        console.log("searchembedding message not found!", JSON.stringify(rootMessageHash), rootMessage, manualFind, messages);
+        console.error("searchembedding message not found!", JSON.stringify(rootMessageHash), rootMessage, manualFind, messages);
         return [];
       }
     }

@@ -88,7 +88,7 @@ export async function createConversation(db: ConversationDB, loadedMessages: Con
 
   conversation.outgoingMessageStream.subscribe({
     complete: () => {
-      console.log("completed conversation!")
+      //console.log("completed conversation!")
     }
   })
 
