@@ -116,7 +116,11 @@ export async function getChatCompletion(
   if (!OPENAI_KEY) return;
 
   const payload: ChatCompletionPayload = {
-    messages: messages.map((message: ChatMessage) => message.role === "function" ? { ...message, name: deserializeFunctionMessageContent(message.content)?.name || "(unknown)" } : message ),
+    // TODO: Getting the function name here programmatically is a little bit tricky since we need the original contents of the message
+    // which contains the name of the function call. The embellished contents of the message is (at time of writing) a human readable
+    // markdown version of the message which would be too awkward to parse the name out of. There's some work to be done here to make
+    // it less ambiguous about whether a message is a function call, whether it's been embellished, etc.
+    messages: messages.map((message: ChatMessage) => message.role === "function" ? { ...message, name: "TODO" } : message ),
     model,
     max_tokens: maxTokens,
     temperature,
