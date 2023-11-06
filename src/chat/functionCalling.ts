@@ -116,46 +116,59 @@ const functionSpecs: FunctionSpec[] = [
   {
     name: "append_user_reply",
     description: "Appends the provided message content as a user reply to the message specified by the SHA.",
-    implementation: async (utils: {db: ConversationDB}, content: string, rawRole?: string, sha?: string) => {
-      rawRole ||= "user";
-      if (rawRole !== "user" && rawRole !== "system") throw new Error(`Invalid role "${rawRole}". Must be either "user" or "system".`);
-      const role = rawRole as "user" | "system";
+    implementation: (utils: {db: ConversationDB}, content: string, rawRole?: string, sha?: string) => {
+      return new Observable<string>(observer => {
+        (async () => {
+          rawRole ||= "user";
+          if (rawRole !== "user" && rawRole !== "system" && rawRole !== "assistant") throw new Error(`Invalid role "${rawRole}". Must be either "user" or "system" or "assistant".`);
+          const role = rawRole as "user" | "system" | "assistant";
 
-      let messages: MessageDB[] = [];
+          let messages: MessageDB[] = [];
 
-      if(sha) {
-        const leafMessage = await utils.db.getMessageByHash(sha);
-        if (!leafMessage) throw new Error(`Message with SHA ${sha} not found.`);
+          if(sha) {
+            const leafMessage = await utils.db.getMessageByHash(sha);
+            if (!leafMessage) throw new Error(`Message with SHA ${sha} not found.`);
 
-        messages = await utils.db.getConversationFromLeafMessage(leafMessage);
-      }
+            messages = await utils.db.getConversationFromLeafMessage(leafMessage);
+          }
 
-      const newMessage: Message = {
-        role,
-        content
-      };
-      const newMessages = [...messages, newMessage];
-      if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached."); // compilershutup for typing
+          const newMessage: Message = {
+            role,
+            content
+          };
+          const newMessages = [...messages, newMessage];
+          if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached."); // compilershutup for typing
 
-      const processedMessages = await reprocessMessagesStartingFrom("gpt-4", newMessages);
-      const newLeafMessage = processedMessages[processedMessages.length - 1].message;
+          const processedMessages = await reprocessMessagesStartingFrom("gpt-4", newMessages);
+          const newLeafMessage = processedMessages[processedMessages.length - 1].message;
 
-      const persistedMessages = await utils.db.getConversationFromLeafMessage(newLeafMessage);
+          // Emit newLeafMessage data
+          observer.next(`Appended SHA: ${newLeafMessage.hash}`);
 
-      const conversation = await buildParticipatedConversation(utils.db, persistedMessages, "gpt-4", []);
-      const observeReplies = observeNewMessages(conversation).pipe(
-        //tap(event => console.log("new message event", event)),
-        filter(({role}  ) => role === "assistant")
-      );
+          const persistedMessages = await utils.db.getConversationFromLeafMessage(newLeafMessage);
 
-      const reply = await firstValueFrom(observeReplies);
+          if (role !== "assistant") {
+            const conversation = await buildParticipatedConversation(utils.db, persistedMessages, "gpt-4", []);
+            const observeReplies = observeNewMessages(conversation).pipe(
+              //tap(event => console.log("new message event", event)),
+              filter(({role}  ) => role === "assistant")
+            );
 
-      teardownConversation(conversation);
-      return `
+            const reply = await firstValueFrom(observeReplies);
+
+            teardownConversation(conversation);
+
+            // Emit reply data
+            observer.next(`
 Reply SHA: ${reply.hash}
 
 Content: ${reply.content}
-      `.trim();
+            `.trim());
+          }
+
+          observer.complete();
+        })().catch(err => observer.error(err));
+      });
     },
     parameters: [
       {
@@ -181,7 +194,7 @@ Content: ${reply.content}
   {
     name: "alert",
     description: "Displays a browser alert with the provided message.",
-    implementation: async (_utils, message: string) => {
+    implementation: async (_utils: {db: ConversationDB}, message: string) => {
       alert(message);
       return "sent alert!"
     },
@@ -197,7 +210,7 @@ Content: ${reply.content}
   {
     name: "prompt",
     description: "Opens a prompt dialog asking the user to input some text.",
-    implementation: (_utils, message: string, defaultValue?: string) => prompt(message, defaultValue) || "",
+    implementation: (_utils: {db: ConversationDB}, message: string, defaultValue?: string) => prompt(message, defaultValue) || "",
     parameters: [
       {
         name: "message",
@@ -213,7 +226,7 @@ Content: ${reply.content}
       }
     ]
   }
-];
+]
 
 export function getAllFunctionOptions(): FunctionOption[] {
   return functionSpecs.map((spec) => ({

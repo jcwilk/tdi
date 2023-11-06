@@ -1,6 +1,7 @@
 import { Configuration, OpenAIApi } from 'openai';
 import { APIKeyFetcher } from './api_key_storage';
 import { deserializeFunctionMessageContent } from './chat/functionCalling';
+import JSON5 from 'json5'
 
 const getClient = function(): OpenAIApi | null {
   const apiKey = APIKeyFetcher();
@@ -129,6 +130,10 @@ export async function getChatCompletion(
   if (functions.length > 0) {
     payload.functions = functions;
     payload.function_call = "auto";
+
+    // TODO: not the most graceful way to handle this, but it does seem to improve the situation. Even GPT-4 escapes incorrectly much of the time without it, especially on bigger contexts.
+    // We'll need to insert this in a better place in the future when we start anticipating token length, since this will change the token length of the prompt.
+    payload.messages = [...payload.messages, { role: "system", content: "If you call a function, generated JSON for the arguments MUST be RFC8259 compliant. In particular, newlines must be escaped as \"\\\\n\" in strings." }]
   }
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -166,6 +171,7 @@ export async function getChatCompletion(
         onSentMessage,
         onCutoff
       )
+      //console.log("aggregated contents:", aggregatedContents)
 
       if (aggregatedContents !== "") {
         // Just so that we're sending a last hypothetical chunk out prior to calling onFunctionCall
@@ -261,7 +267,7 @@ function processChunk(
   } else if (finishReason === 'function_call') {
     onFunction({
       name: functionName!,
-      parameters: JSON.parse(aggregatedContents) as FunctionParameters
+      parameters: JSON5.parse(aggregatedContents) as FunctionParameters // JSON5.parse has more liberal support for squirrely JSON
     });
     return ""; // Reset aggregated contents after function call
   } else if (finishReason === 'length') {
