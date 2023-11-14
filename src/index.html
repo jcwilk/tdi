@@ -7,6 +7,9 @@
     <title>
         <%= htmlWebpackPlugin.options.title %>
     </title>
+    <% if (htmlWebpackPlugin.options.templateParameters.trackingCode) { %>
+        <%= htmlWebpackPlugin.options.templateParameters.trackingCode %>
+    <% } %>
 </head>
 
 <body>

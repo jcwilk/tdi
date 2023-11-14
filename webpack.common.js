@@ -61,6 +61,9 @@ module.exports = {
       minify: {
         collapseWhitespace: false,
       },
+      templateParameters: {
+        trackingCode: process.env.TRACKING_CODE
+      },
     }),
     new HtmlInlineScriptPlugin(),
     new FaviconsWebpackPlugin({
