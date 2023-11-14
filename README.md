@@ -4,7 +4,7 @@ This is a Pages-only SPA prototype for a more comprehensive flow of building sof
 
 It can be visited at [jcwilk.github.io/tdi](https://jcwilk.github.io/tdi) - It requires your GPT api key which it stores in LocalStorage. Use at your own risk.
 
-Example gifs of usage (further documentation pending soon)
+Example gifs of usage (further documentation pending soon - for now, my [blog post on the vision](https://jcwilk.com/tree-driven-interaction-vision-and-upcoming-features/) stands in its place)
 
 ![tdi_jokes_v1_sped_up](https://github.com/jcwilk/tdi/assets/39782/8f2bd775-5b08-4b02-a9d5-f51908882558)
 
