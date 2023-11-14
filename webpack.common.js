@@ -63,17 +63,6 @@ module.exports = {
       },
     }),
     new HtmlInlineScriptPlugin(),
-
-    // Add this block to copy the Jasmine files to the output folder
-    new CopyWebpackPlugin({
-      patterns: [
-        {
-          from: path.resolve(__dirname, 'jasmine/jasmine.js'),
-          to: path.resolve(__dirname, 'docs/jasmine/'),
-        },
-      ],
-    }),
-
     new FaviconsWebpackPlugin({
       // Your source logo (required)
       logo: './src/full_favicon_trimmed.png', // path to your favicon source file
