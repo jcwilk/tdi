@@ -1,29 +1,10 @@
 import { EMPTY, Observable, Subject, UnaryFunction, catchError, concatMap, distinctUntilChanged, filter, from, map, merge, share, switchMap, tap, throwError } from "rxjs";
-import { Conversation, Message, TypingUpdate, sendError, sendSystemMessage } from "./conversation";
+import { Conversation, Message, TypingUpdate, sendError } from "./conversation";
 import { sendMessage, typeMessage } from "./participantSubjects";
-import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, GPTFunctionCall, isGPTTextUpdate, isGPTSentMessage, SupportedModels } from "./chatStreams";
+import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, isGPTTextUpdate, isGPTSentMessage, SupportedModels } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
 import { callFunction, possiblyEmbellishedMessageToMarkdown } from "./functionCalling";
 import { ConversationDB, isMessageDB } from "./conversationDb";
-
-const interruptionFunctions: FunctionOption[] = [
-  {
-    "name": "append",
-    "description": "Interrupt the current typing stream and induce the next message to be appended to the current message",
-    "parameters": {
-      "type": "object",
-      "properties": {}
-    },
-  },
-  {
-    "name": "cancel",
-    "description": "Interrupt the current typing stream and induce the next message to be a new message",
-    "parameters": {
-      "type": "object",
-      "properties": {}
-    },
-  }
-]
 
 // This is an odd solution to a very tricky problem with vanilla cold observables.
 // Cold observables don't start consuming their source until they get a subscriber,
@@ -88,8 +69,7 @@ export function addAssistant(
   );
 
   const newSystemMessages = filterByIsSystemMessage(messagesAndTyping);
-  const newUninterruptingUserMessages = filterByIsUninterruptedUserMessage(messagesAndTyping);
-  const newInterruptingUserMessages = filterByIsInterruptingUserMessage(messagesAndTyping);
+  const newUninterruptingUserMessages = filterByIsUninterruptingUserMessage(messagesAndTyping);
 
   const newRespondableMessages = merge(newUninterruptingUserMessages, newSystemMessages).pipe(
     map(([messages, _typing]) => messages)
@@ -106,19 +86,6 @@ export function addAssistant(
 
   handleGptMessages(conversation, typingAndSending, db);
 
-  // TODO: The way that I'm using naming to constrain which stream contains what data seems wrong. It'd be worth exploring
-  // whether there's a way to leverage the type system to make this less brittle.
-  const interruptingFunctionCalls = switchedOutputStreamsFromInterruptingUserMessages(db, newInterruptingUserMessages)
-    .pipe(
-      catchError(err => {
-        console.error("Error from before sendSystemMessagesForInterruptions!", err);
-        sendError(conversation, err);
-        return EMPTY;
-      })
-    );
-
-  sendSystemMessagesForInterruptions(conversation, interruptingFunctionCalls);
-
   return conversation;
 }
 
@@ -132,7 +99,7 @@ function filterByIsSystemMessage(messagesAndTyping: Observable<[Message[], Typin
   )
 }
 
-function filterByIsUninterruptedUserMessage(messagesAndTyping: Observable<[Message[], TypingUpdate]>): Observable<[Message[], TypingUpdate]> {
+function filterByIsUninterruptingUserMessage(messagesAndTyping: Observable<[Message[], TypingUpdate]>): Observable<[Message[], TypingUpdate]> {
   return messagesAndTyping.pipe(
     filter(([messages, typing]) => {
       return messages.length > 0
@@ -160,18 +127,6 @@ function switchedOutputStreamsFromRespondableMessages(
       )
     }),
     hotShare() // NB: necessary to avoid inducing a separate stream for each subscriber
-  )
-}
-
-function filterByIsInterruptingUserMessage(messagesAndTyping: Observable<[Message[], TypingUpdate]>): Observable<[Message[], TypingUpdate]> {
-  return messagesAndTyping.pipe(
-    filter(([messages, typing]) =>
-      messages.length > 0
-      &&
-      messages[messages.length - 1].role === "user"
-      &&
-      typing.content.length > 0
-    )
   )
 }
 
@@ -215,49 +170,5 @@ function handleGptMessages(conversation: Conversation, typingAndSending: Observa
       sendError(conversation, err);
       return EMPTY;
     })
-  ).subscribe();
-}
-
-function switchedOutputStreamsFromInterruptingUserMessages(db: ConversationDB, newInterruptingUserMessages: Observable<[Message[], TypingUpdate]>) {
-  return newInterruptingUserMessages.pipe(
-    switchMap(([messages, typingUpdate]) => {
-      const convertedMessagesPromise = messagesToConversationMessages(db, messages.filter(({ role }) => role !== "system"));
-      const systemInstructions: ChatMessage = { role: "system", content: `
-You are a text generation monitor. The user has sent new messages while the text generation of the assistant was still in progress. The text generation in progress was:
-\`\`\`
-${typingUpdate.content}
-\`\`\`
-
-The only way to take the newest messages from the user into account is to either discard the message in progress (\`cancel\`) or to restart with new data but \`append\` to the message in progress.
-
-The ONLY scenario where you should not call a function is if the latest user messages are already fully addressed by the message in progress. Return a blank string (\`""\`) in this case.
-      `.trim() };
-
-      return from(convertedMessagesPromise).pipe(
-        concatMap(convertedMessages => chatCompletionMetaStream([systemInstructions, ...convertedMessages], 0.1, "gpt-3.5-turbo-0613", 100, interruptionFunctions)), // TODO: consider restructuring how this is presented to the assistant
-        map(gptMessage => [gptMessage, typingUpdate] as [GPTMessage, TypingUpdate])
-      )
-    }),
-    filter(([gptMessage, _typingUpdate]) => isGPTFunctionCall(gptMessage)),
-    map(([gptMessage, typingUpdate]) => [gptMessage, typingUpdate] as [GPTFunctionCall, TypingUpdate]),
-    hotShare() // NB: Neccesary to avoid rerunning the api stream for multiple subscribers
-  )
-}
-
-function sendSystemMessagesForInterruptions(conversation: Conversation, interruptingFunctionCalls: Observable<[GPTFunctionCall, TypingUpdate]>) {
-  interruptingFunctionCalls.pipe(
-    filter(([{ functionCall }, _typingUpdate]) => functionCall.name === "cancel"),
-    tap(() => sendSystemMessage(conversation, "Assistant was interrupted by the user and the message in progress was discarded."))
-  ).subscribe();
-
-  interruptingFunctionCalls.pipe(
-    filter(([{ functionCall }, _typingUpdate]) => functionCall.name === "append"),
-    tap(([_, typingUpdate]) => sendSystemMessage(conversation, `Assistant was interrupted by the user. The message in progress was:
-\`\`\`
-${typingUpdate.content}
-\`\`\`
-
-Your message MUST be a continuation of this message in progress, but MUST also include a rapid pivot to fit with the most recent user messages. Do not duplicate the message in progress in the new message.`
-    ))
   ).subscribe();
 }

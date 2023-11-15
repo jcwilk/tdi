@@ -52,8 +52,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
     return messages[messages.length - 1];
   }, [messages]);
 
-  const currentLeafHash = currentLeafMessage?.hash; // no need for useMemo because it's a primitive
-
   const availableChild: MessageDB | null | undefined = useLiveQuery(() => {
     const message = messages[messages.length - 1];
 
