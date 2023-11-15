@@ -427,16 +427,19 @@ export async function possiblyEmbellishedMessageToMarkdown(db: ConversationDB, m
   }
 
   const results = await db.getFunctionResultsByUUID(invocation.uuid);
+
+  const completed = results.findIndex(({completed}) => completed) !== -1;
+  const nonCompletionResults = results.filter(({completed}) => !completed);
   return `
 **function**: ${createCodeBlock(invocation.name)}
 
 ${Object.entries(invocation.parameters).map(([key, value]) => `**${key}**: ${createCodeBlock(typeof(value) === "string" ? value : JSON.stringify(value))}`).join("\n")}
 
-${results.length === 0 ? "Function call incomplete..." : results.map((result) => {
-if (result.completed) return "Function call complete."
+${nonCompletionResults.map((result) => {
 
-const contents = createCodeBlock(result.result);
+const contents = createCodeBlock(result.result ?? "");
 return `Result: ${contents}`
 }).join("\n")}
+${completed ? "Function call complete." : "Function call incomplete..."}
   `.trim();
 }
