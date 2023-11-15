@@ -19,7 +19,7 @@ export type GPTSentMessage = {
   stopReason: "stop" | "length"
 }
 
-export type SupportedModels = "gpt-3.5-turbo" | "gpt-4" | "gpt-3.5-turbo-0613" | "gpt-4-0613";
+export type SupportedModels = "gpt-3.5-turbo" | "gpt-4" | "gpt-3.5-turbo-0613" | "gpt-4-0613" | "gpt-4-1106-preview";
 
 export function isGPTFunctionCall(message: GPTMessage): message is GPTFunctionCall {
   return "functionCall" in message;
@@ -37,8 +37,10 @@ export type GPTMessage = GPTTextUpdate | GPTFunctionCall | GPTSentMessage;
 
 // Adjust the model based on the functions array length
 function adjustModel(model: SupportedModels, functions: FunctionOption[]): SupportedModels {
+  if (model === "gpt-4") return "gpt-4-1106-preview"; // gpt-4-turbo
+
   if (functions.length > 0) {
-    if (model === "gpt-4") return "gpt-4-0613";
+    //if (model === "gpt-4") return "gpt-4-0613";
     if (model === "gpt-3.5-turbo") return "gpt-3.5-turbo-0613";
   }
   return model;
