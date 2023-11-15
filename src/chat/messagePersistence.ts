@@ -33,19 +33,19 @@ function findIndexByProperty<T>(arr: T[], property: keyof T, value: T[keyof T]):
 
 type ProcessedMessageResultNullObject = {
   message: null,
-  metadataRecords: MetadataRecords
+  metadataRecordsPromise: Promise<MetadataRecords>
 }
 
 type ProcessedMessageResult = {
   message: MessageDB,
-  metadataRecords: MetadataRecords
+  metadataRecordsPromise: Promise<MetadataRecords>
 }
 
 export type MaybeProcessedMessageResult = ProcessedMessageResultNullObject | ProcessedMessageResult;
 
 export const NULL_OBJECT_PROCESSED_MESSAGE_RESULT: ProcessedMessageResultNullObject = {
   message: null,
-  metadataRecords: {}
+  metadataRecordsPromise: Promise.resolve({})
 } as const;
 
 function escapeSummaryValues(text: string) {
@@ -58,8 +58,8 @@ function buildSummaryPayload(priorSummary: string, newMessage: Message) {
   return `Given the following two texts to combine:\n\nNew Message (${newMessage.role}): \"\"\"\n${newMessageContent}\n\"\"\"\n\nPrior Conversation Summary: \"\"\"\n${priorSummary}\n\"\"\"\n\nPlease generate a summary of the overall conversation.`;
 }
 
-function recursivelySummarize(newMessage: Message, priorResult: MaybeProcessedMessageResult): Promise<string> {
-  const priorSummary = priorResult.metadataRecords.messageSummary?.summary ?? "";
+async function recursivelySummarize(newMessage: Message, priorResult: MaybeProcessedMessageResult): Promise<string> {
+  const priorSummary = (await priorResult.metadataRecordsPromise).messageSummary?.summary ?? "";
   const payload = buildSummaryPayload(priorSummary, newMessage);
 
   const fewShotPayload = buildSummaryPayload(
@@ -149,9 +149,9 @@ export async function processMessagesWithHashing(
   }
   const metadataHandlers: MetadataHandlers = conversationMode === 'paused' ? unconditionalHandlers : { ...unconditionalHandlers, ...unpausedHandlers };
 
-  const [persistedMessage, metadataRecords] = (await conversationDB.saveMessage(messageToSave, metadataHandlers));
-  const possiblyEmbellishedMessage = (await embellishFunctionMessage(conversationDB, persistedMessage)) || persistedMessage;
-  return { message: possiblyEmbellishedMessage, metadataRecords };
+  const [persistedMessagePromise, metadataRecordsPromise] = conversationDB.saveMessage(messageToSave, metadataHandlers);
+  const possiblyEmbellishedMessage = (await embellishFunctionMessage(conversationDB, await persistedMessagePromise)) || await persistedMessagePromise;
+  return { message: possiblyEmbellishedMessage, metadataRecordsPromise };
 };
 
 const identifyMessagesForReprocessing = (conversation: MessageDB[], startIndex: number): Message[] => {

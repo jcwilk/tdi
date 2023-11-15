@@ -158,6 +158,9 @@ export async function getChatCompletion(
     const rawDelta = decoder.decode(value)
     //console.log("raw delta:", rawDelta)
 
+    // uncomment this to cause hell to the end of checking error handling
+    //JSON.parse("{")
+
     aggregatedRawContents += rawDelta;
     const lines = splitDataLines(rawDelta)
 

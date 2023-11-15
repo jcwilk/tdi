@@ -1,4 +1,4 @@
-import { BehaviorSubject, Observable, Subject, concatMap, distinctUntilChanged, filter, from, map, scan } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, catchError, concatMap, distinctUntilChanged, filter, from, map, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
 import { ConversationDB, ConversationMessages, MessageDB } from './conversationDb';
 import { MaybeProcessedMessageResult, processMessagesWithHashing, reprocessMessagesStartingFrom } from './messagePersistence';
@@ -41,6 +41,28 @@ export type ConversationEvent = ErrorMessageEvent | TypingUpdateEvent | NewMessa
 
 function isErrorMessageEvent(event: ConversationEvent): event is ErrorMessageEvent {
   return event.type === 'errorMessage';
+}
+
+export function errorToErrorMessageEvent(error: unknown): ErrorMessageEvent {
+  let errorMessage = 'An unexpected error occurred';
+
+  if (error instanceof Error) {
+    errorMessage = `Error(${error.name}): ${error.message}`.trim();
+  } else if (typeof error === 'string') {
+    errorMessage = error;
+  } else if (typeof error === 'number') {
+    errorMessage = `Error code: ${error}`;
+  } else if (typeof error === 'object' && error !== null) {
+    errorMessage = JSON.stringify(error);
+  }
+
+  return {
+    type: 'errorMessage',
+    payload: {
+      content: errorMessage,
+      role: 'system'
+    }
+  };
 }
 
 function isNewMessageEvent(event: ConversationEvent): event is NewMessageEvent {
@@ -86,13 +108,11 @@ export async function createConversation(db: ConversationDB, loadedMessages: Con
     model
   }
 
-  conversation.outgoingMessageStream.subscribe({
-    complete: () => {
-      //console.log("completed conversation!")
-    }
-  })
-
   const aggregatedOutput = conversation.newMessagesInput.pipe(
+    catchError(err => {
+      console.error("Error caught in aggregatedOutput!", err);
+      return from([errorToErrorMessageEvent(err)]);
+    }),
     scanAsync<ConversationEvent, ScanState>(async (acc: ScanState, event: ConversationEvent) => {
       if (isNewMessageEvent(event) || isErrorMessageEvent(event)) {
         const result = await processMessagesWithHashing(model, event.payload, acc.lastResult);
@@ -107,7 +127,7 @@ export async function createConversation(db: ConversationDB, loadedMessages: Con
       }
     }, { lastResult: processedResults[processedResults.length - 1], event: null }),
     map((state) => state.event),
-    filter<ConversationEvent | null, ConversationEvent>((event): event is ConversationEvent => event !== null),
+    filter(Boolean),
     scan(
       (state: ConversationState, event: ConversationEvent) => {
         if (event.type === 'processedMessage') {
@@ -151,25 +171,9 @@ export function teardownConversation(conversation: Conversation) {
 }
 
 export function sendError(conversation: Conversation, error: unknown) {
-  let errorMessage = 'An unexpected error occurred';
+  const event = errorToErrorMessageEvent(error);
 
-  if (error instanceof Error) {
-    errorMessage = `Error(${error.name}): ${error.message}`.trim();
-  } else if (typeof error === 'string') {
-    errorMessage = error;
-  } else if (typeof error === 'number') {
-    errorMessage = `Error code: ${error}`;
-  } else if (typeof error === 'object' && error !== null) {
-    errorMessage = JSON.stringify(error);
-  }
-
-  conversation.newMessagesInput.next({
-    type: 'errorMessage',
-    payload: {
-      content: errorMessage,
-      role: 'system'
-    }
-  });
+  conversation.newMessagesInput.next(event);
 }
 
 export function sendFunctionCall(conversation: Conversation, content: string): void {

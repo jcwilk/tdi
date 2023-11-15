@@ -152,90 +152,85 @@ export class ConversationDB extends Dexie {
     this.functionResults = this.table('functionResults');
   }
 
-  async saveMessage(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers): Promise<[MessageDB, MetadataRecords]> {
+  saveMessage(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers): [Promise<MessageDB>, Promise<MetadataRecords>] {
     let persistedMessagePromise: Promise<MessageDB>;
+
     if (isMessageDB(message)) {
       persistedMessagePromise = Promise.resolve(message);
-    }
-    else {
-      const messageSpec = message;
-      persistedMessagePromise = this.transaction('rw', this.messages, async (): Promise<MessageDB> => {
-        const existingMessage = await this.getMessageByHash(messageSpec.hash);
+    } else {
+      persistedMessagePromise = this.transaction('rw', this.messages, () => {
+        return this.getMessageByHash(message.hash)
+          .then(existingMessage => {
+            if (existingMessage && (hasParent(existingMessage) || hasParent(message)) && existingMessage.parentHash !== message.parentHash) {
+              throw new Error(`Message with hash: ${message.hash} exists but with a different parent hash.`);
+            }
 
-        // Check if the hash exists but with a different parent hash
-        if (existingMessage && (hasParent(existingMessage) || hasParent(messageSpec)) && existingMessage.parentHash !== messageSpec.parentHash) {
-          throw new Error(`Message with hash: ${messageSpec.hash} exists but with a different parent hash.`);
-        }
+            if (existingMessage) {
+              return existingMessage;
+            }
 
-        // Return the existing message if it matches the hash and parent hash
-        if (existingMessage) {
-          return existingMessage;
-        }
+            if (hasParent(message)) {
+              return this.getMessageByHash(message.parentHash)
+                .then(parentMessage => {
+                  if (!parentMessage) {
+                    throw new Error(`Parent hash: ${message.parentHash} does not exist in the database.`);
+                  }
 
-        // Constraint to ensure that the parentHash exists in the DB (if not a root message)
-        if (hasParent(messageSpec) && !(await this.getMessageByHash(messageSpec.parentHash))) {
-          throw new Error(`Parent hash: ${messageSpec.parentHash} does not exist in the database.`);
-        }
-
-        const newMessage: MessageDB = { ...messageSpec, timestamp: Date.now() };
-        await this.messages.add(newMessage);
-        return newMessage;
+                  const newMessage: MessageDB = { ...message, timestamp: Date.now() };
+                  return this.messages.add(newMessage).then(() => newMessage);
+                });
+            } else {
+              const newMessage: MessageDB = { ...message, timestamp: Date.now() };
+              return this.messages.add(newMessage).then(() => newMessage);
+            }
+          });
       });
     }
 
-    // Not the most elegant way to do this, but fancier ways to make the typing work would be nearly illegible
-    let messageSummaryDBPromise: Promise<MessageSummaryDB> | undefined;
-    let summaryEmbeddingDBPromise: Promise<SummaryEmbeddingDB> | undefined;
-    let messageEmbeddingDBPromise: Promise<EmbeddingDB> | undefined;
+    // TODO: dry these up, I'm sorry.
+    const messageSummaryDBPromise = metadataHandlers['messageSummary']
+      ? this.getSummaryByHash(message.hash)
+        .then(summary => {
+          if (summary) return summary;
+          return metadataHandlers['messageSummary'] ? metadataHandlers['messageSummary']().then(summarySpec => this.saveSummary(summarySpec)) : Promise.resolve(undefined);
+        })
+      : Promise.resolve(undefined);
 
-    if (metadataHandlers['messageSummary']) {
-      const enclosedHandler = metadataHandlers['messageSummary'];
-      messageSummaryDBPromise = this.getSummaryByHash(message.hash).then(summary => {
-        if (summary) return summary;
+    const summaryEmbeddingDBPromise = metadataHandlers['summaryEmbedding']
+      ? messageSummaryDBPromise.then(summary => {
+        if (!summary) throw new Error('MessageSummary must be specified when SummaryEmbedding is specified.');
 
-        return enclosedHandler().then(summarySpec => this.saveSummary(summarySpec));
+        return this.getSummaryEmbeddingByHash(message.hash)
+          .then(embedding => {
+            if (embedding) return embedding;
+            return metadataHandlers['summaryEmbedding'] ? metadataHandlers['summaryEmbedding'](summary).then(embeddingSpec => this.saveSummaryEmbedding(embeddingSpec)) : Promise.resolve(undefined);
+          });
+      })
+      : Promise.resolve(undefined);
+
+    const messageEmbeddingDBPromise = metadataHandlers['messageEmbedding']
+      ? this.getEmbeddingByHash(message.hash)
+        .then(embedding => {
+          if (embedding) return embedding;
+          return metadataHandlers['messageEmbedding'] ? metadataHandlers['messageEmbedding']().then(embeddingSpec => this.saveMetadata(embeddingSpec)) : Promise.resolve(undefined);
+        })
+      : Promise.resolve(undefined);
+
+    const metadataRecordsPromise = Promise.all([messageSummaryDBPromise, summaryEmbeddingDBPromise, messageEmbeddingDBPromise])
+      .then(([messageSummary, summaryEmbedding, messageEmbedding]) => {
+        const metadataRecords: MetadataRecords = {
+          messageEmbedding,
+          messageSummary,
+          summaryEmbedding,
+        };
+
+        assertKeysMatch(metadataHandlers, metadataRecords);
+        return metadataRecords;
       });
-    }
 
-    if (metadataHandlers['summaryEmbedding']) {
-      if (!messageSummaryDBPromise) {
-        throw new Error('MessageSummary must be specified when SummaryEmbedding is specified.');
-      }
-
-      const enclosedMessageSummaryDBPromise = messageSummaryDBPromise;
-      const enclosedHandler = metadataHandlers['summaryEmbedding'];
-      summaryEmbeddingDBPromise = this.getSummaryEmbeddingByHash(message.hash).then(async embedding => {
-        if (embedding) return embedding;
-
-        const summary = await enclosedMessageSummaryDBPromise;
-        const embeddingSpec = await enclosedHandler(summary);
-        return this.saveSummaryEmbedding(embeddingSpec);
-      });
-    }
-
-    if (metadataHandlers['messageEmbedding']) {
-      const enclosedHandler = metadataHandlers['messageEmbedding'];
-      messageEmbeddingDBPromise = this.getEmbeddingByHash(message.hash).then(async embedding => {
-        if (embedding) return embedding;
-
-        const embeddingSpec = await enclosedHandler();
-        return this.saveMetadata(embeddingSpec);
-      });
-    }
-
-    const [persistedMessage, messageSummary, summaryEmbedding, messageEmbedding] = await Promise.all(
-      [persistedMessagePromise, messageSummaryDBPromise, summaryEmbeddingDBPromise, messageEmbeddingDBPromise]
-    );
-
-    const metadataRecords: MetadataRecords = {
-      messageEmbedding,
-      messageSummary,
-      summaryEmbedding,
-    };
-
-    assertKeysMatch(metadataHandlers, metadataRecords);
-    return [persistedMessage, metadataRecords];
+    return [persistedMessagePromise, metadataRecordsPromise];
   }
+
 
   async getSummaryByHash(hash: string): Promise<MessageSummaryDB | undefined> {
     return this.summaries.get(hash);
