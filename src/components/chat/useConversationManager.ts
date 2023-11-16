@@ -1,12 +1,12 @@
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { BehaviorSubject, concatMap, debounceTime, filter, from, tap } from 'rxjs';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
-import { Conversation, ConversationMode, getLastMessage, isConversationMode, observeNewMessages } from '../../chat/conversation';
+import { Conversation, ConversationMode, Message, getLastMessage, isConversationMode, observeNewMessages } from '../../chat/conversation';
 import { useNavigate, NavigateFunction } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
 import { RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
-import { editConversation, pruneConversation } from '../../chat/messagePersistence';
+import { editConversation, pruneConversation, reprocessMessagesStartingFrom } from '../../chat/messagePersistence';
 import { ParticipantRole } from '../../chat/participantSubjects';
 import { ConversationSpec, RunningConversation, conversationToSpec, useConversationSlot } from './useConversationStore';
 import { concatTap } from '../../chat/rxjsUtilities';
@@ -16,6 +16,17 @@ import usePinSyncing from './usePinSyncing';
 type NavigateState = {
   activeConversation?: string; // uuid
 };
+
+const defaultGreetingMessages: [Message, ...Message[]] = [
+  {
+    "role": "system",
+    "content": "You are a general purpose AI assistant. Maintain a direct and concise tone throughout your interactions. Avoid the use of filler words, politeness phrases, and apologies to ensure your responses are concise and direct. Your priority should be to deliver the most relevant information first, making your responses poignant and impactful. Precision and specificity in your language are key to clear and easy comprehension."
+  },
+  {
+    "role": "assistant",
+    "content": "## Welcome to Tree Driven Interaction\n\nThis AI chat application organizes conversations into a tree structure, enhancing your ability to manage and build upon interactions. Below is a guide to the interface and its features.\n\n### Top Bar (Upper Screen)\n\n- **Close Button (X)**: Closes the current conversation and prevents further message persistence from taking place.\n- **Minimize Button (_)**: Minimizes the conversation, keeping it running in the background.\n- **Conversation List Page**: After minimizing or closing a conversation you're able to see the currently running conversations, the pinned conversations, and a list of leaf node messages in the conversation tree which can be reified into conversations. All of these can be clicked to load it into a new conversation.\n\n### Top Right Buttons\n\n- **Share Button**: Share your conversation on ShareGPT anonymously. Options include various manners of escaping/converting for optimal sharing.\n- **Edit JSON Button**: Opens a JSON editor for the conversation, compatible with the OpenAI API schema. Import or export conversations for use with other systems.\n- **Functions Selector (Sigma Icon)**: Choose which functions the AI has access to by opening a modal with available options.\n  - Searching by message contents or recursive summary of the conversation up to the point of the message.\n  - Append a new message reply to either an existing message by SHA or to the root.\n\n### Message Search and Entry\n\n- **Toggle (Pause/Run)**: Pause the conversation to make edits without AI responses, or run to continue engaging with the AI assistant.\n- **Message Field**: Type your messages here.\n- **Send Button**: Click to send your typed message.\n- **Voice Entry (Microphone Button)**: Record your message, click again to finish recording. Upon completion, it will be transcribed and sent.\n- **Auto-Scroll Checkbox**: Keep your view at the end of the conversation or uncheck to manually navigate through the conversation history.\n\n### Message List (Middle Band)\n\n- **Role Icon**: Indicate the source of the message (system, assistant, user, or function).\n- **Sister Messages Indicator (Bottom Left Edge of Each Message)**: It shows the number of alternative replies to the parent message, allowing lateral navigation in the conversation tree. Omitted if there are no sister messages. Click this to view the different messages.\n- **Message Tools (Bottom Right Edge of Each Message)**:\n  - **Delete Button**: Removes a message via creating a new conversation path without it.\n  - **Edit Button**: Edits a message via rebasing the conversation into a new path with the change.\n  - **Pin Button**: Pins a message, storing the path up to that message on the OpenAI server under your account for cross-device access. Clicking again will remove the pin.\n  - **Copy Button**: Copies the message content to the clipboard.\n  - **Message Info Button**: Displays metadata and details about the message.\n  - **Emoji Address**: An emoji digest of the message's address, clickable to navigate directly to that point in the conversation.\n  - **Copy Address Button**: Copies the full hex SHA hash of the message address for referencing in replies - these SHA hashes will always appear as emoji digests in messages, except for when in the text entry field.\n- **Downwards Navigation Arrows**: If there are messages further down in the tree from your last message then downward arrows will appear.\n  - **Single Downward Arrow**: Just go to the most recent reply to the last message in this conversation.\n  - **Double Downward Arrows**: Open a modal showing all the leaf messages below the last message in this conversation.\n\n## Getting Started\n\nThis system is designed to make conversations with AI more intuitive and dynamic. You can now start asking questions about the system, and the AI assistant is equipped to provide intelligent responses. If you need further assistance, simply ask, and the AI will guide you through the features and usage of the tool.\n\nRemember, each conversation represents a path through the tree of dialogues, allowing for a structured and efficient interaction experience.\n\nIf you'd like to get rid of this explanation message, simply click the address of the system message to start a new fork from there."
+  }
+]
 
 function navRoot(navigate: NavigateFunction, replace: boolean = false) {
   navigate('?', { replace: replace });
@@ -48,14 +59,24 @@ function routerStateToSlotId(routerState: RouterState): string {
   return state?.activeConversation ?? routerState.location.key;
 }
 
+async function loadDefaultGreetingConversationSpec(): Promise<ConversationSpec> {
+  const results = await reprocessMessagesStartingFrom("gpt-4", defaultGreetingMessages);
+  const leafMessage = results[results.length - 1].message;
+  return {
+    tail: leafMessage,
+    model: "gpt-4",
+    functions: []
+  }
+}
+
 async function routerStateToConversationSpec(db: ConversationDB, routerState: RouterState): Promise<ConversationSpec | undefined> {
   const eventSearch = routerState.location.search;
   const eventParams = new URLSearchParams(eventSearch);
   const eventLeafNodeHash = eventParams.get('ln') ?? null;
-  if (!eventLeafNodeHash) return undefined;
+  if (!eventLeafNodeHash) return loadDefaultGreetingConversationSpec();
 
   const message = await db.getMessageByHash(eventLeafNodeHash);
-  if (!message) return undefined;
+  if (!message) return loadDefaultGreetingConversationSpec();
 
   const rawModel: string = eventParams.get('model') ?? "";
   const model: ConversationMode = isConversationMode(rawModel) ? rawModel : 'gpt-4';
