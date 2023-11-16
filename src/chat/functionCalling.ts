@@ -225,6 +225,21 @@ Content: ${reply.content}
         required: false
       }
     ]
+  },
+  {
+    name: "error",
+    description: "Throws an error with the provided message.",
+    implementation: (_utils: {db: ConversationDB}, message: string) => {
+      throw new Error(message);
+    },
+    parameters: [
+      {
+        name: "message",
+        type: "string",
+        description: "The message to display in the error.",
+        required: true
+      }
+    ]
   }
 ]
 
