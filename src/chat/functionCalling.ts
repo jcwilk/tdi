@@ -387,17 +387,6 @@ export async function embellishFunctionMessage(db: ConversationDB, message: Mess
   return functionMessage;
 }
 
-export function embellishFunctionMessages(db: ConversationDB): OperatorFunction<MessageDB, MessageDB> {
-  return (source: Observable<MessageDB>): Observable<MessageDB> => {
-    return source.pipe(
-      concatMap(message => {
-        const promise = embellishFunctionMessage(db, message).then(embellishedMessage => embellishedMessage || message);
-        return from(promise);
-      })
-    );
-  };
-}
-
 function createCodeBlock(text: string): string {
   // Determine the maximum sequence of backticks in the text
   const maxBackticks = Math.max(...text.match(/`+/g)?.map(s => s.length) ?? [0]);

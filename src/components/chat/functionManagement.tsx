@@ -24,12 +24,6 @@ export const FunctionManagement: React.FC<FunctionManagementProps> = ({ availabl
     });
   };
 
-  const calculateTokenCount = (selectedFuncs: FunctionOption[]) => {
-    // Mock implementation for now.
-    // You can replace this with your function to calculate token count.
-    return selectedFuncs.length * 20;
-  };
-
   const handleSave = () => {
     onUpdate(currentSelected);
     setOpen(false);
