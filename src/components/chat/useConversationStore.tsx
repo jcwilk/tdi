@@ -65,7 +65,7 @@ export const MessageAndConversationProvider: React.FC<React.PropsWithChildren> =
   );
 }
 
-export async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-3.5-turbo", functionOptions: FunctionOption[] = []): Promise<Conversation> {
+export async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-4", functionOptions: FunctionOption[] = []): Promise<Conversation> {
   const conversation = await createConversation(db, messages, model, functionOptions);
   return addAssistant(conversation, db);
 }

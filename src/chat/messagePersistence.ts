@@ -87,7 +87,7 @@ async function recursivelySummarize(newMessage: Message, priorResult: MaybeProce
       }
     ],
     0.1,
-    "gpt-3.5-turbo",
+    "gpt-4",
     100, // change size of summary here
   )
   return firstValueFrom(observer.pipe(

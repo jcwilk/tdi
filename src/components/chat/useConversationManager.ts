@@ -58,7 +58,7 @@ async function routerStateToConversationSpec(db: ConversationDB, routerState: Ro
   if (!message) return undefined;
 
   const rawModel: string = eventParams.get('model') ?? "";
-  const model: ConversationMode = isConversationMode(rawModel) ? rawModel : 'gpt-3.5-turbo';
+  const model: ConversationMode = isConversationMode(rawModel) ? rawModel : 'gpt-4';
   const functionNames = JSON.parse(eventParams.get('functions') ?? '[]');
   const functions = getAllFunctionOptions().filter(f => functionNames.includes(f.name));
 
@@ -70,7 +70,7 @@ async function routerStateToConversationSpec(db: ConversationDB, routerState: Ro
 }
 
 const defaultSpecSettings = {
-  model: "gpt-3.5-turbo" as ConversationMode,
+  model: "gpt-4" as ConversationMode,
   functions: [] as FunctionOption[],
 };
 

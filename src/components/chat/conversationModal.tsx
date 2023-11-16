@@ -180,8 +180,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
               aria-label="Platform"
             >
               <ToggleButton value="paused"><PauseIcon /></ToggleButton>
-              <ToggleButton value="gpt-3.5-turbo"><DirectionsRunIcon /></ToggleButton>
-              <ToggleButton value="gpt-4"><DirectionsWalkIcon /></ToggleButton>
+              <ToggleButton value="gpt-4"><DirectionsRunIcon /></ToggleButton>
             </ToggleButtonGroup>
           </Box>
         </Toolbar>

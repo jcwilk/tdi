@@ -5,7 +5,6 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
-import { Message } from '../../chat/conversation';
 import ShareIcon from '@mui/icons-material/Share';
 import copy from 'copy-to-clipboard';
 import { IconButton } from '@mui/material';
@@ -19,6 +18,8 @@ import RadioGroup from '@mui/material/RadioGroup';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormControl from '@mui/material/FormControl';
 import FormLabel from '@mui/material/FormLabel';
+import { possiblyEmbellishedMessageToMarkdown } from '../../chat/functionCalling';
+import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 
 type ShareGptMessage = {
   from: 'gpt' | 'human';
@@ -58,8 +59,11 @@ function capitalizeFirstLetter(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-async function convertMessage(message: Message, conversionType: string): Promise<ShareGptMessage> {
-  let content = message.content;
+// TODO: will come back to oranizing db access better when there's time
+const db = new ConversationDB();
+
+async function convertMessage(message: MessageDB, conversionType: string): Promise<ShareGptMessage> {
+  let content = await possiblyEmbellishedMessageToMarkdown(db, message);
 
   if (conversionType === "markdown") {
     content = await markdownToHtmlString(content);
@@ -74,7 +78,7 @@ async function convertMessage(message: Message, conversionType: string): Promise
   };
 }
 
-const ShareGptButton: React.FC<{ messages: [Message, ...Message[]] }> = ({ messages }) => {
+const ShareGptButton: React.FC<{ messages: [MessageDB, ...MessageDB[]] }> = ({ messages }) => {
   const [open, setOpen] = useState(false);
   const [conversionType, setConversionType] = useState('markdown');
 
