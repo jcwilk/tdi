@@ -53,12 +53,6 @@ Example gifs of usage (some of the interfaces have been minorly adjusted, see th
   - **Single Downward Arrow**: Just go to the most recent reply to the last message in this conversation.
   - **Double Downward Arrows**: Open a modal showing all the leaf messages below the last message in this conversation.
 
-## TDI Legacy
-
-If you're looking for or are curious about the history of this project, or are interested in a workflow/step/test oriented interface rather than a more open-ended chat
-interface, then go over and check out [github.com/jcwilk/tdi_legacy](https://github.com/jcwilk/tdi_legacy) formerly called "Test Driven Interactions". There's a gif there
-illustrating how it works and is also running as a freely available Github Pages site.
-
 ## How to run
 
 `npm run dev` - run dev server
@@ -68,3 +62,15 @@ If you'd like to build under prod mode to test locally:
 `npm run build` - build for prod
 
 But this shouldn't be necessary since you can just use Pages!
+
+## Known Issues
+
+* It tends to not work well in multiple tabs at once on mobile because of how I'm using IndexedDB/Dexie.js, however it's a better UX to just use forward/back nav between different conversations within the same tab IMO, especially on mobile. The way to fix this issue IIUC would be to move the indexeddb access to a shared web worker and interface with it through events but there's a long list of higher priority features.
+* It's a bit short on some conversation settings like which model to use (I currently have it limited to GPT-4-turbo because it's so much better than everyting and only marginally more expensive than GPT-3.5-turbo), termperature, p-value, etc, etc - being able to adjust these things doesn't really help me build and test out the tree management infrastructure so they haven't been a priority, but it would be quite trivial to add them, so feel free to open an issue if you need them and I could throw a couple hours at it and see where it ends up. In the interim, you can also try using the excellent [BetterChatGPT](https://github.com/ztjhz/BetterChatGPT) to handle a particular conversation path which might require very specific model settings, and then use the JSON editor feature to import the conversation back to your TDI tree afterwards.
+* It requires a paid OpenAI account in order to get an API key before you can do anything with it. This is sometimes behind a waitlist, if you are unable to sign up and want to try the app feel free to contact me for a temporary API key (if I know you of course, lol)
+
+## TDI Legacy
+
+If you're looking for or are curious about the history of this project, or are interested in a more rigidly structured workflow/step/test oriented interface rather than a more open-ended chat
+interface, then go over and check out [github.com/jcwilk/tdi_legacy](https://github.com/jcwilk/tdi_legacy). There's a gif there
+illustrating how it works and is also running as a freely available Github Pages site.
