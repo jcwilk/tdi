@@ -71,9 +71,6 @@ export const FunctionManagement: React.FC<FunctionManagementProps> = ({ availabl
               />
             ))}
           </FormGroup>
-          <div>
-            Token Count: {calculateTokenCount(currentSelected)}
-          </div>
         </DialogContent>
         <DialogActions>
           <Button autoFocus onClick={handleClose}>Cancel</Button>
