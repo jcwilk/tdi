@@ -417,17 +417,23 @@ export class ConversationDB extends Dexie {
   }
 
   async addPin(message: MessageDB, remoteTimestamp: number): Promise<void> {
-    const pin: PinDB = {
-      hash: message.hash,
-      timestamp: Date.now(),
-      version: 1,
-      remoteTimestamp: remoteTimestamp
-    };
-    await this.pins.add(pin);
+    this.transaction('rw', this.pins, async () => {
+      if (await this.hasPin(message)) return;
+
+      const pin: PinDB = {
+        hash: message.hash,
+        timestamp: Date.now(),
+        version: 1,
+        remoteTimestamp: remoteTimestamp
+      };
+      await this.pins.add(pin);
+    });
   }
 
   async removePin(message: MessageDB): Promise<void> {
-    await this.pins.where('hash').equals(message.hash).delete();
+    this.transaction('rw', this.pins, async () => {
+      await this.pins.where('hash').equals(message.hash).delete();
+    });
   }
 
   async hasPin(message: MessageDB): Promise<boolean> {

@@ -5,7 +5,6 @@ import { ConversationDB, MessageDB } from "./conversationDb";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
 import { isParticipantRole } from "./participantSubjects";
 
-
 function transformMessagesToTrainingItems(messages: Message[]): TrainingLineItem[] {
   return messages.map(message => ({
     prompt: message.role,
@@ -68,18 +67,26 @@ export async function mirrorPinsToDB(db: ConversationDB): Promise<void> {
   const remoteHashes = new Set(hashFilePairs.map(([hash, _file]) => hash));
 
   // Import new files and add pins
-  await Promise.all(hashFilePairs.map(async ([hash, file]) => {
-    const persisted = await db.getMessageByHash(hash);
-    if (!persisted) {
-      const trainingItems = await fetchFileContent(file);
-      const messages = transformTrainingItemsToMessages(trainingItems);
-      if (isAtLeastOne(messages)) {
-        const processedMessages = await reprocessMessagesStartingFrom("paused", messages);
-        const newLeafMessage = processedMessages[processedMessages.length - 1].message;
-        await db.addPin(newLeafMessage, file.created_at);
-      }
-    }
-  }));
+  const conversationsToImportWithFiles = (await Promise.all(
+    hashFilePairs
+      .map(async ([hash, file]) => {
+        const persisted = await db.getMessageByHash(hash);
+        if (!persisted) {
+          const trainingItems = await fetchFileContent(file);
+          const messages = transformTrainingItemsToMessages(trainingItems);
+          if (isAtLeastOne(messages)) {
+            return [messages, file];
+
+          }
+        }
+      })
+  )).filter(Boolean) as [[Message, ...Message[]], FileRecord][];
+
+  for (const [messages, file] of conversationsToImportWithFiles) {
+    const processedMessages = await reprocessMessagesStartingFrom("paused", messages);
+    const newLeafMessage = processedMessages[processedMessages.length - 1].message;
+    await db.addPin(newLeafMessage, file.created_at);
+  }
 
   // Remove pins not present in remote files
   const localPins = await db.getPinnedMessages();
