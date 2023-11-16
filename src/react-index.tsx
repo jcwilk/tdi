@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from "react-router-dom"
 import { RouterState } from '@remix-run/router';
@@ -6,8 +6,20 @@ import { BehaviorSubject } from 'rxjs';
 import Client from './components/chat/client';
 import './index.css';
 import { MessageAndConversationProvider } from './components/chat/useConversationStore';
+import { APIKeyFetcher } from './api_key_storage';
+import ApiKeyEntry from './components/api_key_entry';
 
 const App = () => {
+  const [apiKey, setApiKey] = useState<boolean>(!!APIKeyFetcher());
+
+  const handleApiKeySubmit = () => {
+    setApiKey(true);
+  };
+
+  if (!apiKey) {
+    return <ApiKeyEntry onSubmit={handleApiKeySubmit} />;
+  }
+
   return (
     <MessageAndConversationProvider>
       <Client />

@@ -1,23 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { ConversationDB } from '../../chat/conversationDb';
 import ConversationModal from './conversationModal';
 import LeafMessages from './leafMessages';
 import { useConversationsManager } from './useConversationManager';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import ApiKeyEntry from '../api_key_entry';
-import { APIKeyFetcher } from '../../api_key_storage';
 
 const Client: React.FC = () => {
-  const [apiKey, setApiKey] = useState<boolean>(!!APIKeyFetcher());
-
-  const handleApiKeySubmit = () => {
-    setApiKey(true);
-  };
-
-  if (!apiKey) {
-    return <ApiKeyEntry onSubmit={handleApiKeySubmit} />;
-  }
-
   const darkTheme = createTheme({
     palette: {
       mode: 'dark',
