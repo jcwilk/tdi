@@ -94,7 +94,7 @@ interface ScanState {
   event: TypingUpdateEvent | ProcessedMessageEvent | null;
 }
 
-export async function createConversation(db: ConversationDB, loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-3.5-turbo', functions: FunctionOption[] = []): Promise<Conversation> {
+export async function createConversation(db: ConversationDB, loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-4', functions: FunctionOption[] = []): Promise<Conversation> {
   const processedResults = await reprocessMessagesStartingFrom(model, loadedMessages);
 
   const processedMessages = processedResults.map(result => result.message);
