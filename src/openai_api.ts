@@ -130,10 +130,6 @@ export async function getChatCompletion(
   if (functions.length > 0) {
     payload.functions = functions;
     payload.function_call = "auto";
-
-    // TODO: not the most graceful way to handle this, but it does seem to improve the situation. Even GPT-4 escapes incorrectly much of the time without it, especially on bigger contexts.
-    // We'll need to insert this in a better place in the future when we start anticipating token length, since this will change the token length of the prompt.
-    payload.messages = [...payload.messages, { role: "system", content: "If you call a function, generated JSON for the arguments MUST be RFC8259 compliant. In particular, newlines must be escaped as \"\\\\n\" in strings." }]
   }
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
