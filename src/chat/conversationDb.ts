@@ -1,6 +1,8 @@
 import Dexie from 'dexie';
 import { Message } from './conversation';
 import { Observable, defer, filter, merge, mergeMap, of } from 'rxjs';
+import { FunctionOption } from '../openai_api';
+import { FunctionMessageContent, getFunctionResultsFromMessage } from './functionCalling';
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {
@@ -94,6 +96,12 @@ type FunctionResultWithCompletion = {
 
 export type FunctionResultDB = FunctionResultWithResult | FunctionResultWithCompletion;
 
+type FunctionDependency = {
+  hash: string;
+  timestamp: number;
+  dependencyName: string;
+};
+
 // This type is exclusively used internally in the dexie class to sidestep type awkwardness around
 // not getting the auto-inc id until it's persisted, but not being able to persist without an id.
 type FunctionResultDBMaybeId = Partial<Pick<FunctionResultDB, 'id'>> & Omit<FunctionResultDB, 'id'>;
@@ -131,17 +139,19 @@ export class ConversationDB extends Dexie {
   summaryEmbeddings: Dexie.Table<SummaryEmbeddingDB, string>;
   pins: Dexie.Table<PinDB, string>;
   functionResults: Dexie.Table<FunctionResultDBMaybeId, number>;
+  functionDependencies: Dexie.Table<FunctionDependency, string>;
 
   constructor() {
     super('ConversationDatabase');
 
-    this.version(15).stores({
+    this.version(16).stores({
       messages: '&hash,timestamp,parentHash,role,content',
       embeddings: '&hash,timestamp,embedding',
       summaries: '&hash,timestamp,summary',
       summaryEmbeddings: '&hash,timestamp,embedding',
       pins: '&hash,timestamp,version,remoteTimestamp',
       functionResults: '++id,*uuid,timestamp,functionName,result,completed',
+      functionDependencies: '&hash,timestamp,dependencyName',
     });
 
     this.messages = this.table('messages');
@@ -150,6 +160,7 @@ export class ConversationDB extends Dexie {
     this.summaryEmbeddings = this.table('summaryEmbeddings');
     this.pins = this.table('pins');
     this.functionResults = this.table('functionResults');
+    this.functionDependencies = this.table('functionDependencies');
   }
 
   saveMessage(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers): [Promise<MessageDB>, Promise<MetadataRecords>] {
@@ -459,5 +470,23 @@ export class ConversationDB extends Dexie {
   async getFunctionResultsByUUID(uuid: string): Promise<FunctionResultDB[]> {
     const results = await this.functionResults.where('uuid').equals(uuid).sortBy('id');
     return results as FunctionResultDB[];
+  }
+
+  async saveFunctionDependency(messageDB: MessageDB, dependency: FunctionOption): Promise<FunctionDependency> {
+    return this.transaction('rw', [this.functionResults, this.functionDependencies], async () => {
+      const dependencyDB: FunctionDependency = {
+        hash: messageDB.hash,
+        timestamp: Date.now(),
+        dependencyName: dependency.name,
+      };
+
+      const functionResults = await getFunctionResultsFromMessage(this, messageDB);
+
+      if (!functionResults) throw new Error('Cannot add dependency to a non-function message.');
+      if (functionResults.some(result => result.completed)) throw new Error('Cannot add dependency to completed function result.');
+
+      await this.functionDependencies.add(dependencyDB);
+      return dependencyDB;
+    });
   }
 }

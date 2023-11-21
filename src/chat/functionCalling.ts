@@ -12,17 +12,24 @@ type FunctionParameter = {
   type: string;
   description: string;
   required: boolean;
+  items?: {
+    type: string;
+  }
 };
+
+type FunctionReturn = Observable<string> | Promise<string> | string;
 
 type FunctionSpec = {
   name: string;
   description: string;
-  implementation: (...args: any[]) => Observable<string> | Promise<string> | string;
+  implementation: (...args: any[]) => FunctionReturn;
   parameters: FunctionParameter[];
 };
 
-type FunctionUntils = {
+type FunctionUtils = {
   db: ConversationDB;
+  functionMessagePromise: Promise<FunctionMessage>;
+  functionOptions: FunctionOption[];
 }
 
 export type FunctionMessage = MessageDB & {
@@ -192,6 +199,53 @@ Content: ${reply.content}
     ]
   },
   {
+    name: "generate_dynamic_function",
+    description: "TODO",
+    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<FunctionMessage>, functionOptions: FunctionOption[]}, functionBody: string, dependencies: string[]) => {
+      const functionMessage = await utils.functionMessagePromise;
+      const functionMessageContent = deserializeFunctionMessageContent(functionMessage.content);
+      if (!functionMessageContent) throw new Error("Invalid function message content");
+
+      // iterate through the dependencies and assert that they all correspond to entries in functionOptions
+      const functionOptions = utils.functionOptions;
+      const functionOptionNames = functionOptions.map((option) => option.name);
+      const missingDependencies = dependencies.filter((dep) => !functionOptionNames.includes(dep));
+      if (missingDependencies.length > 0) throw new Error(`Missing dependencies: ${missingDependencies.join(", ")}`);
+
+      // save each dependency to the database
+      await Promise.all(
+        dependencies.map(async (dep) => {
+          const functionOption = functionOptions.find((option) => option.name === dep);
+          if (!functionOption) throw new Error(`Function option "${dep}" not found in function options.`);
+
+          return await utils.db.saveFunctionDependency(
+            functionMessage,
+            functionOption
+          );
+        })
+      );
+
+      return "Dependencies persisted!";
+    },
+    parameters: [
+      {
+        name: "functionBody",
+        type: "string",
+        description: "The body of the async function to generate without the enclosing async function definition.",
+        required: true
+      },
+      {
+        name: "dependencies",
+        type: "array",
+        items: {
+          type: "string"
+        },
+        description: "A list of the names of the functions to which the generated function should have access.",
+        required: true
+      }
+    ]
+  },
+  {
     name: "alert",
     description: "Displays a browser alert with the provided message.",
     implementation: async (_utils: {db: ConversationDB}, message: string) => {
@@ -254,6 +308,7 @@ export function getAllFunctionOptions(): FunctionOption[] {
           type: param.type,
           description: param.description
         };
+        if (param.items) acc[param.name].items = param.items;
         return acc;
       }, {} as any)
     },
@@ -263,6 +318,15 @@ export function getAllFunctionOptions(): FunctionOption[] {
 
 export function isActiveFunction(conversation: Conversation, functionCall: FunctionCall) {
     return conversation.functions.some((f) => f.name === functionCall.name);
+}
+
+async function getFunctionMessageDBPromise(conversation: Conversation, functionMessageContent: FunctionMessageContent): Promise<FunctionMessage> {
+  const newMessagesObserver = observeNewMessages(conversation, false);
+
+  return firstValueFrom(newMessagesObserver.pipe(
+    filter(isFunctionMessage),
+    filter((message) => deserializeFunctionMessageContent(message.content)?.uuid === functionMessageContent.uuid)
+  ));
 }
 
 export async function callFunction(conversation: Conversation, functionCall: FunctionCall, db: ConversationDB): Promise<void> {
@@ -281,7 +345,9 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
     const initialContent = serializeFunctionMessageContent(functionMessageContent);
     sendFunctionCall(conversation, initialContent);
 
-    const result = code({db});
+    const functionMessagePromise = getFunctionMessageDBPromise(conversation, functionMessageContent);
+
+    const result = code({db, functionMessagePromise, functionOptions: conversation.functions});
 
     const saveFunctionResult = async (resultString: string, completed: boolean) => {
       if (completed) {
@@ -313,7 +379,11 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
       return; // Return early to prevent saving completion spec below
     }
 
-    await saveFunctionResult(await result, false);
+    const resultString = await result;
+
+    if (resultString !== null) await saveFunctionResult(resultString, false);
+
+
     await saveFunctionResult('', true);
   } catch (error) {
     console.error("caught error in callFunction", error);
@@ -321,7 +391,7 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
   }
 }
 
-export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils: FunctionUntils) => string | Promise<string> | Observable<string>{
+export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils: FunctionUtils) => FunctionReturn {
   // Find the function spec for the called function
   const funcSpec = functionSpecs.find(func => func.name === functionCall.name);
   if (!funcSpec) {
@@ -335,7 +405,8 @@ export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils:
       if (param.type === "number") return Number(value);
       if (param.type === "boolean") return Boolean(value);
       if (param.type === "string") return String(value);
-      else throw new Error(`Unsupported parameter type "${param.type}" for parameter "${param.name}".`); // Just add handling for the unknown type directly above this line
+      if (param.type === "array" && param.items?.type === "string") return value.map(String);
+      else throw new Error(`Unsupported parameter type "${param.type}" for parameter "${param.name}". It had value of ${value}`); // Just add handling for the unknown type directly above this line
     } else if (param.required) {
       throw new Error(`Required parameter "${param.name}" missing in function call.`);
     } else {
@@ -343,7 +414,7 @@ export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils:
     }
   });
 
-  return (utils: FunctionUntils): string | Promise<string> | Observable<string> => {
+  return (utils: FunctionUtils): FunctionReturn => {
     return funcSpec.implementation(utils, ...args);
   };
 }
@@ -372,7 +443,7 @@ export function deserializeFunctionMessageContent(content: string): FunctionMess
   }
 }
 
-async function getFunctionResultsFromMessage(db: ConversationDB, message: MessageDB): Promise<FunctionResultDB[] | null> {
+export async function getFunctionResultsFromMessage(db: ConversationDB, message: MessageDB): Promise<FunctionResultDB[] | null> {
   if (message.role !== 'function') {
     return null;
   }
