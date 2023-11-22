@@ -10,6 +10,11 @@
     <% if (htmlWebpackPlugin.options.templateParameters.trackingCode) { %>
         <%= htmlWebpackPlugin.options.templateParameters.trackingCode %>
     <% } %>
+    <script>
+        // Assuming 'worker' is the chunk name for your worker
+        window.workerPath = '/tdi/' + '<%= htmlWebpackPlugin.files.worker %>';
+        // Now you can use workerPath to instantiate your worker
+    </script>
 </head>
 
 <body>

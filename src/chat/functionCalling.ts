@@ -7,6 +7,22 @@ import { Observable, OperatorFunction, concatMap, filter, firstValueFrom, from, 
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
 import { isAtLeastOne } from "../tsUtils";
 
+
+
+
+export type DynamicFunctionWorkerPayload = {
+  functionHash: string;
+  input: string;
+  functionOptions: FunctionOption[];
+}
+
+export type DynamicFunctionWorkerResponse = {
+  status: "complete"
+ } | {
+  status: "incomplete";
+  content: string;
+}
+
 type FunctionParameter = {
   name: string;
   type: string;
@@ -225,7 +241,11 @@ Content: ${reply.content}
         })
       );
 
-      return "Dependencies persisted!";
+      return "Dynamic function persisted:\n\n" + JSON.stringify({
+        hash: functionMessage.hash,
+        functionBody,
+        dependencies
+      });
     },
     parameters: [
       {
@@ -241,6 +261,57 @@ Content: ${reply.content}
           type: "string"
         },
         description: "A list of the names of the functions to which the generated function should have access.",
+        required: true
+      }
+    ]
+  },
+  {
+    name: "invoke_dynamic_function",
+    description: "TODO",
+    implementation: (utils: {db: ConversationDB, functionOptions: FunctionOption[]}, functionHash: string, input: string) => {
+      const observable = new Observable<string>(subscriber => {
+        const worker = new Worker((window as any).workerPath);
+        worker.addEventListener('message', (event) => {
+          const data = event.data as DynamicFunctionWorkerResponse;
+
+          if (data.status === "complete") {
+            subscriber.complete();
+            worker.terminate();
+            return;
+          }
+          console.log('Received from worker:', data);
+          subscriber.next(String(data.content));
+        });
+
+        worker.addEventListener('error', (event) => {
+          subscriber.error(event.error || event.message);
+          worker.terminate();
+        });
+
+        // NB: having the worker postMessage here means it won't send the first message until the observable is subscribed to
+        // this is important so that we don't miss a response from the worker, but means that it's important to not subscribe
+        // to this observable more than once
+        const message: DynamicFunctionWorkerPayload = {
+          functionHash,
+          input,
+          functionOptions: utils.functionOptions
+        };
+        worker.postMessage(message);
+      });
+
+      return observable;
+    },
+    parameters: [
+      {
+        name: "functionHash",
+        type: "string",
+        description: "The SHA of the function to invoke.",
+        required: true
+      },
+      {
+        name: "input",
+        type: "string", // TODO: since it's going to end up as an observable of strings, maybe an array of strings would be more appropriate?
+        description: "The input to provide to the function.",
         required: true
       }
     ]

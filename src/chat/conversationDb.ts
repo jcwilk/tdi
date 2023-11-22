@@ -96,7 +96,7 @@ type FunctionResultWithCompletion = {
 
 export type FunctionResultDB = FunctionResultWithResult | FunctionResultWithCompletion;
 
-type FunctionDependency = {
+type FunctionDependencyDB = {
   hash: string;
   timestamp: number;
   dependencyName: string;
@@ -139,7 +139,7 @@ export class ConversationDB extends Dexie {
   summaryEmbeddings: Dexie.Table<SummaryEmbeddingDB, string>;
   pins: Dexie.Table<PinDB, string>;
   functionResults: Dexie.Table<FunctionResultDBMaybeId, number>;
-  functionDependencies: Dexie.Table<FunctionDependency, string>;
+  functionDependencies: Dexie.Table<FunctionDependencyDB, string>;
 
   constructor() {
     super('ConversationDatabase');
@@ -472,9 +472,9 @@ export class ConversationDB extends Dexie {
     return results as FunctionResultDB[];
   }
 
-  async saveFunctionDependency(messageDB: MessageDB, dependency: FunctionOption): Promise<FunctionDependency> {
+  async saveFunctionDependency(messageDB: MessageDB, dependency: FunctionOption): Promise<FunctionDependencyDB> {
     return this.transaction('rw', [this.functionResults, this.functionDependencies], async () => {
-      const dependencyDB: FunctionDependency = {
+      const dependencyDB: FunctionDependencyDB = {
         hash: messageDB.hash,
         timestamp: Date.now(),
         dependencyName: dependency.name,
@@ -488,5 +488,9 @@ export class ConversationDB extends Dexie {
       await this.functionDependencies.add(dependencyDB);
       return dependencyDB;
     });
+  }
+
+  async getFunctionDependenciesByHash(hash: string): Promise<FunctionDependencyDB[]> {
+    return this.functionDependencies.where('hash').equals(hash).toArray();
   }
 }

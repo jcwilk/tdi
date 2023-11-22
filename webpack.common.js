@@ -1,12 +1,12 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const HtmlInlineScriptPlugin = require('html-inline-script-webpack-plugin');
-const CopyWebpackPlugin = require('copy-webpack-plugin')
 const FaviconsWebpackPlugin = require('favicons-webpack-plugin');
+const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
 
 module.exports = {
   entry: {
-    react: './src/react-index.tsx', // Add your React entry point here
+    react: './src/react-index.tsx',
+    worker: './src/workers/dynamicFunctions.worker.ts',
   },
   module: {
     rules: [
@@ -25,20 +25,12 @@ module.exports = {
         },
       },
       {
-        test: /\.worker\.(js)$/,
-        use: { loader: "worker-loader" },
-      },
-      {
         test: /\.css$/i,
         use: ["style-loader", "css-loader"],
       },
       {
         test: /\.(png|svg|jpg|jpeg|gif)$/i,
         type: "asset/inline",
-      },
-      {
-        test: /\.glsl$/,
-        use: "webpack-glsl-loader",
       },
     ],
 
@@ -55,17 +47,32 @@ module.exports = {
     globalObject: 'self',
   },
   plugins: [
+    new WebpackManifestPlugin({
+      fileName: 'asset-manifest.json',
+      publicPath: '/tdi/',
+    }),
     new HtmlWebpackPlugin({
       title: 'Tree Driven Interaction',
       template: 'src/index.html',
+      excludeChunks: ['worker'],
       minify: {
         collapseWhitespace: false,
       },
-      templateParameters: {
-        trackingCode: process.env.TRACKING_CODE
+      templateParameters: (compilation) => {
+        const assets = compilation.getStats().toJson().assetsByChunkName;
+        return {
+          assets,
+          htmlWebpackPlugin: {
+            files: assets,
+            options: {
+              templateParameters: {
+                trackingCode: process.env.TRACKING_CODE,
+              },
+            },
+          },
+        };
       },
     }),
-    new HtmlInlineScriptPlugin(),
     new FaviconsWebpackPlugin({
       // Your source logo (required)
       logo: './src/full_favicon_trimmed.png', // path to your favicon source file
