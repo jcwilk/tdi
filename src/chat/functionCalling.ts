@@ -7,12 +7,13 @@ import { Observable, OperatorFunction, concatMap, filter, firstValueFrom, from, 
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
 import { isAtLeastOne } from "../tsUtils";
 
-
-
+// NB: Conceptually this could also be an Observable<string> or Promise<string>, however because we're
+// sending it to the worker, it needs to be serializable, and Observables and Promises are not.
+export type DynamicFunctionWorkerInput = undefined | string | string[];
 
 export type DynamicFunctionWorkerPayload = {
   functionHash: string;
-  input: string;
+  input: DynamicFunctionWorkerInput;
   functionOptions: FunctionOption[];
 }
 
@@ -74,7 +75,6 @@ export type IncompleteFunctionMessage = EmbellishedFunctionMessage & {
   isComplete: false;
 };
 
-
 function concatWithEllipses(str: string, maxLength: number): string {
   return str.length > maxLength ? str.substring(0, maxLength - 3) + "..." : str;
 }
@@ -124,6 +124,30 @@ function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name
     ]
   }
 }
+
+const generateDynamicFunctionDescription = `
+Create a JavaScript function by specifying the body of the function, including the return statement but excluding the outer function definition or brackets. \`functionBody\` is a string of code, and \`dependencies\` is an array of callable function SHAs. \`input\` is an RxJS Observable<string>, possibly EMPTY. Return values are coerced into Observable<string> and can be RxJS.EMPTY, string, array, strings, undefined, or Observable<string>. Use \`RxJS\` for RxJS functions and \`dependencies\` with SHAs to call other functions. Functions are sandboxed, identified by SHA, and invoked with \`invoke_dynamic_function\`.
+
+Example:
+###JSON
+{
+  "functionBody": "return dependencies['c2931bf195957b133ebb5e8820df94a20c96887e234d2869ecafad53846501e7'](input).pipe(RxJS.map(x => x + '!'));",
+  "dependencies": ['c2931bf195957b133ebb5e8820df94a20c96887e234d2869ecafad53846501e7']
+}
+###
+`.trim();
+
+const invokeDynamicFunctionDescription = `
+Invoke a dynamic function using its SHA hash with \`invoke_dynamic_function\`. Provide \`functionHash\`, the SHA of the function, and \`input\`, an array of strings to pass as arguments. The function returns an RxJS Observable<string> with the function's output. The function is executed in a Worker, ensuring isolation and asynchronous execution. The observable emits values as they are received from the worker and completes when the function execution is done.
+
+Example:
+###JSON
+{
+  "functionHash": "c2931bf195957b133ebb5e8820df94a20c96887e234d2869ecafad53846501e7",
+  "input": ["sample input"]
+}
+###
+`.trim();
 
 const functionSpecs: FunctionSpec[] = [
   sharedSearchSpecBuilder(
@@ -216,8 +240,9 @@ Content: ${reply.content}
   },
   {
     name: "generate_dynamic_function",
-    description: "TODO",
-    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<FunctionMessage>, functionOptions: FunctionOption[]}, functionBody: string, dependencies: string[]) => {
+    description: generateDynamicFunctionDescription,
+    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<FunctionMessage>, functionOptions: FunctionOption[]}, functionBody: string, dependencies?: string[]) => {
+      dependencies ||= [];
       const functionMessage = await utils.functionMessagePromise;
       const functionMessageContent = deserializeFunctionMessageContent(functionMessage.content);
       if (!functionMessageContent) throw new Error("Invalid function message content");
@@ -226,17 +251,19 @@ Content: ${reply.content}
       const functionOptions = utils.functionOptions;
       const functionOptionNames = functionOptions.map((option) => option.name);
       const missingDependencies = dependencies.filter((dep) => !functionOptionNames.includes(dep));
-      if (missingDependencies.length > 0) throw new Error(`Missing dependencies: ${missingDependencies.join(", ")}`);
+
+      // TODO: check whether non-function-options are dynamic functions by looking them up as potential hashes
+      //if (missingDependencies.length > 0) throw new Error(`Missing dependencies: ${missingDependencies.join(", ")}`);
 
       // save each dependency to the database
       await Promise.all(
         dependencies.map(async (dep) => {
-          const functionOption = functionOptions.find((option) => option.name === dep);
-          if (!functionOption) throw new Error(`Function option "${dep}" not found in function options.`);
+          //const functionOption = functionOptions.find((option) => option.name === dep);
+          //if (!functionOption) throw new Error(`Function option "${dep}" not found in function options.`);
 
           return await utils.db.saveFunctionDependency(
             functionMessage,
-            functionOption
+            dep
           );
         })
       );
@@ -251,7 +278,7 @@ Content: ${reply.content}
       {
         name: "functionBody",
         type: "string",
-        description: "The body of the async function to generate without the enclosing async function definition.",
+        description: "The body of the function to generate without the enclosing function definition or surrounding curly braces.",
         required: true
       },
       {
@@ -260,15 +287,15 @@ Content: ${reply.content}
         items: {
           type: "string"
         },
-        description: "A list of the names of the functions to which the generated function should have access.",
-        required: true
+        description: "A list of the names of the functions to which the generated function should have access. Defaults to [].",
+        required: false
       }
     ]
   },
   {
     name: "invoke_dynamic_function",
-    description: "TODO",
-    implementation: (utils: {db: ConversationDB, functionOptions: FunctionOption[]}, functionHash: string, input: string) => {
+    description: invokeDynamicFunctionDescription,
+    implementation: (utils: {db: ConversationDB, functionOptions: FunctionOption[]}, functionHash: string, input: DynamicFunctionWorkerInput) => {
       const observable = new Observable<string>(subscriber => {
         const worker = new Worker((window as any).workerPath);
         worker.addEventListener('message', (event) => {
@@ -310,9 +337,12 @@ Content: ${reply.content}
       },
       {
         name: "input",
-        type: "string", // TODO: since it's going to end up as an observable of strings, maybe an array of strings would be more appropriate?
-        description: "The input to provide to the function.",
-        required: true
+        type: "array",
+        items: {
+          type: "string"
+        },
+        description: "The input to provide to the function. Defaults to [].",
+        required: false
       }
     ]
   },
@@ -495,6 +525,17 @@ export type FunctionMessageContent = {
   v: number;
   name: string;
   parameters: FunctionParameters;
+}
+
+export type DynamicFunctionMessageContent = FunctionMessageContent & {
+  parameters: {
+    functionBody: string;
+    dependencies: string[];
+  }
+};
+
+export function isDynamicFunctionMessageContent(content: FunctionMessageContent): content is DynamicFunctionMessageContent {
+  return content.name === "generate_dynamic_function";
 }
 
 export function serializeFunctionMessageContent(content: FunctionMessageContent): string {

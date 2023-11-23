@@ -96,7 +96,7 @@ type FunctionResultWithCompletion = {
 
 export type FunctionResultDB = FunctionResultWithResult | FunctionResultWithCompletion;
 
-type FunctionDependencyDB = {
+export type FunctionDependencyDB = {
   hash: string;
   timestamp: number;
   dependencyName: string;
@@ -472,12 +472,12 @@ export class ConversationDB extends Dexie {
     return results as FunctionResultDB[];
   }
 
-  async saveFunctionDependency(messageDB: MessageDB, dependency: FunctionOption): Promise<FunctionDependencyDB> {
+  async saveFunctionDependency(messageDB: MessageDB, dependencyName: string): Promise<FunctionDependencyDB> {
     return this.transaction('rw', [this.functionResults, this.functionDependencies], async () => {
       const dependencyDB: FunctionDependencyDB = {
         hash: messageDB.hash,
         timestamp: Date.now(),
-        dependencyName: dependency.name,
+        dependencyName,
       };
 
       const functionResults = await getFunctionResultsFromMessage(this, messageDB);
