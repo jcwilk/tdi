@@ -2,6 +2,29 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const FaviconsWebpackPlugin = require('favicons-webpack-plugin');
 const { WebpackManifestPlugin } = require('webpack-manifest-plugin');
+const fs = require('fs');
+
+// This plugin updates the hash in the main html file when the worker hash changes
+// This is necessary because the main html file contains a reference to the worker's path
+class WebpackWorkerHashUpdatePlugin {
+  apply(compiler) {
+    let previousFilename = '';
+
+    compiler.hooks.emit.tapAsync('WebpackWorkerHashUpdatePlugin', (compilation, callback) => {
+      const workerFilePattern = /^worker\.[a-f0-9]+\.js$/;
+      const workerFilename = Object.keys(compilation.assets).find(filename => workerFilePattern.test(filename));
+
+      if (previousFilename !== workerFilename) {
+        previousFilename = workerFilename;
+        const mainFilePath = path.join(compiler.options.context, 'src', 'index.html');
+        const content = fs.readFileSync(mainFilePath, 'utf-8');
+        fs.writeFileSync(mainFilePath, content);
+      }
+
+      callback();
+    });
+  }
+}
 
 module.exports = {
   entry: {
@@ -82,5 +105,6 @@ module.exports = {
       appName: '',
       shortName: '',
     }),
+    new WebpackWorkerHashUpdatePlugin(),
   ],
 };
