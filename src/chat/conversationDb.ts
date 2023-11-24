@@ -151,7 +151,7 @@ export class ConversationDB extends Dexie {
       summaryEmbeddings: '&hash,timestamp,embedding',
       pins: '&hash,timestamp,version,remoteTimestamp',
       functionResults: '++id,*uuid,timestamp,functionName,result,completed',
-      functionDependencies: '&hash,timestamp,dependencyName',
+      functionDependencies: '&hash,timestamp,dependencyName', // TODO: fix the index here :(
     });
 
     this.messages = this.table('messages');

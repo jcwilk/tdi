@@ -6,6 +6,7 @@ import { reprocessMessagesStartingFrom } from "./messagePersistence";
 import { Observable, OperatorFunction, concatMap, filter, firstValueFrom, from, isObservable, map, tap } from "rxjs";
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
 import { isAtLeastOne } from "../tsUtils";
+import { APIKeyFetcher } from "../api_key_storage";
 
 // NB: Conceptually this could also be an Observable<string> or Promise<string>, however because we're
 // sending it to the worker, it needs to be serializable, and Observables and Promises are not.
@@ -34,7 +35,7 @@ type FunctionParameter = {
   }
 };
 
-type FunctionReturn = Observable<string> | Promise<string> | string;
+export type FunctionReturn = Observable<string> | Promise<string> | string | string[] | undefined;
 
 type FunctionSpec = {
   name: string;
@@ -126,16 +127,16 @@ function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name
 }
 
 const generateDynamicFunctionDescription = `
-Create a JavaScript function by specifying the body of the function, including the return statement but excluding the outer function definition or brackets. \`functionBody\` is a string of code, and \`dependencies\` is an array of callable function SHAs. \`input\` is an RxJS Observable<string>, possibly EMPTY. Return values are coerced into Observable<string> and can be RxJS.EMPTY, string, array, strings, undefined, or Observable<string>. Use \`RxJS\` for RxJS functions and \`dependencies\` with SHAs to call other functions. Functions are sandboxed, identified by SHA, and invoked with \`invoke_dynamic_function\`.
+Create a JavaScript function by specifying the body of the function, including the return statement but excluding the outer function definition or curly braces. \`functionBody\` is a string of code, and \`dependencies\` is an array of callable function SHAs or function names provided in the API call payload. \`input\` is an RxJS Observable<string>, possibly EMPTY. Return values are coerced into Observable<string> and can be RxJS.EMPTY, string, string[], undefined, or Observable<string>. Use \`RxJS\` for RxJS functions and \`dependencies\` with SHAs or function names to call other functions. Functions are sandboxed, identified by SHA, and invoked with \`invoke_dynamic_function\`.
 
 Example:
 ###JSON
 {
-  "functionBody": "return dependencies['c2931bf195957b133ebb5e8820df94a20c96887e234d2869ecafad53846501e7'](input).pipe(RxJS.map(x => x + '!'));",
-  "dependencies": ['c2931bf195957b133ebb5e8820df94a20c96887e234d2869ecafad53846501e7']
+  "functionBody": "return RxJS.forkJoin([dependencies['c2931bf195'](input), dependencies['some_function']({someParam: 10, otherParam: "yes"})]).pipe(RxJS.map(results => results.join(' and ')));",
+  "dependencies": ['c2931bf195', 'some_function']
 }
 ###
-`.trim();
+`.trim()
 
 const invokeDynamicFunctionDescription = `
 Invoke a dynamic function using its SHA hash with \`invoke_dynamic_function\`. Provide \`functionHash\`, the SHA of the function, and \`input\`, an array of strings to pass as arguments. The function returns an RxJS Observable<string> with the function's output. The function is executed in a Worker, ensuring isolation and asynchronous execution. The observable emits values as they are received from the worker and completes when the function execution is done.
@@ -149,7 +150,7 @@ Example:
 ###
 `.trim();
 
-const functionSpecs: FunctionSpec[] = [
+export const functionSpecs: FunctionSpec[] = [
   sharedSearchSpecBuilder(
     'embeddings',
     'direct_message_embedding_search',
@@ -252,15 +253,19 @@ Content: ${reply.content}
       const functionOptionNames = functionOptions.map((option) => option.name);
       const missingDependencies = dependencies.filter((dep) => !functionOptionNames.includes(dep));
 
-      // TODO: check whether non-function-options are dynamic functions by looking them up as potential hashes
-      //if (missingDependencies.length > 0) throw new Error(`Missing dependencies: ${missingDependencies.join(", ")}`);
+      // filter the missing dependencies down to those which don't exist as hashes in the database
+      const missingNonDynamicDependencies = (await Promise.all(
+        missingDependencies.map(async (dep) => {
+          const message = await utils.db.getMessageByHash(dep);
+          return message ? null : dep;
+        })
+      )).filter(Boolean) as string[];
+
+      if (missingNonDynamicDependencies.length > 0) throw new Error(`Missing dependencies: ${missingNonDynamicDependencies.join(", ")}`);
 
       // save each dependency to the database
       await Promise.all(
         dependencies.map(async (dep) => {
-          //const functionOption = functionOptions.find((option) => option.name === dep);
-          //if (!functionOption) throw new Error(`Function option "${dep}" not found in function options.`);
-
           return await utils.db.saveFunctionDependency(
             functionMessage,
             dep
@@ -298,19 +303,22 @@ Content: ${reply.content}
     implementation: (utils: {db: ConversationDB, functionOptions: FunctionOption[]}, functionHash: string, input: DynamicFunctionWorkerInput) => {
       const observable = new Observable<string>(subscriber => {
         const worker = new Worker((window as any).workerPath);
+        worker.postMessage({SET_API_KEY: APIKeyFetcher()})
+
         worker.addEventListener('message', (event) => {
           const data = event.data as DynamicFunctionWorkerResponse;
+          //console.log("received message", data)
 
           if (data.status === "complete") {
             subscriber.complete();
             worker.terminate();
             return;
           }
-          console.log('Received from worker:', data);
           subscriber.next(String(data.content));
         });
 
         worker.addEventListener('error', (event) => {
+          console.log("received error", event)
           subscriber.error(event.error || event.message);
           worker.terminate();
         });
@@ -467,6 +475,9 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
       });
     };
 
+    // TODO: may or may not be possible to merge the logic below with `coerceInputOrReturn` in dynamicFunctions.worker.ts
+    // but the deadline approaches and done is better than perfect, can always come back to this later.
+
     // observables are a bit different since there's multiple results
     if (isObservable(result)) {
       result.subscribe({
@@ -480,11 +491,21 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
       return; // Return early to prevent saving completion spec below
     }
 
+    if (result === undefined) {
+      await saveFunctionResult('', true);
+      return;
+    }
+
+    if (Array.isArray(result)) {
+      for (const element of result) {
+        await saveFunctionResult(element, false);
+      }
+      await saveFunctionResult('', true);
+      return;
+    }
+
     const resultString = await result;
-
-    if (resultString !== null) await saveFunctionResult(resultString, false);
-
-
+    await saveFunctionResult(resultString, false);
     await saveFunctionResult('', true);
   } catch (error) {
     console.error("caught error in callFunction", error);
@@ -492,17 +513,10 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
   }
 }
 
-export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils: FunctionUtils) => FunctionReturn {
-  // Find the function spec for the called function
-  const funcSpec = functionSpecs.find(func => func.name === functionCall.name);
-  if (!funcSpec) {
-    throw new Error(`Function "${functionCall.name}" not found in specs.`);
-  }
-
-  // Construct the ordered arguments list
-  const args = funcSpec.parameters.map(param => {
-    if (param.name in functionCall.parameters) {
-      const value = functionCall.parameters[param.name];
+export function coerceAndOrderFunctionParameters(functionParameters: FunctionParameters, functionSpec: FunctionSpec): any[] {
+  return functionSpec.parameters.map(param => {
+    if (param.name in functionParameters) {
+      const value = functionParameters[param.name];
       if (param.type === "number") return Number(value);
       if (param.type === "boolean") return Boolean(value);
       if (param.type === "string") return String(value);
@@ -514,6 +528,17 @@ export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils:
       return undefined; // Default value for optional parameters not provided in the call
     }
   });
+}
+
+export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils: FunctionUtils) => FunctionReturn {
+  // Find the function spec for the called function
+  const funcSpec = functionSpecs.find(func => func.name === functionCall.name);
+  if (!funcSpec) {
+    throw new Error(`Function "${functionCall.name}" not found in specs.`);
+  }
+
+  // Construct the ordered arguments list
+  const args = coerceAndOrderFunctionParameters(functionCall.parameters, funcSpec);
 
   return (utils: FunctionUtils): FunctionReturn => {
     return funcSpec.implementation(utils, ...args);
