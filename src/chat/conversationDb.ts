@@ -3,6 +3,7 @@ import { Message } from './conversation';
 import { Observable, defer, filter, merge, mergeMap, of } from 'rxjs';
 import { FunctionOption } from '../openai_api';
 import { FunctionMessageContent, getFunctionResultsFromMessage } from './functionCalling';
+import { defineConversationDBSchema } from './conversationDbMigrations';
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {
@@ -139,20 +140,14 @@ export class ConversationDB extends Dexie {
   summaryEmbeddings: Dexie.Table<SummaryEmbeddingDB, string>;
   pins: Dexie.Table<PinDB, string>;
   functionResults: Dexie.Table<FunctionResultDBMaybeId, number>;
-  functionDependencies: Dexie.Table<FunctionDependencyDB, string>;
+  functionDependencies: Dexie.Table<FunctionDependencyDB, [string, string]>;
+  functionDependencies2: Dexie.Table<FunctionDependencyDB, [string, string]>;
 
   constructor() {
     super('ConversationDatabase');
 
-    this.version(16).stores({
-      messages: '&hash,timestamp,parentHash,role,content',
-      embeddings: '&hash,timestamp,embedding',
-      summaries: '&hash,timestamp,summary',
-      summaryEmbeddings: '&hash,timestamp,embedding',
-      pins: '&hash,timestamp,version,remoteTimestamp',
-      functionResults: '++id,*uuid,timestamp,functionName,result,completed',
-      functionDependencies: '&hash,timestamp,dependencyName', // TODO: fix the index here :(
-    });
+    // To handle migrations - putting this in a separate function to avoid spamming this file too much
+    defineConversationDBSchema(this);
 
     this.messages = this.table('messages');
     this.embeddings = this.table('embeddings');
@@ -161,6 +156,7 @@ export class ConversationDB extends Dexie {
     this.pins = this.table('pins');
     this.functionResults = this.table('functionResults');
     this.functionDependencies = this.table('functionDependencies');
+    this.functionDependencies2 = this.table('functionDependencies2');
   }
 
   saveMessage(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers): [Promise<MessageDB>, Promise<MetadataRecords>] {
