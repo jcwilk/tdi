@@ -5,6 +5,7 @@ import { isAtLeastOne } from '../tsUtils';
 import { chatCompletionMetaStream, isGPTSentMessage } from './chatStreams';
 import { filter, firstValueFrom, map } from 'rxjs';
 import { embellishFunctionMessage } from './functionCalling';
+import { isAPIKeySet } from '../api_key_storage';
 
 const hashFunction = async (message: Message, parentHashes: string[]): Promise<string> => {
   // Extract the required fields
@@ -101,6 +102,8 @@ export async function processMessagesWithHashing(
   message: MaybePersistedMessage,
   priorResult: MaybeProcessedMessageResult
 ): Promise<ProcessedMessageResult> {
+  if (!isAPIKeySet()) conversationMode = 'paused';
+
   const parentHash = priorResult.message ? priorResult.message.hash : rootMessageHash;
   const hash = await hashFunction(message, [parentHash]);
 

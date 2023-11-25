@@ -19,6 +19,7 @@ import AssistantIcon from '@mui/icons-material/PrecisionManufacturing';
 import UserIcon from '@mui/icons-material/Person';
 import SystemIcon from '@mui/icons-material/Dns';
 import FunctionIcon from '@mui/icons-material/Functions';
+import { isAPIKeySet } from "../api_key_storage";
 
 interface BoxPopupProps {
   openEditor: string;
@@ -114,32 +115,34 @@ export default function BoxPopup({
               <FunctionIcon />
             </ToggleButton>
           </ToggleButtonGroup>
-          <Stack direction="row" spacing={1}>
-            <Chip
-              icon={
-                <MicIcon color={onStopRecordingEdit ? "success" : "disabled"}/>
-              }
-              label={
-                <IconButton onClick={()=>{
-                  onStopRecordingEdit ? onStopRecordingEdit() : startRecordingEdit();
-                }}>
-                  <EditNoteIcon />
-                </IconButton>
-              }
-            />
-            <Chip
-              icon={
-                <MicIcon color={onStopRecordingRedo ? "success" : "disabled"}/>
-              }
-              label={
-                <IconButton onClick={()=>{
-                  onStopRecordingRedo ? onStopRecordingRedo() : startRecordingRedo();
-                }}>
-                  <RestartAltIcon />
-                </IconButton>
-              }
-            />
-          </Stack>
+          { isAPIKeySet() &&
+            <Stack direction="row" spacing={1}>
+              <Chip
+                icon={
+                  <MicIcon color={onStopRecordingEdit ? "success" : "disabled"}/>
+                }
+                label={
+                  <IconButton onClick={()=>{
+                    onStopRecordingEdit ? onStopRecordingEdit() : startRecordingEdit();
+                  }}>
+                    <EditNoteIcon />
+                  </IconButton>
+                }
+              />
+              <Chip
+                icon={
+                  <MicIcon color={onStopRecordingRedo ? "success" : "disabled"}/>
+                }
+                label={
+                  <IconButton onClick={()=>{
+                    onStopRecordingRedo ? onStopRecordingRedo() : startRecordingRedo();
+                  }}>
+                    <RestartAltIcon />
+                  </IconButton>
+                }
+              />
+            </Stack>
+          }
           <TextField
             multiline
             fullWidth

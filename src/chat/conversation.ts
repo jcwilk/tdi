@@ -6,6 +6,7 @@ import { FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
 import { SupportedModels } from './chatStreams';
 import { isAtLeastOne } from '../tsUtils';
+import { isAPIKeySet } from '../api_key_storage';
 
 export type Message = {
   role: ParticipantRole;
@@ -95,6 +96,8 @@ interface ScanState {
 }
 
 export async function createConversation(db: ConversationDB, loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-4', functions: FunctionOption[] = []): Promise<Conversation> {
+  if(!isAPIKeySet()) model = "paused";
+
   const processedResults = await reprocessMessagesStartingFrom(model, loadedMessages);
 
   const processedMessages = processedResults.map(result => result.message);

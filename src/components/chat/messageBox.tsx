@@ -21,6 +21,7 @@ import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { MessageWithSummary, SiblingsDialog } from './messageBoxDialogs';
 import PinButton from './pinButton';
 import { possiblyEmbellishedMessageToMarkdown } from '../../chat/functionCalling';
+import { isAPIKeySet } from '../../api_key_storage';
 
 const db = new ConversationDB();
 
@@ -195,7 +196,9 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
         >
           {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
           {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
-          {isMessageDB(message) && <PinButton message={message} />}
+          {isAPIKeySet() &&
+            isMessageDB(message) && <PinButton message={message} />
+          }
           <CopyButton contentToCopy={message.content} />
           {isMessageDB(message) && <CornerButton onClick={() => setOpenDetails(true)} icon={<InfoIcon fontSize="inherit" />} />}
           {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} activeLink={!isTail} />}

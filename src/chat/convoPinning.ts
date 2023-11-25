@@ -1,3 +1,4 @@
+import { isAPIKeySet } from "../api_key_storage";
 import { FileRecord, TrainingLineItem, deleteFile, fetchFileContent, fetchFiles, uploadFile } from "../openai_api";
 import { isAtLeastOne } from "../tsUtils";
 import { Message } from "./conversation";
@@ -60,6 +61,8 @@ export async function unpinConversationByLeaf(leafMessage: MessageDB, messagesSt
 }
 
 export async function mirrorPinsToDB(db: ConversationDB): Promise<void> {
+  if (!isAPIKeySet()) return;
+
   const files = await fetchFiles();
   const hashFilePairsWithUnmatching: [string | undefined, FileRecord][] = files.map(file => [fileToHash(file), file]);
   const hashFilePairs: [string, FileRecord][] = hashFilePairsWithUnmatching.filter(([hash, _file]) => hash !== undefined) as [string, FileRecord][];

@@ -417,8 +417,8 @@ export async function uploadFile(
   return responseData;
 }
 
-export async function fetchFiles(): Promise<FileRecord[]> {
-  const OPENAI_KEY = APIKeyFetcher();
+export async function fetchFiles(key?: string): Promise<FileRecord[]> {
+  const OPENAI_KEY = key || APIKeyFetcher();
   if (!OPENAI_KEY) throw new Error("API Key not found");
 
   const response = await fetch('https://api.openai.com/v1/files', {

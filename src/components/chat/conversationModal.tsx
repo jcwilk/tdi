@@ -7,7 +7,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import { FunctionOption } from '../../openai_api';
 import BoxPopup from '../box_popup';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
-import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk';
 import { FunctionManagement } from './functionManagement';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 import MessageEntry from './messageEntry';
@@ -22,6 +21,8 @@ import { LeafDescendantsDialog } from './messageBoxDialogs';
 import { defaultIfEmpty, filter, firstValueFrom, map } from 'rxjs';
 import ShareGptButton from './shareGptButton';
 import { JsonEditorButton } from './jsonEditorButton';
+import { isAPIKeySet } from '../../api_key_storage';
+import { ApiKeyEntryButton } from './apiKeyEntryButton';
 
 type ConversationModalProps = {
   conversation: Conversation;
@@ -172,16 +173,20 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
               selectedFunctions={conversation.functions} // Replace with your current selected functions
               onUpdate={onFunctionsChange}
             />
-            <ToggleButtonGroup
-              color="primary"
-              value={conversation.model}
-              exclusive
-              onChange={handleModelChange} // Assuming you have handleModelChange method
-              aria-label="Platform"
-            >
-              <ToggleButton value="paused"><PauseIcon /></ToggleButton>
-              <ToggleButton value="gpt-4"><DirectionsRunIcon /></ToggleButton>
-            </ToggleButtonGroup>
+            { isAPIKeySet() ?
+              <ToggleButtonGroup
+                color="primary"
+                value={conversation.model}
+                exclusive
+                onChange={handleModelChange} // Assuming you have handleModelChange method
+                aria-label="Platform"
+              >
+                <ToggleButton value="paused"><PauseIcon /></ToggleButton>
+                <ToggleButton value="gpt-4"><DirectionsRunIcon /></ToggleButton>
+              </ToggleButtonGroup>
+            :
+              ApiKeyEntryButton()
+            }
           </Box>
         </Toolbar>
       </AppBar>

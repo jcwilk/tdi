@@ -8,6 +8,7 @@ import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import SendIcon from '@mui/icons-material/Send';
 import MemoryIcon from '@mui/icons-material/Memory';
 import { Checkbox } from '@mui/material';
+import { isAPIKeySet } from '../../api_key_storage';
 
 type MessageEntryProps = {
   conversation: Conversation;
@@ -106,12 +107,14 @@ const MessageEntry: React.FC<MessageEntryProps> = ({ conversation, autoScroll, o
             marginBottom: '5px'
           }}
         >
-          <IconButton
-            component={'button'}
-            onClick={toggleRecording}
-          >
-            {isTranscribing ? <MemoryIcon /> : isRecording ? <RecordVoiceOverIcon /> : <Mic />}
-          </IconButton>
+          { isAPIKeySet() &&
+            <IconButton
+              component={'button'}
+              onClick={toggleRecording}
+            >
+              {isTranscribing ? <MemoryIcon /> : isRecording ? <RecordVoiceOverIcon /> : <Mic />}
+            </IconButton>
+          }
           <Checkbox
             checked={autoScroll}
             onChange={(event) => onAutoScrollChange(event.target.checked)}
