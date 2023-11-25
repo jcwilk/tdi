@@ -62,9 +62,10 @@ export function ApiKeyEntryButton() {
             <Typography>Features enabled by this key include:</Typography>
             <ul>
               <li>AI Chat Assistant (GPT-4 Turbo)</li>
-              <li>AI Recursive Summarizer</li>
-              <li>Embedding Generator</li>
-              <li>Pinning and Unpinning Messages (syncs conversation across devices)</li>
+              <li>Voice Entry (Whisper API)</li>
+              <li>AI Recursive Summarizer (GPT-4 Turbo)</li>
+              <li>Automatic Embeddings</li>
+              <li>Pinning and Unpinning Messages (Files API)</li>
               <li>Functions related to the above features</li>
             </ul>
           </DialogContentText>
