@@ -3,7 +3,6 @@ import { APIKeyStorer } from '../../api_key_storage';
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton, Link, TextField, Typography } from '@mui/material';
 import { fetchFiles } from '../../openai_api';
 import KeyIcon from '@mui/icons-material/Key';
-import Badge from '@mui/material/Badge';
 
 async function checkApiKey(apiKey: string): Promise<boolean> {
   try {
