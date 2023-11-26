@@ -22,6 +22,7 @@ import { MessageWithSummary, SiblingsDialog } from './messageBoxDialogs';
 import PinButton from './pinButton';
 import { possiblyEmbellishedMessageToMarkdown } from '../../chat/functionCalling';
 import { isAPIKeySet } from '../../api_key_storage';
+import { Conversation } from '../../chat/conversation';
 
 const db = new ConversationDB();
 
@@ -38,6 +39,7 @@ const ContentRenderer: React.FC<{ message: MaybePersistedMessage; openOtherHash:
 
 type MessageProps = {
   message: MaybePersistedMessage;
+  conversation: Conversation;
   onPrune: (message: MessageDB) => void;
   onEdit: (message: MessageDB) => void;
   openOtherHash: (hash: string) => void;
@@ -46,7 +48,7 @@ type MessageProps = {
   switchToConversation: (runningConversation: RunningConversation) => void;
 };
 
-const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOtherHash, openMessage, isTail, switchToConversation }) => {
+const MessageBox: React.FC<MessageProps> = ({ message, conversation, onPrune, onEdit, openOtherHash, openMessage, isTail, switchToConversation }) => {
   const [openDetails, setOpenDetails] = useState(false);
 
   const siblings: MessageWithSummary[] = useLiveQuery(async () => {
@@ -207,7 +209,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, onPrune, onEdit, openOthe
       { isMessageDB(message) &&
         <>
           { incompletePersistence !== undefined && summary !== undefined &&
-            <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} openOtherHash={openOtherHash} incompletePersistence={incompletePersistence} summary={summary} />
+            <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} conversation={conversation} openOtherHash={openOtherHash} incompletePersistence={incompletePersistence} summary={summary} />
           }
           <SiblingsDialog open={openSiblings} onClose={() => setOpenSiblings(false)} onSelectMessage={openMessage} switchToConversation={switchToConversation} messagesWithSummaries={siblings} siblingsTyping={siblingsTyping} />
         </>

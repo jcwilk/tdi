@@ -25,7 +25,7 @@ export type DynamicFunctionWorkerResponse = {
   content: string;
 }
 
-type FunctionParameter = {
+export type FunctionParameter = {
   name: string;
   type: string;
   description: string;
@@ -149,6 +149,8 @@ Example:
 }
 ###
 `.trim();
+
+export const invokeDynamicFunctionName = "invoke_dynamic_function";
 
 export const functionSpecs: FunctionSpec[] = [
   sharedSearchSpecBuilder(
@@ -298,7 +300,7 @@ Content: ${reply.content}
     ]
   },
   {
-    name: "invoke_dynamic_function",
+    name: invokeDynamicFunctionName,
     description: invokeDynamicFunctionDescription,
     implementation: (utils: {db: ConversationDB, functionOptions: FunctionOption[]}, functionHash: string, input: DynamicFunctionWorkerInput) => {
       const observable = new Observable<string>(subscriber => {

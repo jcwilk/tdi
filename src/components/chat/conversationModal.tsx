@@ -169,8 +169,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             <ShareGptButton messages={messages} />
             <JsonEditorButton messages={messages} onNewLeaf={openMessage} />
             <FunctionManagement
-              availableFunctions={getAllFunctionOptions()} // Replace with your array of available functions
-              selectedFunctions={conversation.functions} // Replace with your current selected functions
+              conversation={conversation}
+              availableFunctions={getAllFunctionOptions()}
               onUpdate={onFunctionsChange}
             />
             { isAPIKeySet() ?
@@ -203,6 +203,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           <MessageBox
             key={message.hash}
             message={message}
+            conversation={conversation}
             onPrune={pruneMessage}
             onEdit={setEditingMessage}
             openOtherHash={openSha}
@@ -215,6 +216,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
           <MessageBox
             key="assistant-typing"
             message={{ role: 'assistant', content: assistantTyping }}
+            conversation={conversation}
             onPrune={noopF}
             onEdit={noopF}
             openOtherHash={openSha}
