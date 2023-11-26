@@ -33,8 +33,11 @@ const ManualFunctionCallDialog: React.FC<ManualFunctionCallDialogProps> = ({ def
 
   const functionParameters = useMemo(() => functionOptionToParameters(functionOption), [functionOption]);
 
-  const handleParameterChange = (paramName: string, value: string) => {
-    setParameters(prevParams => ({ ...prevParams, [paramName]: value }));
+  const handleParameterChange = (paramName: string, paramType: string, value: string) => {
+    let parsedValue: string | string[] = value;
+    if (paramType === 'array') parsedValue = value.split(',').map(s => s.trim());
+
+    setParameters(prevParams => ({ ...prevParams, [paramName]: parsedValue }));
   };
 
   const handleSubmit = async () => {
@@ -58,7 +61,7 @@ const ManualFunctionCallDialog: React.FC<ManualFunctionCallDialogProps> = ({ def
       helperText={param.description}
       FormHelperTextProps={{ sx: { whiteSpace: 'pre-wrap' } }}
       value={parameters[param.name] || ''}
-      onChange={(e) => handleParameterChange(param.name, e.target.value)}
+      onChange={(e) => handleParameterChange(param.name, param.type, e.target.value)}
     />
   );
 

@@ -27,11 +27,11 @@ export type DynamicFunctionWorkerResponse = {
 
 export type FunctionParameter = {
   name: string;
-  type: string;
+  type: "string" | "number" | "array" | "boolean";
   description: string;
   required: boolean;
   items?: {
-    type: string;
+    type: "string"; // could be other things hypothetically, but for now it's just this
   }
 };
 
@@ -80,7 +80,7 @@ function concatWithEllipses(str: string, maxLength: number): string {
   return str.length > maxLength ? str.substring(0, maxLength - 3) + "..." : str;
 }
 
-function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name: string, description: string) {
+function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name: string, description: string): FunctionSpec {
   return {
     name,
     description,
