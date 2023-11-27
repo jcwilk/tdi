@@ -36,15 +36,12 @@ async function buildFunction(functionHash: string, staticFunctionNames: string[]
   );
   const dynamicDependencyMapping = `{\n${dynamicDependencyMappings.join("\n")}\n}`;
 
-  // NB: allStaticDependencies gets remapped to staticDependencies for the benefit of the dependent functions because
-  // we want to resrict the static dependencies to only those that are explicitly requested by the function. However,
-  // we do not want to do that same restriction for its dependencies, so we pass allStaticDependencies to them instead.
   return `
     (utils) => (input) => {
       const { RxJS } = utils;
-      utils = { RxJS, staticDependencies: utils.allStaticDependencies, allStaticDependencies: utils.allStaticDependencies };
+      utils = { RxJS, allStaticDependencies: utils.allStaticDependencies };
 
-      const dependencies = {...utils.staticDependencies, ...${dynamicDependencyMapping}};
+      const dependencies = {...utils.allStaticDependencies, ...${dynamicDependencyMapping}};
       input = coerceInputOrReturn(input);
       {
         const utils = undefined;
@@ -63,6 +60,25 @@ const denylistedFunctionNames = [
   "invoke_dynamic_function",
 ]
 
+// TODO...
+function customJsonpRunner(_utils: any, url: any, ..._extra_params: any[]) {
+  if(typeof url !== "string") throw new Error("URL must be a string");
+
+  return new Promise<string>((resolve, reject) => {
+    const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+    // @ts-ignore
+    self[callbackName] = function(data: {data: {[key: string]: any}}) {
+      // @ts-ignore
+      delete self[callbackName];
+      const stringifiedData = JSON.stringify(data.data);
+      resolve(stringifiedData);
+    };
+
+    const script = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + callbackName;
+    importScripts(script);
+  });
+}
+
 self.addEventListener('message', async (event) => {
   if (event.data.SET_API_KEY) {
     // SUPER gross hack, I'm so sorry to anyone who is reading this.
@@ -76,7 +92,7 @@ self.addEventListener('message', async (event) => {
   }
 
   const data: DynamicFunctionWorkerPayload = event.data;
-  const { functionHash, input, functionOptions } = data;
+  const { functionHash, input } = data;
 
   const allowedFunctionSpecs = functionSpecs.filter(functionSpec => !denylistedFunctionNames.includes(functionSpec.name));
   const allStaticDependencies = allowedFunctionSpecs.reduce((acc, functionSpec) => {
@@ -103,10 +119,20 @@ self.addEventListener('message', async (event) => {
           subscriber.error(`Function ${functionSpec.name} accepts at most ${maxParams} parameters.`);
           return;
         }
-        const result = coerceInputOrReturn(functionSpec.implementation({ db }, ...inputArray));
+
+        // Unfortunate hack necessary because the JSONP works slightly differently from a worker than it does from
+        // the main thread. Maybe there's a way to unify them, but something to come back to as time permits.
+        const overriddenFunction = functionSpec.name === "jsonp_data_retrevial" ? customJsonpRunner : functionSpec.implementation;
+
+        const result = coerceInputOrReturn(overriddenFunction({ db }, ...inputArray));
+
+        console.log("result", result)
 
         const subscription = result.subscribe({
-          next: value => subscriber.next(value),
+          next: value => {
+            console.log("value", typeof value, value)
+            subscriber.next(value)
+          },
           error: err => subscriber.error(err),
           complete: () => subscriber.complete()
         });
@@ -118,17 +144,12 @@ self.addEventListener('message', async (event) => {
   }, {} as { [key: string]: (rawInput: FunctionParameters) => Observable<string> });
   const allStaticDependenciesNames = Object.keys(allStaticDependencies);
 
-  const staticDependencies = functionOptions.map(({ name }) => name).reduce((acc, name) => {
-    acc[name] = allStaticDependencies[name];
-    return acc;
-  }, {} as { [key: string]: (rawInput: FunctionParameters) => Observable<string> });
-
   const builtFunctionString = await buildFunction(functionHash, allStaticDependenciesNames);
   //console.log("builtFunctionString", builtFunctionString);
 
   const builtFunction = eval(builtFunctionString);
 
-  const results: Observable<string> = builtFunction({ RxJS, staticDependencies, allStaticDependencies })(input);
+  const results: Observable<string> = builtFunction({ RxJS, allStaticDependencies })(input);
 
   results.subscribe({
     next: (result: string) => {

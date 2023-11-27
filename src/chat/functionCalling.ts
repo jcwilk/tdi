@@ -3,7 +3,7 @@ import { Conversation, Message, observeNewMessages, sendFunctionCall, teardownCo
 import { ConversationDB, FunctionResultDB, FunctionResultSpec, MessageDB } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
-import { Observable, OperatorFunction, concatMap, filter, firstValueFrom, from, isObservable, map, tap } from "rxjs";
+import { Observable, OperatorFunction, async, concatMap, filter, firstValueFrom, from, isObservable, map, tap } from "rxjs";
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
 import { isAtLeastOne } from "../tsUtils";
 import { APIKeyFetcher } from "../api_key_storage";
@@ -15,7 +15,6 @@ export type DynamicFunctionWorkerInput = undefined | string | string[];
 export type DynamicFunctionWorkerPayload = {
   functionHash: string;
   input: DynamicFunctionWorkerInput;
-  functionOptions: FunctionOption[];
 }
 
 export type DynamicFunctionWorkerResponse = {
@@ -84,12 +83,12 @@ function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name
   return {
     name,
     description,
-    implementation: (utils: {db: ConversationDB}, query: string, limit: number, ancestor?: string): Observable<string> => {
+    implementation: (utils: {db: ConversationDB}, query: string, limit: number, descendedFromSHA?: string, maxDepth?: number): Observable<string> => {
       const { db } = utils;
 
       const processMessages = async () => {
         const embedding = await getEmbedding(query);
-        const shaResults = await db.searchEmbedding(embedding, limit, table, ancestor);
+        const shaResults = await db.searchEmbedding(embedding, limit, table, descendedFromSHA, maxDepth);
 
         if (shaResults.length === 0) {
           return ["No results found."];
@@ -120,6 +119,12 @@ function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name
         name: "descendedFromSHA",
         type: "string",
         description: "Optional - when provided, only searches messages descended from the message with the provided SHA. Do not include quotes.",
+        required: false
+      },
+      {
+        name: "maxDepth",
+        type: "number",
+        description: "Optional - when provided, only searches `maxDepth` more levels beneath the specified `descendedFromSHA`.",
         required: false
       }
     ]
@@ -165,60 +170,32 @@ export const functionSpecs: FunctionSpec[] = [
   ),
   {
     name: "append_user_reply",
-    description: "Appends the provided message content as a user reply to the message specified by the SHA.",
-    implementation: (utils: {db: ConversationDB}, content: string, rawRole?: string, sha?: string) => {
-      return new Observable<string>(observer => {
-        (async () => {
-          rawRole ||= "user";
-          if (rawRole !== "user" && rawRole !== "system" && rawRole !== "assistant") throw new Error(`Invalid role "${rawRole}". Must be either "user" or "system" or "assistant".`);
-          const role = rawRole as "user" | "system" | "assistant";
+    description: "Appends the provided message content as a user (or overridden `role`) reply to the message specified by `parentHash`.",
+    implementation: async (utils: {db: ConversationDB}, content: string, role?: string, parentHash?: string) => {
+      role ||= "user";
+      if (!["user", "system", "assistant"].includes(role)) throw new Error(`Invalid role "${role}". Must be either "user" or "system" or "assistant".`);
+      const filteredRole = role as "user" | "system" | "assistant";
 
-          let messages: MessageDB[] = [];
+      let messages: MessageDB[] = [];
 
-          if(sha) {
-            const leafMessage = await utils.db.getMessageByHash(sha);
-            if (!leafMessage) throw new Error(`Message with SHA ${sha} not found.`);
+      if(parentHash) {
+        const leafMessage = await utils.db.getMessageByHash(parentHash);
+        if (!leafMessage) throw new Error(`Message with SHA ${parentHash} not found.`);
 
-            messages = await utils.db.getConversationFromLeafMessage(leafMessage);
-          }
+        messages = await utils.db.getConversationFromLeafMessage(leafMessage);
+      }
 
-          const newMessage: Message = {
-            role,
-            content
-          };
-          const newMessages = [...messages, newMessage];
-          if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached."); // compilershutup for typing
+      const newMessage: Message = {
+        role: filteredRole,
+        content
+      };
+      const newMessages = [...messages, newMessage];
+      if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached - empty messages array in append_user_reply"); // compilershutup for typing
 
-          const processedMessages = await reprocessMessagesStartingFrom("gpt-4", newMessages);
-          const newLeafMessage = processedMessages[processedMessages.length - 1].message;
+      const processedMessages = await reprocessMessagesStartingFrom("paused", newMessages);
+      const newLeafMessage = processedMessages[processedMessages.length - 1].message;
 
-          // Emit newLeafMessage data
-          observer.next(`Appended SHA: ${newLeafMessage.hash}`);
-
-          const persistedMessages = await utils.db.getConversationFromLeafMessage(newLeafMessage);
-
-          if (role !== "assistant") {
-            const conversation = await buildParticipatedConversation(utils.db, persistedMessages, "gpt-4", []);
-            const observeReplies = observeNewMessages(conversation).pipe(
-              //tap(event => console.log("new message event", event)),
-              filter(({role}  ) => role === "assistant")
-            );
-
-            const reply = await firstValueFrom(observeReplies);
-
-            teardownConversation(conversation);
-
-            // Emit reply data
-            observer.next(`
-Reply SHA: ${reply.hash}
-
-Content: ${reply.content}
-            `.trim());
-          }
-
-          observer.complete();
-        })().catch(err => observer.error(err));
-      });
+      return newLeafMessage.hash;
     },
     parameters: [
       {
@@ -230,13 +207,49 @@ Content: ${reply.content}
       {
         name: "role",
         type: "string",
-        description: "Must be one of either 'user' or 'system'. (defaults to 'user')",
+        description: "Must be one of either 'user', 'system', or `assistant`. (defaults to 'user')",
         required: false
       },
       {
+        name: "parentHash",
+        type: "string",
+        description: "The SHA of the message to append a reply to. (defaults to starting a new conversation from the root rather than replying to an existing message)",
+        required: false
+      }
+    ]
+  },
+  {
+    name: "conversation_completion",
+    description: "Uses GPT to get the next message in a conversation at the specified leaf message.",
+    implementation: async (utils: {db: ConversationDB}, sha: string, enabledFunctions?: string): Promise<string> => {
+      const splitEnabledFunctions = (enabledFunctions || "").split(",").map((s) => s.trim());
+      const functionOptions = getAllFunctionOptions().filter((option) => splitEnabledFunctions.includes(option.name));
+
+      const leafMessage = await utils.db.getMessageByHash(sha);
+      if (!leafMessage) throw new Error(`Message with SHA ${sha} not found.`);
+
+      if (!["system", "user"].includes(leafMessage.role)) return "";
+
+      const messages = await utils.db.getConversationFromLeafMessage(leafMessage);
+      const conversation = await buildParticipatedConversation(utils.db, messages, "gpt-4", functionOptions);
+
+      const observeReplies = observeNewMessages(conversation, false)
+      return await firstValueFrom(observeReplies).then((firstValue) => {
+        teardownConversation(conversation);
+        return firstValue.hash;
+      });
+    },
+    parameters: [
+      {
         name: "sha",
         type: "string",
-        description: "The SHA of the message to append a user reply to. (defaults to starting a new conversation from the root rather than replying to an existing message)",
+        description: "The SHA address of the last message in the conversation to run a completion against. If the message is not a user or system message, the function will complete without a result.",
+        required: true
+      },
+      {
+        name: "enabledFunctions",
+        type: "string",
+        description: "A comma separated list of function names to enable for this completion. Defaults to no functions.",
         required: false
       }
     ]
@@ -302,7 +315,7 @@ Content: ${reply.content}
   {
     name: invokeDynamicFunctionName,
     description: invokeDynamicFunctionDescription,
-    implementation: (utils: {db: ConversationDB, functionOptions: FunctionOption[]}, functionHash: string, input: DynamicFunctionWorkerInput) => {
+    implementation: (_utils: {}, functionHash: string, input: DynamicFunctionWorkerInput) => {
       const observable = new Observable<string>(subscriber => {
         const worker = new Worker((window as any).workerPath);
         worker.postMessage({SET_API_KEY: APIKeyFetcher()})
@@ -316,7 +329,7 @@ Content: ${reply.content}
             worker.terminate();
             return;
           }
-          subscriber.next(String(data.content));
+          subscriber.next(typeof(data.content) === "object" ? JSON.stringify(data.content) : String(data.content));
         });
 
         worker.addEventListener('error', (event) => {
@@ -330,8 +343,7 @@ Content: ${reply.content}
         // to this observable more than once
         const message: DynamicFunctionWorkerPayload = {
           functionHash,
-          input,
-          functionOptions: utils.functionOptions
+          input
         };
         worker.postMessage(message);
       });
@@ -353,6 +365,162 @@ Content: ${reply.content}
         },
         description: "The input to provide to the function. Defaults to [].",
         required: false
+      }
+    ]
+  },
+  {
+    name: "get_message_property",
+    description: "Gets a `property` of a message at the provided `sha` address.",
+    implementation: (utils: {db: ConversationDB}, sha: string, property: string) => {
+      property ||= "content";
+
+      return new Observable<string>(subscriber => {
+        (async () => {
+          const message = await utils.db.getMessageByHash(sha);
+          if (!message) {
+            subscriber.error(`Message with SHA ${sha} not found.`);
+            return;
+          }
+
+          if (property === "role" || property === "content" || property  === "parentHash" || property === "timestamp" || property === "hash") {
+            subscriber.next(String(message[property]));
+            return;
+          }
+
+          if (property === "children") {
+            const children = await utils.db.getDirectChildren(message);
+            children.forEach((child) => subscriber.next(child.hash));
+            return;
+          }
+
+          if (property === "summary") {
+            const summary = await utils.db.getSummaryByHash(message.hash);
+            if (summary?.summary) subscriber.next(summary.summary);
+            return;
+          }
+
+          if (property === "functionResults") {
+            if(!isFunctionMessage(message)) return;
+
+            const deserializedContent = deserializeFunctionMessageContent(message.content);
+            if(!deserializedContent) return;
+
+            const functionResults = await utils.db.getFunctionResultsByUUID(deserializedContent.uuid);
+            if (functionResults.find(({completed}) => completed)) {
+              functionResults.filter(({completed}) => !completed).forEach((result) => subscriber.next(result.result));
+            }
+            return;
+          }
+
+          if (property === "functionDependencies") {
+            const dependencies = await utils.db.getFunctionDependenciesByHash(message.hash);
+            dependencies.forEach((dep) => subscriber.next(dep.dependencyName));
+            return;
+          }
+
+          if (property === "embedding") {
+            const embedding = await utils.db.getEmbeddingByHash(message.hash);
+            if (embedding) embedding.embedding.forEach(val => subscriber.next(String(val)));
+            return;
+          }
+
+          if (property === "summaryEmbedding") {
+            const embedding = await utils.db.getSummaryEmbeddingByHash(message.hash);
+            if (embedding) embedding.embedding.forEach(val => subscriber.next(String(val)));
+            return;
+          }
+
+          throw new Error(`Invalid property "${property}". Must be either 'role', 'content', 'parentHash', 'timestamp', 'hash', 'children', 'summary', 'functionResults', 'functionDependencies', 'embedding', or 'summaryEmbedding'.`);
+        })().then(() => subscriber.complete());
+      });
+    },
+    parameters: [
+      {
+        name: "sha",
+        type: "string",
+        description: "SHA address which specifies the target message for property retrieval.",
+        required: true
+      },
+      {
+        name: "property",
+        type: "string",
+        description: `The property to retrieve, defaults to 'content'. Must be one of either:
+'role'
+'content'
+'parentHash'
+'timestamp' (stringified integer representation)
+'hash'
+'children' (their SHAs)
+'summary' (recursive summary representing the conversation path from root to the specified message)
+'functionResults' (EMPTY if not a completed function message)
+'functionDependencies'
+'embedding' (EMPTY if no embedding, series of stringified floats if present)
+'summaryEmbedding' (same behavior as 'embedding' but for the recursive summary)
+        `.trim(),
+        required: false
+      }
+    ]
+  },
+  {
+    name: "recursively_summarize_path",
+    description: "For any messages which are missing it, recursively summarizes and generates an embedding for both the message content and the summary for every message in the conversation path from the root to the message specified by `sha`. Useful for ensuring that all messages in a conversation path have summaries and embeddings before performing an action which depends on them.",
+    implementation: async (utils: {db: ConversationDB}, sha: string): Promise<string> => {
+      const message = await utils.db.getMessageByHash(sha);
+      if (!message) throw new Error(`Message with SHA ${sha} not found.`);
+
+      const messages = await utils.db.getConversationFromLeafMessage(message);
+      const processedMessageResults = await reprocessMessagesStartingFrom("gpt-4", messages);
+      await Promise.all(processedMessageResults.map(({metadataRecordsPromise}) => metadataRecordsPromise));
+
+      return "";
+    },
+    parameters: [
+      {
+        name: "sha",
+        type: "string",
+        description: "SHA address which specifies the last message in a conversation path starting at the root of the tree.",
+        required: true
+      }
+    ]
+  },
+  {
+    name: "jsonp_data_retrevial",
+    description: "Retrieves data from a JSONP endpoint and returns it as a string via JSON.stringify.",
+    implementation: (_utils: {db: ConversationDB}, url: string): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        var callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+        (window as any)[callbackName] = function(data: {data: {[key: string]: any}}) {
+            delete (window as any)[callbackName];
+            document.body.removeChild(script);
+            resolve(JSON.stringify(data.data));
+        };
+
+        var script = document.createElement('script');
+        script.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + callbackName;
+        document.body.appendChild(script);
+      });
+    },
+    parameters: [
+      {
+        name: "url",
+        type: "string",
+        description: "The URL of the JSONP-compatible endpoint to retrieve data from. The JSONP callback parameter will be automatically appended to the URL.",
+        required: true
+      }
+    ]
+  },
+  {
+    name: "cors_data_retrevial",
+    description: "Retrieves data from a CORS-compatible endpoint and returns it as a string via JSON.stringify.",
+    implementation: (_utils: {db: ConversationDB}, url: string): Promise<string> => {
+      return fetch(url).then((response) => response.text());
+    },
+    parameters: [
+      {
+        name: "url",
+        type: "string",
+        description: "The URL of the CORS-compatible endpoint to retrieve data from.",
+        required: true
       }
     ]
   },
@@ -458,6 +626,8 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
 
     const functionMessagePromise = getFunctionMessageDBPromise(conversation, functionMessageContent);
 
+    // functionMessagePromise - only used by generate_dynamic_function
+    // functionOptions - not used, but leaving it for now in case we want to use it in the future
     const result = code({db, functionMessagePromise, functionOptions: conversation.functions});
 
     const saveFunctionResult = async (resultString: string, completed: boolean) => {
@@ -468,6 +638,8 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
           completed: true
         })
       }
+
+      if (resultString === "") return;
 
       return db.saveFunctionResult({
         uuid,

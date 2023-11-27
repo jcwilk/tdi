@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import { Message } from './conversation';
-import { Observable, defer, filter, merge, mergeMap, of } from 'rxjs';
+import { EMPTY, Observable, defer, filter, merge, mergeMap, of } from 'rxjs';
 import { FunctionOption } from '../openai_api';
 import { FunctionMessageContent, getFunctionResultsFromMessage } from './functionCalling';
 import { defineConversationDBSchema } from './conversationDbMigrations';
@@ -340,7 +340,9 @@ export class ConversationDB extends Dexie {
   // queries to the database. However, this would mean that the database queries would be performed sequentially rather than in parallel.
   // Instead, we're using merge/mergeMap which means that the database queries will be performed in parallel and if we don't consume all
   // the events, we'll have wasted some queries. Because it's indexeddb, this doesn't matter, so we're going with the more aggressive option.
-  getMessagesFrom(message: MessageDB | null, pathLength: number = 0, callback: (message: MessageDB, children: MessageDB[]) => boolean = () => true): Observable<LeafPath> {
+  getMessagesFrom(message: MessageDB | null, pathLength: number = 0, callback: (message: MessageDB, children: MessageDB[]) => boolean = () => true, maxDepth?: number): Observable<LeafPath> {
+    if (maxDepth !== undefined && pathLength > maxDepth) return EMPTY;
+
     return defer(() => this.getDirectChildren(message)).pipe(
       mergeMap(children => {
         const childObservables = children.map(child => this.getMessagesFrom(child, pathLength + 1, callback));
@@ -356,26 +358,21 @@ export class ConversationDB extends Dexie {
     return this.getMessagesFrom(message, pathLength, (_message, children) => children.length === 0);
   }
 
-  private getDirectChildren(message: MessageDB | null) {
+  getDirectChildren(message: MessageDB | null) {
     return this.messages.where('parentHash').equals(message ? message.hash : rootMessageHash).reverse().sortBy('timestamp');
   }
 
-  async searchEmbedding(embedding: number[], limit: number, table: 'embeddings' | 'summaryEmbeddings', rootMessageHash?: string): Promise<string[]> {
+  async searchEmbedding(embedding: number[], limit: number, table: 'embeddings' | 'summaryEmbeddings', rootMessageHash?: string, maxDepth?: number): Promise<string[]> {
     let rootMessage: null | MessageDB = null;
 
     if (rootMessageHash) {
       rootMessage = await this.getMessageByHash(rootMessageHash) ?? null;
       if (!rootMessage) {
-        // TODO: somehow this isn't finding messages by hash at all..?
-        const messages = await this.messages.toArray();
-        const manualFind = messages.find(message => message.hash === rootMessageHash);
-
-        console.error("searchembedding message not found!", JSON.stringify(rootMessageHash), rootMessage, manualFind, messages);
-        return [];
+        throw new Error(`searchembedding message not found! ${rootMessageHash}`);
       }
     }
 
-    const embeddingsObservable = this.getMessagesFrom(rootMessage).pipe(
+    const embeddingsObservable = this.getMessagesFrom(rootMessage, 0, () => true, maxDepth).pipe(
       mergeMap(leafPath => {
         const getEmbeddingPromise = table === 'embeddings' ? this.getEmbeddingByHash(leafPath.message.hash) : this.getSummaryEmbeddingByHash(leafPath.message.hash);
         return getEmbeddingPromise.then(embedding => embedding ? {embedding, leafPath} : null);
