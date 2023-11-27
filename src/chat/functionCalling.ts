@@ -609,8 +609,6 @@ async function getFunctionMessageDBPromise(conversation: Conversation, functionM
 }
 
 export async function callFunction(conversation: Conversation, functionCall: FunctionCall, db: ConversationDB): Promise<void> {
-  if (!isActiveFunction(conversation, functionCall)) return;
-
   try {
     const code = generateCodeForFunctionCall(functionCall);
     //console.log("eval!", code);

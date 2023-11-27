@@ -1,28 +1,27 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, Button, DialogActions, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Checkbox, IconButton, Switch } from '@mui/material';
 import FunctionsIcon from '@mui/icons-material/Functions';
 import { ManualFunctionCallButton } from './manualFunctionCall';
 import { FunctionOption } from '../../openai_api';
 import { Conversation } from '../../chat/conversation';
-import PlayDisabledIcon from '@mui/icons-material/PlayDisabled';
+import { getAllFunctionOptions } from '../../chat/functionCalling';
 
 interface FunctionManagementProps {
   conversation: Conversation;
-  availableFunctions: FunctionOption[];
   onUpdate: (updatedFunctions: FunctionOption[]) => void;
 }
 
 interface FunctionManagementDialogProps {
   conversation: Conversation;
-  availableFunctions: FunctionOption[];
   onUpdate: (updatedFunctions: FunctionOption[]) => void;
   onRun: () => void;
   onClose: () => void;
 }
 
-const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ conversation, availableFunctions, onUpdate, onRun, onClose }) => {
-  const [enabledFunctions, setEnabledFunctions] = useState<FunctionOption[]>(conversation.functions);
+const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ conversation, onUpdate, onRun, onClose }) => {
   const [selectedFunctions, setSelectedFunctions] = useState<FunctionOption[]>(conversation.functions);
+
+  const availableFunctions = useMemo(() => getAllFunctionOptions(), []);
 
   const handleToggle = (functionName: string) => {
     setSelectedFunctions(prevSelected => {
@@ -44,7 +43,6 @@ const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ con
   };
 
   const handleSave = () => {
-    setEnabledFunctions(selectedFunctions);
     onUpdate(selectedFunctions);
     onClose();
   };
@@ -56,21 +54,12 @@ const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ con
         <List sx={{ width: '100%' }}>
           {availableFunctions.map(func => {
             const labelId = `checkbox-list-label-${func.name}`;
-            const isFunctionEnabled = !!enabledFunctions.find(enabledFunc => enabledFunc.name === func.name);
 
             return (
               <ListItem key={func.name}
               disablePadding>
                 <ListItemIcon>
-                  {
-                    isFunctionEnabled ?
-                    <ManualFunctionCallButton functionOption={func} conversation={conversation} onRun={onRun} />
-                    :
-                    <IconButton disabled>
-                      <PlayDisabledIcon />
-                    </IconButton>
-                  }
-
+                  <ManualFunctionCallButton functionOption={func} conversation={conversation} onRun={onRun} />
                 </ListItemIcon>
                 <ListItemText id={labelId} primary={func.name} />
                 <Switch
@@ -94,7 +83,7 @@ const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ con
   );
 };
 
-export const FunctionManagement: React.FC<FunctionManagementProps> = ({ conversation, availableFunctions, onUpdate }) => {
+export const FunctionManagement: React.FC<FunctionManagementProps> = ({ conversation, onUpdate }) => {
   const [open, setOpen] = useState(false);
 
   const handleOpen = () => setOpen(true);
@@ -116,7 +105,6 @@ export const FunctionManagement: React.FC<FunctionManagementProps> = ({ conversa
       >
         <FunctionManagementDialog
           conversation={conversation}
-          availableFunctions={availableFunctions}
           onUpdate={onUpdate}
           onRun={handleClose}
           onClose={handleClose}

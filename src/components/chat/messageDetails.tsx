@@ -1,8 +1,8 @@
-import React, { FC } from 'react';
+import React, { FC, useMemo } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, IconButton, List, ListItem, ListItemText } from "@mui/material"
 import { MessageDB } from '../../chat/conversationDb';
 import EmojiShaButton from './emojiShaButton';
-import { deserializeFunctionMessageContent, invokeDynamicFunctionName, isDynamicFunctionMessageContent, isFunctionMessage } from '../../chat/functionCalling';
+import { deserializeFunctionMessageContent, getAllFunctionOptions, invokeDynamicFunctionName, isDynamicFunctionMessageContent, isFunctionMessage } from '../../chat/functionCalling';
 import { Conversation } from '../../chat/conversation';
 import { ManualFunctionCallButton } from './manualFunctionCall';
 import PlayDisabledIcon from '@mui/icons-material/PlayDisabled';
@@ -18,11 +18,11 @@ interface MessageDialogProps {
 }
 
 const MessageDetails: FC<MessageDialogProps> = ({ open, onClose, message, openOtherHash, conversation, incompletePersistence = false, summary = '' }) => {
+  const invokeDynamicFunctionOption = useMemo(() => getAllFunctionOptions().find(func => func.name === invokeDynamicFunctionName), []);
+
   const date = new Date(message.timestamp);
   const dateString = date.toLocaleDateString();
   const timeString = date.toLocaleTimeString();
-
-  const invokeDynamicFunctionOption = conversation.functions.find(enabledFunc => enabledFunc.name === invokeDynamicFunctionName);
 
   const functionMessageContent = isFunctionMessage(message) && deserializeFunctionMessageContent(message.content)
   const isDynamicFunction = functionMessageContent && isDynamicFunctionMessageContent(functionMessageContent);

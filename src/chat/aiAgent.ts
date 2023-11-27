@@ -3,7 +3,7 @@ import { Conversation, Message, TypingUpdate, sendError } from "./conversation";
 import { sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, isGPTTextUpdate, isGPTSentMessage, SupportedModels } from "./chatStreams";
 import { ChatMessage, FunctionOption } from "../openai_api";
-import { callFunction, possiblyEmbellishedMessageToMarkdown } from "./functionCalling";
+import { callFunction, isActiveFunction, possiblyEmbellishedMessageToMarkdown } from "./functionCalling";
 import { ConversationDB, isMessageDB } from "./conversationDb";
 
 // This is an odd solution to a very tricky problem with vanilla cold observables.
@@ -155,6 +155,8 @@ function handleGptMessages(conversation: Conversation, typingAndSending: Observa
         }
 
         if (isGPTFunctionCall(message)) {
+          if (!isActiveFunction(conversation, message.functionCall)) return EMPTY;
+
           return from(callFunction(conversation, message.functionCall, db));
         }
 
