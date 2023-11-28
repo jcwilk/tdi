@@ -166,14 +166,14 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
             </IconButton>
           </Box>
           <Box sx={{ display: 'flex', overflow: 'auto' }}>
+            <ApiKeyEntryButton />
             <ShareGptButton messages={messages} />
             <JsonEditorButton messages={messages} onNewLeaf={openMessage} />
             <FunctionManagement
               conversation={conversation}
-              availableFunctions={getAllFunctionOptions()}
               onUpdate={onFunctionsChange}
             />
-            { isAPIKeySet() ?
+            { isAPIKeySet() ??
               <ToggleButtonGroup
                 color="primary"
                 value={conversation.model}
@@ -184,8 +184,6 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
                 <ToggleButton value="paused"><PauseIcon /></ToggleButton>
                 <ToggleButton value="gpt-4"><DirectionsRunIcon /></ToggleButton>
               </ToggleButtonGroup>
-            :
-              ApiKeyEntryButton()
             }
           </Box>
         </Toolbar>
