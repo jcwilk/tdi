@@ -16,7 +16,7 @@ const Client: React.FC = () => {
 
   const {
     runningConversation,
-    goBack,
+    closeConvo,
     minimize,
     editMessage,
     pruneMessage,
@@ -24,17 +24,21 @@ const Client: React.FC = () => {
     openSha,
     switchToConversation,
     changeModel,
-    changeFunctions
+    changeFunctions,
+    isIndexTrue
   } = useConversationsManager(db);
 
   return (
     <ThemeProvider theme={darkTheme}>
       {
-        runningConversation ?
+        isIndexTrue ?
+          <LeafMessages openMessage={openMessage} switchToConversation={switchToConversation} db={db} />
+          :
+          runningConversation &&
           <ConversationModal
             key={runningConversation.id}
             conversation={runningConversation.conversation}
-            onClose={goBack}
+            onClose={closeConvo}
             minimize={minimize}
             editMessage={editMessage}
             pruneMessage={pruneMessage}
@@ -44,8 +48,6 @@ const Client: React.FC = () => {
             onFunctionsChange={changeFunctions}
             switchToConversation={switchToConversation}
           />
-          :
-          <LeafMessages openMessage={openMessage} switchToConversation={switchToConversation} db={db} />
       }
     </ThemeProvider>
   );

@@ -2,7 +2,7 @@ import { useEffect, useCallback, useMemo, useState } from 'react';
 import { BehaviorSubject, concatMap, debounceTime, filter, from, tap } from 'rxjs';
 import { ConversationDB, MessageDB } from '../../chat/conversationDb';
 import { Conversation, ConversationMode, Message, getLastMessage, isConversationMode, observeNewMessages } from '../../chat/conversation';
-import { useNavigate, NavigateFunction } from 'react-router-dom';
+import { useNavigate, NavigateFunction, useLocation } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
 import { RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
@@ -28,8 +28,8 @@ const defaultGreetingMessages: [Message, ...Message[]] = [
   }
 ]
 
-function navRoot(navigate: NavigateFunction, replace: boolean = false) {
-  navigate('?', { replace: replace });
+function navIndex(navigate: NavigateFunction) {
+  navigate('?index=true');
 }
 
 const rootSearchParams = new URLSearchParams();
@@ -97,6 +97,11 @@ const defaultSpecSettings = {
 
 export function useConversationsManager(db: ConversationDB) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const index = queryParams.get('index');
+
+  const isIndexTrue = index === 'true';
 
   // Hack for getting access to the stream of nav events. Might be more appropriate to use a context for this.
   // However, I've already spent too much time on the navigation system so I'm exercising some restraint.
@@ -180,18 +185,15 @@ export function useConversationsManager(db: ConversationDB) {
     };
   }, [runningConversation, navConversation, navigate]);
 
-  const goBack = useCallback(() => {
-    if (!runningConversation) return;
+  const closeConvo = useCallback(() => {
+    if (runningConversation) closeConversation();
 
-    closeConversation();
-    navRoot(navigate);
+    navIndex(navigate);
   }, [navigate, closeConversation, runningConversation]);
 
   const minimize = useCallback(() => {
-    if (!runningConversation) return;
-
-    navRoot(navigate);
-  }, [navigate, runningConversation]);
+    navIndex(navigate);
+  }, [navigate]);
 
   const remix = useCallback(async (changedParams: {model?: ConversationMode, functions?: FunctionOption[], tail?: MessageDB}) => {
     if (!currentConversationSpec) return;
@@ -262,7 +264,7 @@ export function useConversationsManager(db: ConversationDB) {
 
   return {
     runningConversation,
-    goBack,
+    closeConvo,
     minimize,
     editMessage,
     pruneMessage,
@@ -271,5 +273,6 @@ export function useConversationsManager(db: ConversationDB) {
     switchToConversation,
     changeModel,
     changeFunctions,
+    isIndexTrue
   };
 }
