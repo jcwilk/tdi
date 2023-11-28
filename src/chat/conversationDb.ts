@@ -362,6 +362,10 @@ export class ConversationDB extends Dexie {
     return this.messages.where('parentHash').equals(message ? message.hash : rootMessageHash).reverse().sortBy('timestamp');
   }
 
+  getDirectSiblings(message: MessageDB) {
+    return this.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
+  }
+
   async searchEmbedding(embedding: number[], limit: number, table: 'embeddings' | 'summaryEmbeddings', rootMessageHash?: string, maxDepth?: number): Promise<string[]> {
     let rootMessage: null | MessageDB = null;
 

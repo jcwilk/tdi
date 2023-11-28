@@ -1,7 +1,7 @@
 import { EMPTY, Observable, from, isObservable, of } from "rxjs";
 import * as RxJS from "rxjs";
 import { ConversationDB, FunctionDependencyDB } from "../chat/conversationDb";
-import { DynamicFunctionWorkerPayload, DynamicFunctionWorkerResponse, FunctionReturn, coerceAndOrderFunctionParameters, deserializeFunctionMessageContent, functionSpecs, isDynamicFunctionMessageContent, isFunctionMessage } from "../chat/functionCalling";
+import { DynamicFunctionWorkerPayload, DynamicFunctionWorkerResponse, FunctionReturn, coerceAndOrderFunctionParameters, denylistedInvocableFunctionNames, deserializeFunctionMessageContent, functionSpecs, generateNestedFunctions, isDynamicFunctionMessageContent, isFunctionMessage } from "../chat/functionCalling";
 import { FunctionParameters } from "../openai_api";
 
 const db = new ConversationDB();
@@ -23,7 +23,7 @@ async function buildFunction(functionHash: string, staticFunctionNames: string[]
 
   const functionMessageContent = deserializeFunctionMessageContent(functionMessage.content);
   if (!functionMessageContent) throw new Error("Invalid function message content");
-  if (!isDynamicFunctionMessageContent(functionMessageContent)) throw new Error("Function message is not an invocation of generate_dynamic_function.");
+  if (!isDynamicFunctionMessageContent(functionMessageContent)) throw new Error("Function message must be an invocation of generate_dynamic_function or compose_dynamic_functions.");
 
   const functionDependencies = await db.getFunctionDependenciesByHash(functionMessage.hash);
   const dynamicFunctionDependencies = functionDependencies.filter(functionDependency => !staticFunctionNames.includes(functionDependency.dependencyName));
@@ -36,6 +36,11 @@ async function buildFunction(functionHash: string, staticFunctionNames: string[]
   );
   const dynamicDependencyMapping = `{\n${dynamicDependencyMappings.join("\n")}\n}`;
 
+  // TODO: This is a pretty messy hack, but unlike generate_dynamic_function, compose_dynamic_functions doesn't actually persist the function body to the message,
+  // so we're kind of stuck building it dynamically here. I'd like to refactor this to be more consistent and simpler, and really a lot of this file deserves rethinking,
+  // but this should work fine for now and after the initial launch I can reassess depending on what direction this project goes.
+  const functionBody = functionMessageContent.name === "generate_dynamic_function" ? functionMessageContent.parameters.functionBody : generateNestedFunctions(functionMessageContent.parameters.functionHashes);
+
   return `
     (utils) => (input) => {
       const { RxJS } = utils;
@@ -46,7 +51,7 @@ async function buildFunction(functionHash: string, staticFunctionNames: string[]
       {
         const utils = undefined;
         const returnVal = (() => {
-          ${functionMessageContent.parameters.functionBody}
+          ${functionBody}
         })();
         const coercedReturn = coerceInputOrReturn(returnVal);
         return coercedReturn;
@@ -55,12 +60,6 @@ async function buildFunction(functionHash: string, staticFunctionNames: string[]
   `
 }
 
-const denylistedFunctionNames = [
-  "generate_dynamic_function",
-  "invoke_dynamic_function",
-]
-
-// TODO...
 function customJsonpRunner(_utils: any, url: any, ..._extra_params: any[]) {
   if(typeof url !== "string") throw new Error("URL must be a string");
 
@@ -94,7 +93,7 @@ self.addEventListener('message', async (event) => {
   const data: DynamicFunctionWorkerPayload = event.data;
   const { functionHash, input } = data;
 
-  const allowedFunctionSpecs = functionSpecs.filter(functionSpec => !denylistedFunctionNames.includes(functionSpec.name));
+  const allowedFunctionSpecs = functionSpecs.filter(functionSpec => !denylistedInvocableFunctionNames.includes(functionSpec.name));
   const allStaticDependencies = allowedFunctionSpecs.reduce((acc, functionSpec) => {
     const minParams = functionSpec.parameters.filter(param => param.required).length;
     const maxParams = functionSpec.parameters.length;
@@ -126,11 +125,11 @@ self.addEventListener('message', async (event) => {
 
         const result = coerceInputOrReturn(overriddenFunction({ db }, ...inputArray));
 
-        console.log("result", result)
+        //console.log("result", result)
 
         const subscription = result.subscribe({
           next: value => {
-            console.log("value", typeof value, value)
+            //console.log("value", typeof value, value)
             subscriber.next(value)
           },
           error: err => subscriber.error(err),
@@ -144,28 +143,37 @@ self.addEventListener('message', async (event) => {
   }, {} as { [key: string]: (rawInput: FunctionParameters) => Observable<string> });
   const allStaticDependenciesNames = Object.keys(allStaticDependencies);
 
-  const builtFunctionString = await buildFunction(functionHash, allStaticDependenciesNames);
-  //console.log("builtFunctionString", builtFunctionString);
+  try {
+    const builtFunctionString = await buildFunction(functionHash, allStaticDependenciesNames);
+    //console.log("builtFunctionString", builtFunctionString);
 
-  const builtFunction = eval(builtFunctionString);
+    const builtFunction = eval(builtFunctionString);
 
-  const results: Observable<string> = builtFunction({ RxJS, allStaticDependencies })(input);
+    const results: Observable<string> = builtFunction({ RxJS, allStaticDependencies })(input);
 
-  results.subscribe({
-    next: (result: string) => {
-      const progress: DynamicFunctionWorkerResponse = {
-        status: "incomplete",
-        content: result
+    results.subscribe({
+      next: (result: string) => {
+        const progress: DynamicFunctionWorkerResponse = {
+          status: "incomplete",
+          content: result
+        }
+        self.postMessage(progress);
+      },
+      complete: () => {
+        const completion: DynamicFunctionWorkerResponse = {
+          status: "complete"
+        }
+        self.postMessage(completion);
       }
-      self.postMessage(progress);
-    },
-    complete: () => {
-      const completion: DynamicFunctionWorkerResponse = {
-        status: "complete"
-      }
-      self.postMessage(completion);
+    });
+  } catch(err) {
+    if (err instanceof Error) {
+      console.error("Error caught in dynamicFunctions.worker!", err);
+      self.postMessage({ status: "error", error: "An error occurred while invoking the function. The function likely has a coding error and needs to be regenerated: " + err.message });
+    } else {
+      self.postMessage({ status: "error", error: "An unknown error occurred: " + JSON.stringify(err) });
     }
-  });
+  }
 
   return [];
 });

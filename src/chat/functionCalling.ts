@@ -1,5 +1,5 @@
 import { FunctionCall, FunctionOption, FunctionParameters, getEmbedding } from "../openai_api";
-import { Conversation, Message, observeNewMessages, sendFunctionCall, teardownConversation } from "./conversation";
+import { Conversation, Message, observeNewMessages, sendError, sendFunctionCall, teardownConversation } from "./conversation";
 import { ConversationDB, FunctionResultDB, FunctionResultSpec, MessageDB } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
@@ -7,6 +7,17 @@ import { Observable, OperatorFunction, async, concatMap, filter, firstValueFrom,
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
 import { isAtLeastOne } from "../tsUtils";
 import { APIKeyFetcher } from "../api_key_storage";
+
+export const denylistedInvocableFunctionNames = [
+  "generate_dynamic_function",
+  "invoke_dynamic_function",
+  "compose_dynamic_functions",
+]
+
+export const invocableFunctionMessageNames = [
+  "generate_dynamic_function",
+  "compose_dynamic_functions",
+]
 
 // NB: Conceptually this could also be an Observable<string> or Promise<string>, however because we're
 // sending it to the worker, it needs to be serializable, and Observables and Promises are not.
@@ -22,6 +33,9 @@ export type DynamicFunctionWorkerResponse = {
  } | {
   status: "incomplete";
   content: string;
+} | {
+  status: "error";
+  error: string;
 }
 
 export type FunctionParameter = {
@@ -74,6 +88,21 @@ export type CompleteFunctionMessage = EmbellishedFunctionMessage & {
 export type IncompleteFunctionMessage = EmbellishedFunctionMessage & {
   isComplete: false;
 };
+
+export function generateNestedFunctions(functionHashes: string[], currentDepth = 0): string {
+  if (functionHashes.length < 2) {
+    throw new Error('At least two function names are required to generate invocation code.');
+  }
+
+  // Base case: when the currentDepth reaches the last function, start the invocation chain
+  if (currentDepth === functionHashes.length - 1) {
+    return `dependencies["${functionHashes[currentDepth]}"](input)`;
+  }
+
+  // Recursive case: wrap the current function around the invocation of the next function in the array
+  const nextInvocation = generateNestedFunctions(functionHashes, currentDepth + 1);
+  return (currentDepth === 0 ? "return " : "") + `dependencies["${functionHashes[currentDepth]}"](${nextInvocation})`;
+}
 
 function concatWithEllipses(str: string, maxLength: number): string {
   return str.length > maxLength ? str.substring(0, maxLength - 3) + "..." : str;
@@ -132,7 +161,7 @@ function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name
 }
 
 const generateDynamicFunctionDescription = `
-Create a JavaScript function by specifying the body of the function, including the return statement but excluding the outer function definition or curly braces. \`functionBody\` is a string of code, and \`dependencies\` is an array of callable function SHAs or function names provided in the API call payload. \`input\` is an RxJS Observable<string>, possibly EMPTY. Return values are coerced into Observable<string> and can be RxJS.EMPTY, string, string[], undefined, or Observable<string>. Use \`RxJS\` for RxJS functions and \`dependencies\` with SHAs or function names to call other functions. Functions are sandboxed, identified by SHA, and invoked with \`invoke_dynamic_function\`.
+Create a JavaScript function dynamically and save it to a new message. \`functionBody\` is a string of code, and \`dependencies\` is an array of callable function SHAs or function names provided in the API call payload. Return values from other functions are coerced into Observable<string>. Use \`RxJS\` for RxJS functions and \`dependencies\` with SHAs or function names to call other functions.
 
 Example:
 ###JSON
@@ -141,6 +170,8 @@ Example:
   "dependencies": ['c2931bf195', 'some_function']
 }
 ###
+
+In the above example the \`c2931bf195\` SHA and the contrived \`some_function\` function calling mechanism function were specified as dependencies and became available via \`dependencies[]()\`.
 `.trim()
 
 const invokeDynamicFunctionDescription = `
@@ -256,7 +287,7 @@ export const functionSpecs: FunctionSpec[] = [
   },
   {
     name: "generate_dynamic_function",
-    description: generateDynamicFunctionDescription,
+    description: "Create a JavaScript function dynamically and save it to a new message. `functionBody` is a string of code, and `dependencies` is an array of callable function SHAs or function names provided in the API call payload. Return values from other functions are coerced into Observable<string>. Use `RxJS` for RxJS functions and `dependencies` with SHAs or function names to call other functions. The function must handle errors and return each element as a separate event in an Observable<string> when multiple values are involved.",
     implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<FunctionMessage>, functionOptions: FunctionOption[]}, functionBody: string, dependencies?: string[]) => {
       dependencies ||= [];
       const functionMessage = await utils.functionMessagePromise;
@@ -266,6 +297,10 @@ export const functionSpecs: FunctionSpec[] = [
       // iterate through the dependencies and assert that they all correspond to entries in functionOptions
       const functionOptions = utils.functionOptions;
       const functionOptionNames = functionOptions.map((option) => option.name);
+
+      const denylistedDependencies = dependencies.filter((dep) => denylistedInvocableFunctionNames.includes(dep));
+      if (denylistedDependencies.length > 0) throw new Error(`Forbidden dependencies: ${denylistedDependencies.join(", ")}`);
+
       const missingDependencies = dependencies.filter((dep) => !functionOptionNames.includes(dep));
 
       // filter the missing dependencies down to those which don't exist as hashes in the database
@@ -298,7 +333,7 @@ export const functionSpecs: FunctionSpec[] = [
       {
         name: "functionBody",
         type: "string",
-        description: "The body of the function to generate without the enclosing function definition or surrounding curly braces.",
+        description: "The body of the function to generate without the enclosing function definition or surrounding curly braces. `input` is an RxJS Observable<string>, and must be accessed as such (e.g., `input.pipe(RxJS.first(), ...`). `dependencies` is an object mapping function names to functions, and must be accessed as an object. When invoking a dependency function, pass the argument directly without wrapping it in an object unless the function explicitly requires an object. The function must either not return, or return a string, Observable<string>, or Promise<string>. An empty string return will be interpreted the same as no return. Avoid returning Observable<string[]> or Promise<string[]> as they will be flattened into a single string; instead, emit each element as a separate event in an Observable<string> whenever possible. It is important to ensure that the function body correctly handles the invocation of dependencies, especially when dealing with dynamic function SHAs. Incorrect invocation can lead to errors such as invalid object where a stream was expected.",
         required: true
       },
       {
@@ -307,8 +342,54 @@ export const functionSpecs: FunctionSpec[] = [
         items: {
           type: "string"
         },
-        description: "A list of the names of the functions to which the generated function should have access. Defaults to [].",
+        description: "Defaults to []. A list of the names of the functions to which the generated function should have access. Access will be provided to the `functionBody` via a `dependencies` variable. Any functions or SHAs not specified in this list will not be accessible to the generated function. Specify the SHA of a function to include it as a callable dependency within the generated function. When specifying a function by SHA, use the SHA as the key in the `dependencies` object. Example: `['get_message_property', 'c2931bf195957b133ebb5e8820df94a20c96887e234d2869ecafad53846501e7']`. The following functions are forbidden as dependencies: " + denylistedInvocableFunctionNames.join(", ") + ".",
         required: false
+      }
+    ]
+  },
+  {
+    name: "compose_dynamic_functions",
+    description: "Compose multiple dynamic functions into a single function by chaining them such that the output of one function is the input to the next. The order of execution is determined by the reverse of the array order; for example, an array `['f', 'g']` will result in a composition equivalent to `return f(g(input))`. Only dynamic functions specified by their SHAs are supported, and each must accept and return an RxJS Observable<string>.",
+    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<FunctionMessage>}, functionHashes: string[]) => {
+      const functionMessage = await utils.functionMessagePromise;
+      const functionMessageContent = deserializeFunctionMessageContent(functionMessage.content);
+      if (!functionMessageContent) throw new Error("Invalid function message content");
+
+      // filter the missing dependencies down to those which don't exist as hashes in the database
+      const missingFunctionHashes = (await Promise.all(
+        functionHashes.map(async (dep) => {
+          const message = await utils.db.getMessageByHash(dep);
+          return message ? null : dep;
+        })
+      )).filter(Boolean) as string[];
+
+      if (missingFunctionHashes.length > 0) throw new Error(`Missing functionHashes: ${missingFunctionHashes.join(", ")}`);
+
+      // save each dependency to the database
+      await Promise.all(
+        functionHashes.map(async (dep) => {
+          return await utils.db.saveFunctionDependency(
+            functionMessage,
+            dep
+          );
+        })
+      );
+
+      return "Dynamic function persisted:\n\n" + JSON.stringify({
+        hash: functionMessage.hash,
+        functionBody: generateNestedFunctions(functionHashes),
+        functionHashes
+      });
+    },
+    parameters: [
+      {
+        name: "functionHashes",
+        type: "array",
+        items: {
+          type: "string"
+        },
+        description: "An array of SHAs, each representing a dynamic function to be composed. The functions are composed in reverse order, with the last SHA in the array being the first to process the input and the first SHA being the last, forming a pipeline. All functions must accept and return an RxJS Observable<string>. The array must contain at least two SHAs.",
+        required: true
       }
     ]
   },
@@ -323,6 +404,14 @@ export const functionSpecs: FunctionSpec[] = [
         worker.addEventListener('message', (event) => {
           const data = event.data as DynamicFunctionWorkerResponse;
           //console.log("received message", data)
+
+          if (data.status === "error") {
+            subscriber.error(data.error);
+            subscriber.complete();
+            worker.terminate();
+            console.log("received error", data);
+            return;
+          }
 
           if (data.status === "complete") {
             subscriber.complete();
@@ -393,6 +482,12 @@ export const functionSpecs: FunctionSpec[] = [
             return;
           }
 
+          if (property === "siblings") {
+            const siblings = await utils.db.getDirectSiblings(message);
+            siblings.forEach((sibling) => subscriber.next(sibling.hash));
+            return;
+          }
+
           if (property === "summary") {
             const summary = await utils.db.getSummaryByHash(message.hash);
             if (summary?.summary) subscriber.next(summary.summary);
@@ -430,7 +525,7 @@ export const functionSpecs: FunctionSpec[] = [
             return;
           }
 
-          throw new Error(`Invalid property "${property}". Must be either 'role', 'content', 'parentHash', 'timestamp', 'hash', 'children', 'summary', 'functionResults', 'functionDependencies', 'embedding', or 'summaryEmbedding'.`);
+          throw new Error(`Invalid property "${property}". Must be either 'role', 'content', 'parentHash', 'timestamp', 'hash', 'children', 'siblings', 'summary', 'functionResults', 'functionDependencies', 'embedding', or 'summaryEmbedding'.`);
         })().then(() => subscriber.complete());
       });
     },
@@ -450,11 +545,12 @@ export const functionSpecs: FunctionSpec[] = [
 'parentHash'
 'timestamp' (stringified integer representation)
 'hash'
-'children' (their SHAs)
+'children' (their SHAs each in its own event)
+'siblings' (their SHAs each in its own event)
 'summary' (recursive summary representing the conversation path from root to the specified message)
 'functionResults' (EMPTY if not a completed function message)
-'functionDependencies'
-'embedding' (EMPTY if no embedding, series of stringified floats if present)
+'functionDependencies' (each in its own event)
+'embedding' (EMPTY if no embedding, stringified floats each in their own event if present)
 'summaryEmbedding' (same behavior as 'embedding' but for the recursive summary)
         `.trim(),
         required: false
@@ -624,8 +720,8 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
 
     const functionMessagePromise = getFunctionMessageDBPromise(conversation, functionMessageContent);
 
-    // functionMessagePromise - only used by generate_dynamic_function
-    // functionOptions - not used, but leaving it for now in case we want to use it in the future
+    // functionMessagePromise - only used by generate_dynamic_function and compose_dynamic_functions
+    // functionOptions - only used by generate_dynamic_function
     const result = code({db, functionMessagePromise, functionOptions: conversation.functions});
 
     const saveFunctionResult = async (resultString: string, completed: boolean) => {
@@ -658,7 +754,10 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
         },
         complete: async () => {
           await saveFunctionResult('', true);
-        }
+        },
+        error: async (err) => {
+          await sendError(conversation, err);
+        },
       });
       return; // Return early to prevent saving completion spec below
     }
@@ -732,7 +831,7 @@ export type DynamicFunctionMessageContent = FunctionMessageContent & {
 };
 
 export function isDynamicFunctionMessageContent(content: FunctionMessageContent): content is DynamicFunctionMessageContent {
-  return content.name === "generate_dynamic_function";
+  return invocableFunctionMessageNames.includes(content.name);
 }
 
 export function serializeFunctionMessageContent(content: FunctionMessageContent): string {
@@ -748,6 +847,7 @@ export function deserializeFunctionMessageContent(content: string): FunctionMess
       return null;
     }
   } catch (error) {
+    console.error("Error deserializing function message content", error, content)
     return null;
   }
 }

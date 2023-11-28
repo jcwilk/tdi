@@ -1,6 +1,6 @@
 import React, { FC, useMemo } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, IconButton, List, ListItem, ListItemText } from "@mui/material"
-import { MessageDB } from '../../chat/conversationDb';
+import { MessageDB, rootMessageHash } from '../../chat/conversationDb';
 import EmojiShaButton from './emojiShaButton';
 import { deserializeFunctionMessageContent, getAllFunctionOptions, invokeDynamicFunctionName, isDynamicFunctionMessageContent, isFunctionMessage } from '../../chat/functionCalling';
 import { Conversation } from '../../chat/conversation';
@@ -52,7 +52,7 @@ const MessageDetails: FC<MessageDialogProps> = ({ open, onClose, message, openOt
           </ListItem>
           <ListItem>
             <ListItemText primary="Parent Sha" secondary={
-              message.parentHash ? <EmojiShaButton hash={message.parentHash} openConversation={openOtherHash} /> : "ROOT"
+              message.parentHash !== rootMessageHash ? <EmojiShaButton hash={message.parentHash} openConversation={openOtherHash} /> : "ROOT"
             } />
           </ListItem>
           <ListItem>
