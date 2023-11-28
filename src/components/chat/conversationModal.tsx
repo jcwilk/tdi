@@ -173,7 +173,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
               conversation={conversation}
               onUpdate={onFunctionsChange}
             />
-            { isAPIKeySet() ??
+            { isAPIKeySet() &&
               <ToggleButtonGroup
                 color="primary"
                 value={conversation.model}
