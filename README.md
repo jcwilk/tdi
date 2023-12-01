@@ -4,7 +4,11 @@ This is a Pages-only SPA prototype for a more comprehensive flow of building sof
 
 It can be visited at [jcwilk.github.io/tdi](https://jcwilk.github.io/tdi) - It requires your GPT api key which it stores in LocalStorage. Use at your own risk.
 
-Blog post - https://jcwilk.com/tree-driven-interaction-vision-and-upcoming-features/
+[Launch video](https://youtu.be/P20n5-dAyOA)
+
+[Blog post](https://jcwilk.com/tree-driven-interaction-vision-and-upcoming-features/)
+
+[ShareGPT conversation](https://sharegpt.com/c/11L1odS) - Illustrates how to guide it towards fixing an incorrectly built function
 
 Example gifs of usage (some of the interfaces have been minorly adjusted, see the bulletpoints below for an up to date description)
 
