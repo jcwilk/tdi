@@ -1,16 +1,36 @@
-# Tree Driven Interaction with GPT prototype
+<h1 align="center">
+  <br>
+  <a href="https://jcwilk.github.io/tdi"><img src="img/full_favicon_200.png" alt="Tree Driven Interaction" width="200"></a>
+  <br>
+  Tree Driven Interaction
+  <br>
+</h1>
 
-This is a Pages-only SPA prototype for a more comprehensive flow of building software function-by-function via code-guided interactions with GPT.
+<h4 align="center">A client-side-only GPT-4 Turbo chat client for generating, composing, and running plugins on demand with <a href="https://rxjs.dev/" target="_blank">RxJS</a>.</h4>
 
-It can be visited at [jcwilk.github.io/tdi](https://jcwilk.github.io/tdi) - It requires your GPT api key which it stores in LocalStorage. Use at your own risk.
+<p align="center">
+  <a href="https://youtu.be/P20n5-dAyOA">Launch video</a> •
+  <a href="https://jcwilk.com/tree-driven-interaction-vision-and-upcoming-features/">Blog post</a> •
+  <a href="https://sharegpt.com/c/11L1odS">Fixing Functions</a>
+</p>
 
-[Launch video](https://youtu.be/P20n5-dAyOA)
+## Key Features
 
-[Blog post](https://jcwilk.com/tree-driven-interaction-vision-and-upcoming-features/)
+* Client-side only, running on GitHub pages - easy and free to fork and run yourself, keeps your data private
+* Rigorous PushState integration for nimble flitting between conversation paths and deep linking
+* Individually addressable messages with a novel EmojiSha (👃🍣🏐🏓🐹) visual representation of message addresses
+* Pinning and syncing between devices piggy-backing on the OpenAI Files API so their key is the only one you need (but you can still explore the app without it)
+* Extensive list of functions available to the AI Assistant with a lean interface for toggling which it has access to
+* Ability to manually invoke all functions available to the Assistant
+* Generation, storage, and invocation of JavaScript functions in the context of the conversation they came from - no more one-time-use, server-side-only functions
+* WebWorker isolation of dynamic function invocation
+* JSONP and CORS support for retrieving arbitrary API data
+* Automatic recursive summarization and embeddings generated for both the message and summary useful for doing conceptual searches
+* Introspective abilities for the AI Assistant to be able to search and extend its own conversation tree
 
-[ShareGPT conversation](https://sharegpt.com/c/11L1odS) - Illustrates how to guide it towards fixing an incorrectly built function
+## Example gifs of usage
 
-Example gifs of usage (some of the interfaces have been minorly adjusted, see the bulletpoints below for an up to date description)
+Some of the interfaces have been minorly adjusted, see the bulletpoints below for an up to date description
 
 ![tdi_jokes_v1_sped_up](https://github.com/jcwilk/tdi/assets/39782/8f2bd775-5b08-4b02-a9d5-f51908882558)
 
@@ -26,12 +46,10 @@ Example gifs of usage (some of the interfaces have been minorly adjusted, see th
 
 ### Top Right Conversation Management Buttons and Pausing
 
+- **API Key Entry/Removal**: Set your OpenAI API key here. Not required to explore the app, but highly suggested in order to enjoy its benefits.
 - **Share Button**: Share your conversation on ShareGPT anonymously. Options include various manners of escaping/converting for optimal sharing.
 - **Edit JSON Button**: Opens a JSON editor for the conversation, compatible with the OpenAI API schema. Import or export conversations for use with other systems.
 - **Functions Selector (Sigma Icon)**: Choose which functions the AI has access to by opening a modal with available options.
-  - Searching by message contents or recursive summary of the conversation up to the point of the message - can also limit to to only results under a certain message address.
-  - Append a new message reply to either an existing message by SHA or to the root.
-  - Misc functions useful for testing/debugging such as native alerts, prompts, and throwing errors - useful for understanding how different parts of the system behave.
 - **Toggle (Pause/Run)**: Pause the conversation to make edits without AI responses, or run to continue engaging with the AI assistant.
 
 ### Bottom Message Entry and Sending
