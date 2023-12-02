@@ -6,7 +6,7 @@
   <br>
 </h1>
 
-<h4 align="center">A client-side-only GPT-4 Turbo chat client for generating, composing, and running plugins on demand with <a href="https://rxjs.dev/" target="_blank">RxJS</a>.</h4>
+<h4 align="center">A GPT-4 Turbo chat client for generating, composing, and running plugins on demand with <a href="https://rxjs.dev/" target="_blank">RxJS</a>.</h4>
 
 <p align="center">
   <a href="https://youtu.be/P20n5-dAyOA">Launch video</a> •
