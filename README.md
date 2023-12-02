@@ -110,7 +110,7 @@ Some of the interfaces have been minorly adjusted, see the bulletpoints below fo
 
 ### Top Right Conversation Management Buttons and Pausing
 
-- **API Key Entry/Removal**: Set your OpenAI API key here. Not required to explore the app, but highly suggested in order to enjoy its benefits.
+- **API Key Entry/Removal**: Set your OpenAI API key here. Not required to explore the app, but highly suggested in order to enjoy its benefits. If your key isn't set it will be bright red to remind you that the AI Assistant is unavailable.
 - **Share Button**: Share your conversation on ShareGPT anonymously. Options include various manners of escaping/converting for optimal sharing.
 - **Edit JSON Button**: Opens a JSON editor for the conversation, compatible with the OpenAI API schema. Import or export conversations for use with other systems.
 - **Functions Selector (Sigma Icon)**: Choose which functions the AI has access to by opening a modal with available options.
@@ -152,8 +152,8 @@ But this shouldn't be necessary since you can just use Pages!
 ## Known Issues
 
 * It tends to not work well in multiple tabs at once on mobile because of how I'm using IndexedDB/Dexie.js, however it's a better UX to just use forward/back nav between different conversations within the same tab IMO, especially on mobile. The way to fix this issue IIUC would be to move the indexeddb access to a shared web worker and interface with it through events but there's a long list of higher priority features.
-* It's a bit short on some conversation settings like which model to use. I currently have it limited to GPT-4-turbo because it's so much better than everyting and only marginally more expensive than GPT-3.5-turbo.
-* It requires a paid OpenAI account in order to get an API key before you can do anything with it. This is sometimes behind a waitlist, if you are unable to sign up and want to try the app feel free to contact me for a temporary API key (if I know you of course, lol)
+* It's a bit short on some conversation settings like which model to use. I currently have it limited to GPT-4 Turbo because it's so much higher quality than the other OpenAI models and only marginally more expensive than GPT-3.5 Turbo. It would be an extremely niche scenario where you'd legitimately want to chat in something besides GPT-4 Turbo so it's not worth the interface real estate.
+* I went to significant lengths to make as much of the app available without an API key as possible - only the things which directly depend on generative behaviors require it to function, otherwise you can use the app without a key to get a feel for the flow before you flip on API access. I do strongly recommend you use an API key if you find value in the app though, the interfaces for manually invoking things, while workable, aren't much fun to use.
 
 ## TDI Legacy
 
