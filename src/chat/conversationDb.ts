@@ -345,7 +345,7 @@ export class ConversationDB extends Dexie {
 
     return defer(() => this.getDirectChildren(message)).pipe(
       mergeMap(children => {
-        const childObservables = children.map(child => this.getMessagesFrom(child, pathLength + 1, callback));
+        const childObservables = children.map(child => this.getMessagesFrom(child, pathLength + 1, callback, maxDepth));
         if (message && callback(message, children)) {
           childObservables.unshift(of({message, pathLength}));
         }
