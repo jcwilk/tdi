@@ -40,11 +40,14 @@ export type DynamicFunctionWorkerResponse = {
 
 export type FunctionParameter = {
   name: string;
-  type: "string" | "number" | "array" | "boolean";
+  type: "string" | "number" | "array" | "boolean" | "object";
   description: string;
   required: boolean;
   items?: {
     type: "string"; // could be other things hypothetically, but for now it's just this
+  }
+  additionalProperties?: {
+    type: "string";
   }
 };
 
@@ -606,10 +609,26 @@ export const functionSpecs: FunctionSpec[] = [
     ]
   },
   {
-    name: "cors_data_retrevial",
-    description: "Retrieves data from a CORS-compatible endpoint and returns it as a string via JSON.stringify.",
-    implementation: (_utils: {db: ConversationDB}, url: string): Promise<string> => {
-      return fetch(url).then((response) => response.text());
+    name: "cors_data_retrieval",
+    description: "Retrieves data from a CORS-compatible endpoint with specified options and returns it as a string.",
+    implementation: async (_utils: {db: ConversationDB},
+      url: string,
+      method?: string,
+      headers?: Record<string, string>,
+      body?: string
+    ): Promise<string> => {
+      const fetchOptions: RequestInit = {
+        method: method || "GET",
+        headers: headers || {},
+      };
+
+      // Include body in the fetch options if it's a post request and body is provided
+      if (body && method?.toUpperCase() === "POST") {
+        fetchOptions.body = body;
+      }
+
+      const response = await fetch(url, fetchOptions);
+      return response.text();
     },
     parameters: [
       {
@@ -617,6 +636,27 @@ export const functionSpecs: FunctionSpec[] = [
         type: "string",
         description: "The URL of the CORS-compatible endpoint to retrieve data from.",
         required: true
+      },
+      {
+        name: "method",
+        type: "string",
+        description: "The HTTP method (e.g., GET, POST). Optional, defaults to GET.",
+        required: false
+      },
+      {
+        name: "headers",
+        type: "object",
+        additionalProperties: {
+          type: "string"
+        },
+        description: "Headers to include in the request. Optional.",
+        required: false
+      },
+      {
+        name: "body",
+        type: "string",
+        description: "The body content for POST, PUT requests. Not needed for GET requests.",
+        required: false
       }
     ]
   },
@@ -792,6 +832,7 @@ export function coerceAndOrderFunctionParameters(functionParameters: FunctionPar
       if (param.type === "boolean") return Boolean(value);
       if (param.type === "string") return String(value);
       if (param.type === "array" && param.items?.type === "string") return value.map(String);
+      if (param.type === "object" && param.additionalProperties?.type === "string") return Object.fromEntries(Object.entries(value).map(([key, value]) => [key, String(value)]));
       else throw new Error(`Unsupported parameter type "${param.type}" for parameter "${param.name}". It had value of ${value}`); // Just add handling for the unknown type directly above this line
     } else if (param.required) {
       throw new Error(`Required parameter "${param.name}" missing in function call.`);
