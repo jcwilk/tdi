@@ -1,12 +1,13 @@
 import { FunctionCall, FunctionOption, FunctionParameters, getEmbedding } from "../openai_api";
-import { Conversation, Message, observeNewMessages, sendError, sendFunctionCall, teardownConversation } from "./conversation";
-import { ConversationDB, FunctionResultDB, FunctionResultSpec, MessageDB } from "./conversationDb";
+import { Conversation, Message, createConversation, getAllMessages, observeNewMessages, sendError, sendFunctionCall, teardownConversation } from "./conversation";
+import { ConversationDB, FunctionResultDB, FunctionResultSpec, MaybePersistedMessage, MessageDB } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
-import { Observable, OperatorFunction, async, concatMap, filter, firstValueFrom, from, isObservable, map, tap } from "rxjs";
+import { Observable, OperatorFunction, async, concatMap, filter, firstValueFrom, from, isObservable, map, mergeMap, tap, toArray } from "rxjs";
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
-import { isAtLeastOne } from "../tsUtils";
+import { isAtLeastOne, priorsAndLast, swapNonemptyTypeOrder } from "../tsUtils";
 import { APIKeyFetcher } from "../api_key_storage";
+import { addAssistant } from "./aiAgent";
 
 export const denylistedInvocableFunctionNames = [
   "generate_dynamic_function",
@@ -64,6 +65,7 @@ type FunctionUtils = {
   db: ConversationDB;
   functionMessagePromise: Promise<FunctionMessage>;
   functionOptions: FunctionOption[];
+  conversation: Conversation;
 }
 
 export type FunctionMessage = MessageDB & {
@@ -190,6 +192,50 @@ Example:
 `.trim();
 
 export const invokeDynamicFunctionName = "invoke_dynamic_function";
+
+function invokeDynamicFunctionImplementation(_utils: {}, functionHash: string, input: DynamicFunctionWorkerInput): Observable<string> {
+  const observable = new Observable<string>(subscriber => {
+    const worker = new Worker((window as any).workerPath);
+    worker.postMessage({SET_API_KEY: APIKeyFetcher()})
+
+    worker.addEventListener('message', (event) => {
+      const data = event.data as DynamicFunctionWorkerResponse;
+      //console.log("received message", data)
+
+      if (data.status === "error") {
+        subscriber.error(data.error);
+        subscriber.complete();
+        worker.terminate();
+        console.log("received error", data);
+        return;
+      }
+
+      if (data.status === "complete") {
+        subscriber.complete();
+        worker.terminate();
+        return;
+      }
+      subscriber.next(typeof(data.content) === "object" ? JSON.stringify(data.content) : String(data.content));
+    });
+
+    worker.addEventListener('error', (event) => {
+      console.log("received error", event)
+      subscriber.error(event.error || event.message);
+      worker.terminate();
+    });
+
+    // NB: having the worker postMessage here means it won't send the first message until the observable is subscribed to
+    // this is important so that we don't miss a response from the worker, but means that it's important to not subscribe
+    // to this observable more than once
+    const message: DynamicFunctionWorkerPayload = {
+      functionHash,
+      input
+    };
+    worker.postMessage(message);
+  });
+
+  return observable;
+}
 
 export const functionSpecs: FunctionSpec[] = [
   sharedSearchSpecBuilder(
@@ -399,49 +445,7 @@ export const functionSpecs: FunctionSpec[] = [
   {
     name: invokeDynamicFunctionName,
     description: invokeDynamicFunctionDescription,
-    implementation: (_utils: {}, functionHash: string, input: DynamicFunctionWorkerInput) => {
-      const observable = new Observable<string>(subscriber => {
-        const worker = new Worker((window as any).workerPath);
-        worker.postMessage({SET_API_KEY: APIKeyFetcher()})
-
-        worker.addEventListener('message', (event) => {
-          const data = event.data as DynamicFunctionWorkerResponse;
-          //console.log("received message", data)
-
-          if (data.status === "error") {
-            subscriber.error(data.error);
-            subscriber.complete();
-            worker.terminate();
-            console.log("received error", data);
-            return;
-          }
-
-          if (data.status === "complete") {
-            subscriber.complete();
-            worker.terminate();
-            return;
-          }
-          subscriber.next(typeof(data.content) === "object" ? JSON.stringify(data.content) : String(data.content));
-        });
-
-        worker.addEventListener('error', (event) => {
-          console.log("received error", event)
-          subscriber.error(event.error || event.message);
-          worker.terminate();
-        });
-
-        // NB: having the worker postMessage here means it won't send the first message until the observable is subscribed to
-        // this is important so that we don't miss a response from the worker, but means that it's important to not subscribe
-        // to this observable more than once
-        const message: DynamicFunctionWorkerPayload = {
-          functionHash,
-          input
-        };
-        worker.postMessage(message);
-      });
-
-      return observable;
-    },
+    implementation: invokeDynamicFunctionImplementation,
     parameters: [
       {
         name: "functionHash",
@@ -661,6 +665,72 @@ export const functionSpecs: FunctionSpec[] = [
     ]
   },
   {
+    name: "rag", // Retrieval Augmented Generation - keeping it short so it's quicker for the ai to type out
+    description: "Draws in additional messages for context via a dynamic function address while keeping them out of the ongoing conversation history.",
+    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<FunctionMessage>, conversation: Conversation}, functionHash: string): Promise<string> => {
+      const functionMessage = await utils.functionMessagePromise;
+      const messages = getAllMessages(utils.conversation);
+      const messagesWithoutFunctionMessage = messages.filter((message) => message.hash !== functionMessage.hash);
+
+      if (!isAtLeastOne(messagesWithoutFunctionMessage)) {
+        throw new Error("Conversation was too short to use RAG. Must have at least one message prior to the function message.");
+      }
+      const [priorMessages, triggerMessage] = priorsAndLast(messagesWithoutFunctionMessage);
+
+      const ragMessages: MessageDB[] = await firstValueFrom(invokeDynamicFunctionImplementation({}, functionHash, triggerMessage.hash).pipe(
+        mergeMap(async (sha) => utils.db.getMessageByHash(sha)),
+        filter(Boolean),
+        toArray()
+      ));
+
+      const ragPrefix: Message = {
+        role: "system",
+        content: "This conversation has been supplemented with the following messages for Retrieval Agumented Generation:"
+      }
+
+      const ragPostfix: Message = {
+        role: "system",
+        content: "End of RAG messages. Please use the above messages to respond to the following message:"
+      }
+
+      const ragMissing: Message = {
+        role: "system",
+        content: "No messages were found for Retrieval Augmented Generation. Instead, respond to the following message directly:"
+      }
+
+      const ragConvoMessages: [...MaybePersistedMessage[], MaybePersistedMessage] = ragMessages.length > 0 ?
+        [...priorMessages, ragPrefix, ...ragMessages, ragPostfix, triggerMessage]
+        :
+        [...priorMessages, ragMissing, triggerMessage];
+      const ragConvoFunctions = utils.conversation.functions.filter((f) => f.name !== "rag"); // so the result doesn't simply call rag again
+      const ragConvo = await createConversation(utils.db, swapNonemptyTypeOrder(ragConvoMessages), "gpt-4", ragConvoFunctions);
+      ragConvo.newMessagesInput.subscribe(utils.conversation.newMessagesInput);
+
+      return new Promise<string>(resolve => {
+        observeNewMessages(ragConvo, false).subscribe({
+          next: (reply) => {
+            teardownConversation(ragConvo);
+            resolve(reply.hash);
+          },
+          error: (err) => {
+            teardownConversation(ragConvo);
+            throw err;
+          }
+        });
+
+        addAssistant(ragConvo, utils.db);
+      });
+    },
+    parameters: [
+      {
+        name: "functionHash",
+        type: "string",
+        description: "The SHA of the function to invoke, typically indicated in a system message.",
+        required: true
+      }
+    ]
+  },
+  {
     name: "alert",
     description: "Displays a browser alert with the provided message.",
     implementation: async (_utils: {db: ConversationDB}, message: string) => {
@@ -762,7 +832,7 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
 
     // functionMessagePromise - only used by generate_dynamic_function and compose_dynamic_functions
     // functionOptions - only used by generate_dynamic_function
-    const result = code({db, functionMessagePromise, functionOptions: conversation.functions});
+    const result = code({db, functionMessagePromise, functionOptions: conversation.functions, conversation: conversation});
 
     const saveFunctionResult = async (resultString: string, completed: boolean) => {
       if (completed) {
