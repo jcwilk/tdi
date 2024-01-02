@@ -1,6 +1,6 @@
 import { BehaviorSubject, Observable, Subject, catchError, concatMap, distinctUntilChanged, filter, from, map, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
-import { ConversationDB, ConversationMessages, MessageDB } from './conversationDb';
+import { ConversationDB, ConversationMessages, MaybePersistedMessage, MessageDB } from './conversationDb';
 import { MaybeProcessedMessageResult, processMessagesWithHashing, reprocessMessagesStartingFrom } from './messagePersistence';
 import { FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
@@ -95,18 +95,18 @@ interface ScanState {
   event: TypingUpdateEvent | ProcessedMessageEvent | null;
 }
 
-export async function createConversation(db: ConversationDB, loadedMessages: ConversationMessages, model: ConversationMode = 'gpt-4', functions: FunctionOption[] = []): Promise<Conversation> {
+export async function createConversation(db: ConversationDB, loadedMessages: [MaybePersistedMessage, ...MaybePersistedMessage[]], model: ConversationMode = 'gpt-4', functions: FunctionOption[] = []): Promise<Conversation> {
   if(!isAPIKeySet()) model = "paused";
 
   const processedResults = await reprocessMessagesStartingFrom(model, loadedMessages);
 
   const processedMessages = processedResults.map(result => result.message);
   if (!isAtLeastOne(processedMessages)) throw new Error("No messages in conversation"); // just compilershutup
-  loadedMessages = processedMessages;
+  processedMessages;
 
   const conversation: Conversation = {
     newMessagesInput: new Subject<ConversationEvent>(),
-    outgoingMessageStream: new BehaviorSubject({ messages: loadedMessages, typingStatus: new Map() }),
+    outgoingMessageStream: new BehaviorSubject({ messages: processedMessages, typingStatus: new Map() }),
     functions,
     model
   }
