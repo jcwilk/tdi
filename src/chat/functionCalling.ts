@@ -1,11 +1,11 @@
-import { FunctionCall, FunctionOption, FunctionParameters, getEmbedding } from "../openai_api";
+import { FunctionCallMetadata, FunctionOption, FunctionParameters, getEmbedding, isToolFunctionCall } from "../openai_api";
 import { Conversation, Message, createConversation, getAllMessages, observeNewMessages, sendError, sendFunctionCall, teardownConversation } from "./conversation";
-import { ConversationDB, FunctionResultDB, FunctionResultSpec, MaybePersistedMessage, MessageDB } from "./conversationDb";
+import { ConversationDB, EmbellishedFunctionMessage, FunctionResultDB, MaybePersistedMessage, PersistedMessage, isEmbellishedFunctionMessage } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
-import { Observable, OperatorFunction, async, concatMap, filter, firstValueFrom, from, isObservable, map, mergeMap, tap, toArray } from "rxjs";
+import { Observable, concatMap, filter, firstValueFrom, from, isObservable, mergeMap, toArray } from "rxjs";
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
-import { isAtLeastOne, priorsAndLast, swapNonemptyTypeOrder } from "../tsUtils";
+import { isAtLeastOne, isTruthy, priorsAndLast, swapNonemptyTypeOrder } from "../tsUtils";
 import { APIKeyFetcher } from "../api_key_storage";
 import { addAssistant } from "./aiAgent";
 
@@ -63,36 +63,10 @@ type FunctionSpec = {
 
 type FunctionUtils = {
   db: ConversationDB;
-  functionMessagePromise: Promise<FunctionMessage>;
+  functionMessagePromise: Promise<EmbellishedFunctionMessage>;
   functionOptions: FunctionOption[];
   conversation: Conversation;
 }
-
-export type FunctionMessage = MessageDB & {
-  role: 'function'
-}
-
-export function isFunctionMessage(message: Message): message is FunctionMessage {
-  return message.role === "function";
-}
-
-export type EmbellishedFunctionMessage = FunctionMessage & {
-  isComplete: boolean;
-  results: FunctionResultDB[];
-}
-
-export function isEmbellishedFunctionMessage(message: Message): message is EmbellishedFunctionMessage {
-  return isFunctionMessage(message) && "isComplete" in message && "results" in message;
-}
-
-// This is a little unusual, but doing it as an experiment - types which differ only by guard
-// Because the difference is only in the
-export type CompleteFunctionMessage = EmbellishedFunctionMessage & {
-  isComplete: true;
-};
-export type IncompleteFunctionMessage = EmbellishedFunctionMessage & {
-  isComplete: false;
-};
 
 export function generateNestedFunctions(functionHashes: string[], currentDepth = 0): string {
   if (functionHashes.length < 2) {
@@ -127,7 +101,7 @@ function sharedSearchSpecBuilder(table: 'embeddings' | 'summaryEmbeddings', name
         if (shaResults.length === 0) {
           return ["No results found."];
         } else {
-          const messages = (await Promise.all(shaResults.map(sha => db.getMessageByHash(sha)))).filter((message): message is MessageDB => Boolean(message));
+          const messages = (await Promise.all(shaResults.map(sha => db.getMessageByHash(sha)))).filter(isTruthy);
           return messages.map(message => `${message.hash}: ${concatWithEllipses(message.content.replace(/\n/g, ""), 60)}`);
         }
       };
@@ -256,7 +230,7 @@ export const functionSpecs: FunctionSpec[] = [
       if (!["user", "system", "assistant"].includes(role)) throw new Error(`Invalid role "${role}". Must be either "user" or "system" or "assistant".`);
       const filteredRole = role as "user" | "system" | "assistant";
 
-      let messages: MessageDB[] = [];
+      let messages: PersistedMessage[] = [];
 
       if(parentHash) {
         const leafMessage = await utils.db.getMessageByHash(parentHash);
@@ -272,7 +246,7 @@ export const functionSpecs: FunctionSpec[] = [
       const newMessages = [...messages, newMessage];
       if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached - empty messages array in append_user_reply"); // compilershutup for typing
 
-      const processedMessages = await reprocessMessagesStartingFrom("paused", newMessages);
+      const processedMessages = await reprocessMessagesStartingFrom(utils.db, "paused", newMessages);
       const newLeafMessage = processedMessages[processedMessages.length - 1].message;
 
       return newLeafMessage.hash;
@@ -337,7 +311,7 @@ export const functionSpecs: FunctionSpec[] = [
   {
     name: "generate_dynamic_function",
     description: "Create a JavaScript function dynamically and save it to a new message. `functionBody` is a string of code, and `dependencies` is an array of callable function SHAs or function names provided in the API call payload. Return values from other functions are coerced into Observable<string>. Use `RxJS` for RxJS functions and `dependencies` with SHAs or function names to call other functions. The function must handle errors and return each element as a separate event in an Observable<string> when multiple values are involved.",
-    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<FunctionMessage>, functionOptions: FunctionOption[]}, functionBody: string, dependencies?: string[]) => {
+    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<EmbellishedFunctionMessage>, functionOptions: FunctionOption[]}, functionBody: string, dependencies?: string[]) => {
       dependencies ||= [];
       const functionMessage = await utils.functionMessagePromise;
       const functionMessageContent = deserializeFunctionMessageContent(functionMessage.content);
@@ -399,7 +373,7 @@ export const functionSpecs: FunctionSpec[] = [
   {
     name: "compose_dynamic_functions",
     description: "Compose multiple dynamic functions into a single function by chaining them such that the output of one function is the input to the next. The order of execution is determined by the reverse of the array order; for example, an array `['f', 'g']` will result in a composition equivalent to `return f(g(input))`. Only dynamic functions specified by their SHAs are supported, and each must accept and return an RxJS Observable<string>.",
-    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<FunctionMessage>}, functionHashes: string[]) => {
+    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<EmbellishedFunctionMessage>}, functionHashes: string[]) => {
       const functionMessage = await utils.functionMessagePromise;
       const functionMessageContent = deserializeFunctionMessageContent(functionMessage.content);
       if (!functionMessageContent) throw new Error("Invalid function message content");
@@ -502,7 +476,7 @@ export const functionSpecs: FunctionSpec[] = [
           }
 
           if (property === "functionResults") {
-            if(!isFunctionMessage(message)) return;
+            if(!isEmbellishedFunctionMessage(message)) return;
 
             const deserializedContent = deserializeFunctionMessageContent(message.content);
             if(!deserializedContent) return;
@@ -572,7 +546,7 @@ export const functionSpecs: FunctionSpec[] = [
       if (!message) throw new Error(`Message with SHA ${sha} not found.`);
 
       const messages = await utils.db.getConversationFromLeafMessage(message);
-      const processedMessageResults = await reprocessMessagesStartingFrom("gpt-4", messages);
+      const processedMessageResults = await reprocessMessagesStartingFrom(utils.db, "gpt-4", messages);
       await Promise.all(processedMessageResults.map(({metadataRecordsPromise}) => metadataRecordsPromise));
 
       return "";
@@ -667,7 +641,7 @@ export const functionSpecs: FunctionSpec[] = [
   {
     name: "rag", // Retrieval Augmented Generation - keeping it short so it's quicker for the ai to type out
     description: "Draws in additional messages for context via a dynamic function address while keeping them out of the ongoing conversation history.",
-    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<FunctionMessage>, conversation: Conversation}, functionHash: string): Promise<string> => {
+    implementation: async (utils: {db: ConversationDB, functionMessagePromise: Promise<EmbellishedFunctionMessage>, conversation: Conversation}, functionHash: string): Promise<string> => {
       const functionMessage = await utils.functionMessagePromise;
       const messages = getAllMessages(utils.conversation);
       const messagesWithoutFunctionMessage = messages.filter((message) => message.hash !== functionMessage.hash);
@@ -677,7 +651,7 @@ export const functionSpecs: FunctionSpec[] = [
       }
       const [priorMessages, triggerMessage] = priorsAndLast(messagesWithoutFunctionMessage);
 
-      const ragMessages: MessageDB[] = await firstValueFrom(invokeDynamicFunctionImplementation({}, functionHash, triggerMessage.hash).pipe(
+      const ragMessages: PersistedMessage[] = await firstValueFrom(invokeDynamicFunctionImplementation({}, functionHash, triggerMessage.hash).pipe(
         mergeMap(async (sha) => utils.db.getMessageByHash(sha)),
         filter(Boolean),
         toArray()
@@ -801,27 +775,34 @@ export function getAllFunctionOptions(): FunctionOption[] {
   }));
 }
 
-export function isActiveFunction(conversation: Conversation, functionCall: FunctionCall) {
+export function isActiveFunction(conversation: Conversation, functionCall: FunctionCallMetadata) {
     return conversation.functions.some((f) => f.name === functionCall.name);
 }
 
-async function getFunctionMessageDBPromise(conversation: Conversation, functionMessageContent: FunctionMessageContent): Promise<FunctionMessage> {
+async function getFunctionMessageDBPromise(conversation: Conversation, functionMessageContent: FunctionMessageContent): Promise<EmbellishedFunctionMessage> {
   const newMessagesObserver = observeNewMessages(conversation, false);
 
   return firstValueFrom(newMessagesObserver.pipe(
-    filter(isFunctionMessage),
+    filter(isEmbellishedFunctionMessage),
     filter((message) => deserializeFunctionMessageContent(message.content)?.uuid === functionMessageContent.uuid)
   ));
 }
 
-export async function callFunction(conversation: Conversation, functionCall: FunctionCall, db: ConversationDB): Promise<void> {
+export async function callFunction(conversation: Conversation, functionCall: FunctionCallMetadata, db: ConversationDB): Promise<void> {
   try {
     const code = generateCodeForFunctionCall(functionCall);
     //console.log("eval!", code);
 
     const uuid = uuidv4();
-    const functionMessageContent: FunctionMessageContent = {
-      ...functionCall,
+    const functionMessageContent: FunctionMessageContent = isToolFunctionCall(functionCall) ? {
+      parameters: functionCall.parameters,
+      name: functionCall.name,
+      toolId: functionCall.id,
+      uuid,
+      v: 2,
+    } : {
+      parameters: functionCall.parameters,
+      name: functionCall.name,
       uuid,
       v: 1,
     };
@@ -912,7 +893,7 @@ export function coerceAndOrderFunctionParameters(functionParameters: FunctionPar
   });
 }
 
-export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils: FunctionUtils) => FunctionReturn {
+export function generateCodeForFunctionCall(functionCall: FunctionCallMetadata): (utils: FunctionUtils) => FunctionReturn {
   // Find the function spec for the called function
   const funcSpec = functionSpecs.find(func => func.name === functionCall.name);
   if (!funcSpec) {
@@ -927,11 +908,25 @@ export function generateCodeForFunctionCall(functionCall: FunctionCall): (utils:
   };
 }
 
-export type FunctionMessageContent = {
+export type FunctionMessageContent = FunctionMessageContentv1 | FunctionMessageContentv2;
+
+export type FunctionMessageContentv1 = {
   uuid: string;
-  v: number;
+  v: 1;
   name: string;
   parameters: FunctionParameters;
+}
+
+export function isFunctionMessageContentv1(content: FunctionMessageContent): content is FunctionMessageContentv1 {
+  return content.v === 1;
+}
+
+export type FunctionMessageContentv2 = {
+  uuid: string;
+  v: 2;
+  name: string;
+  parameters: FunctionParameters;
+  toolId: string;
 }
 
 export type DynamicFunctionMessageContent = FunctionMessageContent & {
@@ -952,7 +947,7 @@ export function serializeFunctionMessageContent(content: FunctionMessageContent)
 export function deserializeFunctionMessageContent(content: string): FunctionMessageContent | null {
   try {
     const parsedContent = JSON.parse(content);
-    if (parsedContent.uuid && parsedContent.v === 1) {
+    if (parsedContent.uuid && (parsedContent.v === 1 || parsedContent.v === 2)) {
       return parsedContent;
     } else {
       return null;
@@ -963,7 +958,7 @@ export function deserializeFunctionMessageContent(content: string): FunctionMess
   }
 }
 
-export async function getFunctionResultsFromMessage(db: ConversationDB, message: MessageDB): Promise<FunctionResultDB[] | null> {
+export async function getFunctionResultsFromMessage(db: ConversationDB, message: PersistedMessage): Promise<FunctionResultDB[] | null> {
   if (message.role !== 'function') {
     return null;
   }
@@ -975,22 +970,6 @@ export async function getFunctionResultsFromMessage(db: ConversationDB, message:
   }
 
   return db.getFunctionResultsByUUID(functionMessageContent.uuid);
-}
-
-export async function embellishFunctionMessage(db: ConversationDB, message: MessageDB): Promise<EmbellishedFunctionMessage | null> {
-  const functionResults = await getFunctionResultsFromMessage(db, message);
-  if (functionResults === null) {
-    return null;
-  }
-
-  const functionMessage: EmbellishedFunctionMessage = {
-    ...message,
-    role: 'function', // mostly just to appease the type system
-    isComplete: functionResults.findIndex(({completed}) => completed) !== -1,
-    results: functionResults
-  };
-
-  return functionMessage;
 }
 
 function createCodeBlock(text: string): string {
@@ -1012,7 +991,7 @@ function createCodeBlock(text: string): string {
   }
 }
 
-export async function possiblyEmbellishedMessageToMarkdown(db: ConversationDB, message: MessageDB): Promise<string> {
+export async function possiblyEmbellishedMessageToMarkdown(db: ConversationDB, message: PersistedMessage): Promise<string> {
   if (!isEmbellishedFunctionMessage(message)) {
     return message.content;
   }

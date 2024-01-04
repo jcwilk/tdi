@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { BehaviorSubject, concatMap, debounceTime, filter, from, tap } from 'rxjs';
-import { ConversationDB, MessageDB } from '../../chat/conversationDb';
+import { ConversationDB, PersistedMessage } from '../../chat/conversationDb';
 import { Conversation, ConversationMode, Message, getLastMessage, isConversationMode, observeNewMessages } from '../../chat/conversation';
 import { useNavigate, NavigateFunction, useLocation } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
@@ -60,7 +60,7 @@ function routerStateToSlotId(routerState: RouterState): string {
 }
 
 async function loadDefaultGreetingConversationSpec(): Promise<ConversationSpec> {
-  const results = await reprocessMessagesStartingFrom("gpt-4", defaultGreetingMessages);
+  const results = await reprocessMessagesStartingFrom(new ConversationDB, "gpt-4", defaultGreetingMessages);
   const leafMessage = results[results.length - 1].message;
   return {
     tail: leafMessage,
@@ -111,7 +111,7 @@ export function useConversationsManager(db: ConversationDB) {
 
   const { runningConversation, setConversation, closeConversation, getNewSlot } = useConversationSlot(activeConversationId);
 
-  const [leafMessage, setLeafMessage] = useState<MessageDB | undefined>(undefined);
+  const [leafMessage, setLeafMessage] = useState<PersistedMessage | undefined>(undefined);
 
   usePinSyncing(1000 * 60);
 
@@ -195,7 +195,7 @@ export function useConversationsManager(db: ConversationDB) {
     navIndex(navigate);
   }, [navigate]);
 
-  const remix = useCallback(async (changedParams: {model?: ConversationMode, functions?: FunctionOption[], tail?: MessageDB}) => {
+  const remix = useCallback(async (changedParams: {model?: ConversationMode, functions?: FunctionOption[], tail?: PersistedMessage}) => {
     if (!currentConversationSpec) return;
 
     const newSpec = { ...currentConversationSpec, ...changedParams };
@@ -209,7 +209,7 @@ export function useConversationsManager(db: ConversationDB) {
     }
   }, [currentConversationSpec, navigate, getNewSlot, navConversation]);
 
-  const openMessage = useCallback(async (message: MessageDB) => {
+  const openMessage = useCallback(async (message: PersistedMessage) => {
     if (!currentConversationSpec) {
       const newRunningConversation = await getNewSlot({ tail: message, ...defaultSpecSettings });
       //console.log("navigating!")
@@ -233,7 +233,7 @@ export function useConversationsManager(db: ConversationDB) {
     remix({functions});
   }, [remix]);
 
-  const editMessage = useCallback(async (messageToEdit: MessageDB, newContent: string, newRole: ParticipantRole) => {
+  const editMessage = useCallback(async (messageToEdit: PersistedMessage, newContent: string, newRole: ParticipantRole) => {
     if (!runningConversation) return;
 
     const lastMessage = getLastMessage(runningConversation.conversation);
@@ -244,7 +244,7 @@ export function useConversationsManager(db: ConversationDB) {
     await openMessage(newLeafMessage);
   }, [openMessage, runningConversation]);
 
-  const pruneMessage = useCallback(async (message: MessageDB) => {
+  const pruneMessage = useCallback(async (message: PersistedMessage) => {
     if (!runningConversation) return;
 
     const lastMessage = getLastMessage(runningConversation.conversation);

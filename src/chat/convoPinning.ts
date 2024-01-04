@@ -2,7 +2,7 @@ import { isAPIKeySet } from "../api_key_storage";
 import { FileRecord, TrainingLineItem, deleteFile, fetchFileContent, fetchFiles, uploadFile } from "../openai_api";
 import { isAtLeastOne } from "../tsUtils";
 import { Message } from "./conversation";
-import { ConversationDB, MessageDB } from "./conversationDb";
+import { ConversationDB, PersistedMessage } from "./conversationDb";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
 import { isParticipantRole } from "./participantSubjects";
 
@@ -31,7 +31,7 @@ function transformTrainingItemsToMessages(items: TrainingLineItem[]): Message[] 
   });
 }
 
-function messageToFilename(message: MessageDB): string {
+function messageToFilename(message: PersistedMessage): string {
   return `tdipins_${message.hash}_v1.jsonl`;
 }
 
@@ -43,7 +43,7 @@ function fileToHash(file: FileRecord): string | undefined {
   return undefined;
 }
 
-export async function pinConversationByLeaf(leafMessage: MessageDB, messagesStore: ConversationDB) {
+export async function pinConversationByLeaf(leafMessage: PersistedMessage, messagesStore: ConversationDB) {
   const messages = await messagesStore.getConversationFromLeafMessage(leafMessage);
   const trainingData = transformMessagesToTrainingItems(messages);
   const leafNode = messages[messages.length - 1];
@@ -51,7 +51,7 @@ export async function pinConversationByLeaf(leafMessage: MessageDB, messagesStor
   await messagesStore.addPin(leafMessage, file.created_at);
 }
 
-export async function unpinConversationByLeaf(leafMessage: MessageDB, messagesStore: ConversationDB) {
+export async function unpinConversationByLeaf(leafMessage: PersistedMessage, messagesStore: ConversationDB) {
   const files = await fetchFiles();
   const matchingFile = files.find(file => file.filename === messageToFilename(leafMessage));
 
@@ -86,7 +86,7 @@ export async function mirrorPinsToDB(db: ConversationDB): Promise<void> {
   )).filter(Boolean) as [[Message, ...Message[]], FileRecord][];
 
   for (const [messages, file] of conversationsToImportWithFiles) {
-    const processedMessages = await reprocessMessagesStartingFrom("paused", messages);
+    const processedMessages = await reprocessMessagesStartingFrom(db, "paused", messages);
     const newLeafMessage = processedMessages[processedMessages.length - 1].message;
     await db.addPin(newLeafMessage, file.created_at);
   }

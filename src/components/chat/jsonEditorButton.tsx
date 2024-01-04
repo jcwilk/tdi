@@ -4,7 +4,7 @@ import CodeIcon from '@mui/icons-material/Code';
 import CloseIcon from '@mui/icons-material/Close';
 import { Message } from '../../chat/conversation';
 import { reprocessMessagesStartingFrom } from '../../chat/messagePersistence';
-import { MessageDB } from '../../chat/conversationDb';
+import { ConversationDB, PersistedMessage } from '../../chat/conversationDb';
 
 
 function messagesToString(messages: Message[]): string {
@@ -40,7 +40,7 @@ interface JsonEditorDialogProps {
   messages: Message[];
   open: boolean;
   onClose: () => void;
-  onNewLeaf: (newLeafMessage: MessageDB) => void;
+  onNewLeaf: (newLeafMessage: PersistedMessage) => void;
 }
 
 const JsonEditorDialog: React.FC<JsonEditorDialogProps> = ({ messages, open, onClose, onNewLeaf }) => {
@@ -50,7 +50,7 @@ const JsonEditorDialog: React.FC<JsonEditorDialogProps> = ({ messages, open, onC
   const handleSave = async () => {
     try {
       const updatedMessages = stringToMessages(currentText);
-      const newMessages = await reprocessMessagesStartingFrom("paused", updatedMessages);
+      const newMessages = await reprocessMessagesStartingFrom(new ConversationDB, "paused", updatedMessages);
       const newLeaf = newMessages[newMessages.length - 1].message;
       await onNewLeaf(newLeaf);
       onClose();
@@ -95,7 +95,7 @@ const JsonEditorDialog: React.FC<JsonEditorDialogProps> = ({ messages, open, onC
 
 interface JsonEditorButtonProps {
   messages: Message[];
-  onNewLeaf: (newLeafMessage: MessageDB) => void;
+  onNewLeaf: (newLeafMessage: PersistedMessage) => void;
 }
 
 export const JsonEditorButton: React.FC<JsonEditorButtonProps> = ({ messages, onNewLeaf }) => {

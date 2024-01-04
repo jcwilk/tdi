@@ -1,8 +1,8 @@
 import React, { FC, useMemo } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, IconButton, List, ListItem, ListItemText } from "@mui/material"
-import { MessageDB, rootMessageHash } from '../../chat/conversationDb';
+import { PersistedMessage, isEmbellishedFunctionMessage, rootMessageHash } from '../../chat/conversationDb';
 import EmojiShaButton from './emojiShaButton';
-import { deserializeFunctionMessageContent, getAllFunctionOptions, invokeDynamicFunctionName, isDynamicFunctionMessageContent, isFunctionMessage } from '../../chat/functionCalling';
+import { deserializeFunctionMessageContent, getAllFunctionOptions, invokeDynamicFunctionName, isDynamicFunctionMessageContent } from '../../chat/functionCalling';
 import { Conversation } from '../../chat/conversation';
 import { ManualFunctionCallButton } from './manualFunctionCall';
 import PlayDisabledIcon from '@mui/icons-material/PlayDisabled';
@@ -10,7 +10,7 @@ import PlayDisabledIcon from '@mui/icons-material/PlayDisabled';
 interface MessageDialogProps {
   open: boolean;
   onClose: () => void;
-  message: MessageDB;
+  message: PersistedMessage;
   openOtherHash: (hash: string) => void;
   conversation: Conversation;
   incompletePersistence: boolean;
@@ -24,7 +24,7 @@ const MessageDetails: FC<MessageDialogProps> = ({ open, onClose, message, openOt
   const dateString = date.toLocaleDateString();
   const timeString = date.toLocaleTimeString();
 
-  const functionMessageContent = isFunctionMessage(message) && deserializeFunctionMessageContent(message.content)
+  const functionMessageContent = isEmbellishedFunctionMessage(message) && deserializeFunctionMessageContent(message.content)
   const isDynamicFunction = functionMessageContent && isDynamicFunctionMessageContent(functionMessageContent);
 
   return (

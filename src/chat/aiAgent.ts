@@ -1,10 +1,11 @@
-import { EMPTY, Observable, Subject, UnaryFunction, catchError, concatMap, distinctUntilChanged, filter, from, map, merge, share, switchMap, tap, throwError } from "rxjs";
-import { Conversation, Message, TypingUpdate, sendError } from "./conversation";
+import { EMPTY, Observable, Subject, UnaryFunction, catchError, concatMap, distinctUntilChanged, filter, firstValueFrom, from, map, merge, share, switchMap, tap, throwError } from "rxjs";
+import { Conversation, ConversationState, Message, TypingUpdate, sendError } from "./conversation";
 import { sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, isGPTTextUpdate, isGPTSentMessage, SupportedModels } from "./chatStreams";
-import { ChatMessage, FunctionOption } from "../openai_api";
+import { ChatMessage, FunctionOption, isToolFunctionCall } from "../openai_api";
 import { callFunction, isActiveFunction, possiblyEmbellishedMessageToMarkdown } from "./functionCalling";
-import { ConversationDB, isMessageDB } from "./conversationDb";
+import { ConversationDB, ConversationMessages, isBasicPersistedMessage, isFunctionResultWithResult } from "./conversationDb";
+import { ChatCompletionAssistantMessageParam, ChatCompletionFunctionMessageParam, ChatCompletionMessageParam, ChatCompletionMessageToolCall, ChatCompletionToolMessageParam } from "openai/resources/chat/completions";
 
 // This is an odd solution to a very tricky problem with vanilla cold observables.
 // Cold observables don't start consuming their source until they get a subscriber,
@@ -22,16 +23,29 @@ function hotShare<T>(): UnaryFunction<Observable<T>, Observable<T>> {
   });
 }
 
-async function messagesToConversationMessages(db: ConversationDB, messages: Message[]): Promise<ChatMessage[]> {
-  const convertedMessagesPromises = messages.map(message => {
-    if (!isMessageDB(message)) return Promise.resolve(message);
+async function messagesToConversationMessages(messages: ConversationMessages): Promise<ChatCompletionMessageParam[]> {
+  const convertedMessagesPromises = messages.map(async message => {
+    if (isBasicPersistedMessage(message)) return {role: message.role, content: message.content};
 
-    // TODO: Human-oriented markdown may not be the most appropriate format for the assistant to use internally.
-    // However, it's a good starting point for now and we can come back to this as time permits.
-    return possiblyEmbellishedMessageToMarkdown(db, message).then(content => ({role: message.role, content}));
+    const resultsWithCompletion = await firstValueFrom(message.results);
+    const resultsOnly = resultsWithCompletion.filter(isFunctionResultWithResult);
+    const results = {
+      results: resultsOnly.map(result => result.result),
+      state: (resultsWithCompletion.length === resultsOnly.length) ? "completed" : "incomplete"
+    };
+
+    if (isToolFunctionCall(message.functionCall)) {
+      const toolCalls: ChatCompletionMessageToolCall[] = [{id: message.functionCall.id, type: 'function', function: {name: message.functionCall.name, arguments: JSON.stringify(message.functionCall.parameters)}}];
+      const assistantToolCall: ChatCompletionAssistantMessageParam = {role: "assistant", tool_calls: toolCalls};
+      const toolMessage: ChatCompletionToolMessageParam = {role: "tool", content: JSON.stringify(results), tool_call_id: message.functionCall.id};
+      return [assistantToolCall, toolMessage];
+    }
+
+    const functionMessage: ChatCompletionFunctionMessageParam = {role: "function", content: JSON.stringify({...results, arguments: message.functionCall.parameters}), name: message.functionCall.name};
+    return functionMessage;
   });
 
-  return Promise.all(convertedMessagesPromises);
+  return (await Promise.all(convertedMessagesPromises)).flat();
 }
 
 function rateLimiter<T>(maxCalls: number, windowSize: number): (source: Observable<T>) => Observable<T> {
@@ -64,8 +78,8 @@ export function addAssistant(
   if (conversation.model === "paused") return conversation;
 
   const messagesAndTyping = conversation.outgoingMessageStream.pipe(
-    map(({messages, typingStatus}) => [messages, {role: "assistant", content: typingStatus.get("assistant") ?? ""}] as [Message[], TypingUpdate]),
-    distinctUntilChanged(([messagesA, _typingA], [messagesB, _typingB]) => messagesA === messagesB)
+    map<ConversationState,[ConversationMessages,TypingUpdate]>(({messages, typingStatus}) => [messages, {role: "assistant", content: typingStatus.get("assistant") ?? ""}]),
+    distinctUntilChanged(([messagesA, _typingA], [messagesB, _typingB]) => messagesA.length === messagesB.length)
   );
 
   const newSystemMessages = filterByIsSystemMessage(messagesAndTyping);
@@ -75,7 +89,7 @@ export function addAssistant(
     map(([messages, _typing]) => messages)
   );
 
-  const typingAndSending = switchedOutputStreamsFromRespondableMessages(db, newRespondableMessages, conversation.model, conversation.functions)
+  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, conversation.model, conversation.functions)
     .pipe(
       catchError(err => {
         console.error("Error from before handleGptMessages!", err);
@@ -89,22 +103,18 @@ export function addAssistant(
   return conversation;
 }
 
-function filterByIsSystemMessage(messagesAndTyping: Observable<[Message[], TypingUpdate]>): Observable<[Message[], TypingUpdate]> {
+function filterByIsSystemMessage(messagesAndTyping: Observable<[ConversationMessages, TypingUpdate]>): Observable<[ConversationMessages, TypingUpdate]> {
   return messagesAndTyping.pipe(
     filter(([messages, _typing]) =>
-      messages.length > 0
-      &&
       messages[messages.length - 1].role === "system"
     )
   )
 }
 
-function filterByIsUninterruptingUserMessage(messagesAndTyping: Observable<[Message[], TypingUpdate]>): Observable<[Message[], TypingUpdate]> {
+function filterByIsUninterruptingUserMessage(messagesAndTyping: Observable<[ConversationMessages, TypingUpdate]>): Observable<[ConversationMessages, TypingUpdate]> {
   return messagesAndTyping.pipe(
     filter(([messages, typing]) => {
-      return messages.length > 0
-      &&
-      messages[messages.length - 1].role === "user"
+      return messages[messages.length - 1].role === "user"
       &&
       typing.content.length === 0
     }
@@ -113,15 +123,14 @@ function filterByIsUninterruptingUserMessage(messagesAndTyping: Observable<[Mess
 }
 
 function switchedOutputStreamsFromRespondableMessages(
-  db: ConversationDB,
-  newRespondableMessages: Observable<Message[]>,
+  newRespondableMessages: Observable<ConversationMessages>,
   model?: SupportedModels,
   functions?: FunctionOption[],
 ) {
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
     switchMap(messages => {
-      const convertedMessagesPromise = messagesToConversationMessages(db, messages);
+      const convertedMessagesPromise = messagesToConversationMessages(messages);
       return from(convertedMessagesPromise).pipe(
         concatMap(convertedMessages => chatCompletionMetaStream(convertedMessages, 0.1, model, 1000, functions))
       )

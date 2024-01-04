@@ -1,6 +1,6 @@
 import { BehaviorSubject, Observable, Subject, catchError, concatMap, distinctUntilChanged, filter, from, map, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
-import { ConversationDB, ConversationMessages, MaybePersistedMessage, MessageDB } from './conversationDb';
+import { ConversationDB, ConversationMessages, MaybePersistedMessage, PersistedMessage } from './conversationDb';
 import { MaybeProcessedMessageResult, processMessagesWithHashing, reprocessMessagesStartingFrom } from './messagePersistence';
 import { FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
@@ -30,7 +30,7 @@ export type NewMessageEvent = {
 
 export type ProcessedMessageEvent = {
   type: 'processedMessage';
-  payload: MessageDB;
+  payload: PersistedMessage;
 };
 
 export type TypingUpdateEvent = {
@@ -98,7 +98,7 @@ interface ScanState {
 export async function createConversation(db: ConversationDB, loadedMessages: [MaybePersistedMessage, ...MaybePersistedMessage[]], model: ConversationMode = 'gpt-4', functions: FunctionOption[] = []): Promise<Conversation> {
   if(!isAPIKeySet()) model = "paused";
 
-  const processedResults = await reprocessMessagesStartingFrom(model, loadedMessages);
+  const processedResults = await reprocessMessagesStartingFrom(db, model, loadedMessages);
 
   const processedMessages = processedResults.map(result => result.message);
   if (!isAtLeastOne(processedMessages)) throw new Error("No messages in conversation"); // just compilershutup
@@ -118,7 +118,7 @@ export async function createConversation(db: ConversationDB, loadedMessages: [Ma
     }),
     scanAsync<ConversationEvent, ScanState>(async (acc: ScanState, event: ConversationEvent) => {
       if (isNewMessageEvent(event) || isErrorMessageEvent(event)) {
-        const result = await processMessagesWithHashing(model, event.payload, acc.lastResult);
+        const result = await processMessagesWithHashing(db, model, event.payload, acc.lastResult);
 
         return {
           lastResult: result,
@@ -189,7 +189,7 @@ export function sendFunctionCall(conversation: Conversation, content: string): v
   } as NewMessageEvent);
 }
 
-export function getLastMessage(conversation: Conversation): MessageDB {
+export function getLastMessage(conversation: Conversation): PersistedMessage {
   const messages = conversation.outgoingMessageStream.value.messages;
   return messages[messages.length - 1];
 }
@@ -202,24 +202,24 @@ export function getTypingStatus(conversation: Conversation, role: TyperRole): st
   return conversation.outgoingMessageStream.value.typingStatus.get(role) ?? "";
 }
 
-export function observeNewMessagesWithLatestTypingMap(conversation: Conversation, includeExisting = false): Observable<[MessageDB, Map<TyperRole, string>]> {
+export function observeNewMessagesWithLatestTypingMap(conversation: Conversation, includeExisting = false): Observable<[PersistedMessage, Map<TyperRole, string>]> {
   const indexToStartAt = includeExisting ? 0 : getAllMessages(conversation).length;
 
   return conversation.outgoingMessageStream.pipe(
-    map(({messages, typingStatus}) => [messages, typingStatus] as [MessageDB[], Map<TyperRole, string>]),
+    map(({messages, typingStatus}) => [messages, typingStatus] as [PersistedMessage[], Map<TyperRole, string>]),
     distinctUntilChanged(([messagesA, _typingStatusA], [messagesB, _typingStatusB]) => messagesA === messagesB),
-    scan<[MessageDB[], Map<TyperRole, string>], [MessageDB[], number, Map<TyperRole, string>]>(([_lastMessages, index, _lastTypingStatus], [messages, typingStatus]) => {
+    scan<[PersistedMessage[], Map<TyperRole, string>], [PersistedMessage[], number, Map<TyperRole, string>]>(([_lastMessages, index, _lastTypingStatus], [messages, typingStatus]) => {
       const newMessages = messages.slice(index);
       return [newMessages, index + newMessages.length, typingStatus];
-    }, [[], indexToStartAt, new Map<TyperRole, string>()] as [MessageDB[], number, Map<TyperRole, string>]),
+    }, [[], indexToStartAt, new Map<TyperRole, string>()] as [PersistedMessage[], number, Map<TyperRole, string>]),
     concatMap(([messages, _index, typingStatus]) => {
-      const messageUpdates = messages.map(message => { return [message, typingStatus] as [MessageDB, Map<TyperRole, string>]})
+      const messageUpdates = messages.map(message => { return [message, typingStatus] as [PersistedMessage, Map<TyperRole, string>]})
       return from(messageUpdates);
     }),
   );
 }
 
-export function observeNewMessages(conversation: Conversation, includeExisting = false): Observable<MessageDB> {
+export function observeNewMessages(conversation: Conversation, includeExisting = false): Observable<PersistedMessage> {
   return observeNewMessagesWithLatestTypingMap(conversation, includeExisting).pipe(
     map(([message, _typingStatus]) => message)
   );

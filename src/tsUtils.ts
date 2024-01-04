@@ -13,3 +13,7 @@ export function swapNonemptyTypeOrder<T>(array: [...T[], T]): [T, ...T[]] {
 
   return array; // This is safe because the type is guaranteed to be nonempty either way
 }
+
+export function isTruthy<T>(value: T): value is NonNullable<T> {
+  return Boolean(value);
+}

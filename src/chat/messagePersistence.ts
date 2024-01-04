@@ -1,10 +1,9 @@
-import { ConversationDB, MaybePersistedMessage, MessageDB, MessageSpec, MessageSummaryDB, MetadataHandlers, MetadataRecords, isMessageDB, rootMessageHash } from './conversationDb';
+import { ConversationDB, MaybePersistedMessage, MessageSpec, MessageSummaryDB, MetadataHandlers, MetadataRecords, PersistedMessage, isPersistedMessage, rootMessageHash } from './conversationDb';
 import { ConversationMode, Message } from './conversation';
 import { getEmbedding } from '../openai_api';
 import { isAtLeastOne } from '../tsUtils';
 import { chatCompletionMetaStream, isGPTSentMessage } from './chatStreams';
 import { filter, firstValueFrom, map } from 'rxjs';
-import { embellishFunctionMessage } from './functionCalling';
 import { isAPIKeySet } from '../api_key_storage';
 
 const hashFunction = async (message: Message, parentHashes: string[]): Promise<string> => {
@@ -38,7 +37,7 @@ type ProcessedMessageResultNullObject = {
 }
 
 type ProcessedMessageResult = {
-  message: MessageDB,
+  message: PersistedMessage,
   metadataRecordsPromise: Promise<MetadataRecords>
 }
 
@@ -98,6 +97,7 @@ async function recursivelySummarize(newMessage: Message, priorResult: MaybeProce
 }
 
 export async function processMessagesWithHashing(
+  db: ConversationDB,
   conversationMode: ConversationMode,
   message: MaybePersistedMessage,
   priorResult: MaybeProcessedMessageResult
@@ -107,21 +107,21 @@ export async function processMessagesWithHashing(
   const parentHash = priorResult.message ? priorResult.message.hash : rootMessageHash;
   const hash = await hashFunction(message, [parentHash]);
 
-  let messageToSave: MessageDB | MessageSpec;
+  let messageToSave: PersistedMessage | MessageSpec;
 
-  // If the message is a MessageDB and its hash matches
-  if (isMessageDB(message) && message.hash === hash) {
+  // If the message is a PersistedMessage and its hash matches
+  if (isPersistedMessage(message) && message.hash === hash) {
     messageToSave = message;
-  } else {
-    messageToSave = {
-      ...message,
-      timestamp: undefined,
+  }
+  else {
+    const newMessage: MessageSpec = {
+      content: message.content,
+      role: message.role,
       hash,
       parentHash: parentHash
     };
+    messageToSave = newMessage;
   }
-
-  const conversationDB = new ConversationDB();
 
   const unconditionalHandlers = {
     messageEmbedding: async () => {
@@ -152,20 +152,19 @@ export async function processMessagesWithHashing(
   }
   const metadataHandlers: MetadataHandlers = conversationMode === 'paused' ? unconditionalHandlers : { ...unconditionalHandlers, ...unpausedHandlers };
 
-  const [persistedMessagePromise, metadataRecordsPromise] = conversationDB.saveMessage(messageToSave, metadataHandlers);
-  const possiblyEmbellishedMessage = (await embellishFunctionMessage(conversationDB, await persistedMessagePromise)) || await persistedMessagePromise;
-  return { message: possiblyEmbellishedMessage, metadataRecordsPromise };
+  const [persistedMessagePromise, metadataRecordsPromise] = db.saveMessage(messageToSave, metadataHandlers);
+  return { message: await persistedMessagePromise, metadataRecordsPromise };
 };
 
-const identifyMessagesForReprocessing = (conversation: MessageDB[], startIndex: number): Message[] => {
+const identifyMessagesForReprocessing = (conversation: PersistedMessage[], startIndex: number): Message[] => {
   return conversation.slice(startIndex).map(message => ({
     content: message.content,
     role: message.role
   }));
 };
 
-export async function reprocessMessagesStartingFrom(conversationMode: ConversationMode, messagesForReprocessing: [MaybePersistedMessage, ...MaybePersistedMessage[]]): Promise<[ProcessedMessageResult, ...ProcessedMessageResult[]]> {
-  let accResult = await processMessagesWithHashing(conversationMode, messagesForReprocessing[0], NULL_OBJECT_PROCESSED_MESSAGE_RESULT);
+export async function reprocessMessagesStartingFrom(db: ConversationDB, conversationMode: ConversationMode, messagesForReprocessing: [MaybePersistedMessage, ...MaybePersistedMessage[]]): Promise<[ProcessedMessageResult, ...ProcessedMessageResult[]]> {
+  let accResult = await processMessagesWithHashing(db, conversationMode, messagesForReprocessing[0], NULL_OBJECT_PROCESSED_MESSAGE_RESULT);
   const results: [ProcessedMessageResult, ...ProcessedMessageResult[]] = [accResult];
 
   const remainingMessages = messagesForReprocessing.slice(1);
@@ -173,7 +172,7 @@ export async function reprocessMessagesStartingFrom(conversationMode: Conversati
   if(!isAtLeastOne(remainingMessages)) return results;
 
   for (const message of remainingMessages) {
-    accResult = await processMessagesWithHashing(conversationMode, message, accResult);
+    accResult = await processMessagesWithHashing(db, conversationMode, message, accResult);
     results.push(accResult);
   }
 
@@ -182,10 +181,10 @@ export async function reprocessMessagesStartingFrom(conversationMode: Conversati
 
 export async function editConversation(
   conversationMode: ConversationMode,
-  leafMessage: MessageDB,
-  originalMessage: MessageDB,
+  leafMessage: PersistedMessage,
+  originalMessage: PersistedMessage,
   newMessage: Message
-): Promise<MessageDB> {
+): Promise<PersistedMessage> {
   const conversationDB = new ConversationDB();
 
   // Fetch the full conversation from the leaf to the root
@@ -212,15 +211,15 @@ export async function editConversation(
   }
 
   // Replace the message at the given index with the new message
-  const newMessages = await reprocessMessagesStartingFrom(conversationMode, fullMessagesForReprocessing);
+  const newMessages = await reprocessMessagesStartingFrom(conversationDB, conversationMode, fullMessagesForReprocessing);
   return newMessages[newMessages.length - 1].message;
 };
 
 export async function pruneConversation(
   conversationMode: ConversationMode,
-  leafMessage: MessageDB,
-  excludedMessage: MessageDB
-): Promise<MessageDB> {
+  leafMessage: PersistedMessage,
+  excludedMessage: PersistedMessage
+): Promise<PersistedMessage> {
   const conversationDB = new ConversationDB();
 
   // Fetch the full conversation from the leaf to the root
@@ -251,6 +250,6 @@ export async function pruneConversation(
     return precedingMessages[precedingMessages.length - 1];
   }
 
-  const newMessages = await reprocessMessagesStartingFrom(conversationMode, fullMessagesForReprocessing);
+  const newMessages = await reprocessMessagesStartingFrom(conversationDB, conversationMode, fullMessagesForReprocessing);
   return newMessages[newMessages.length - 1].message;
 };

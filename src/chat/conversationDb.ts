@@ -1,9 +1,11 @@
-import Dexie from 'dexie';
+import Dexie, { liveQuery } from 'dexie';
 import { Message } from './conversation';
-import { EMPTY, Observable, defer, filter, merge, mergeMap, of } from 'rxjs';
-import { FunctionOption } from '../openai_api';
-import { FunctionMessageContent, getFunctionResultsFromMessage } from './functionCalling';
+import { EMPTY, Observable, defer, filter, from, merge, mergeMap, of } from 'rxjs';
+import { getFunctionResultsFromMessage, deserializeFunctionMessageContent, isFunctionMessageContentv1 } from './functionCalling';
 import { defineConversationDBSchema } from './conversationDbMigrations';
+
+import { isTruthy } from '../tsUtils';
+import { FunctionCallMetadata, isToolFunctionCall } from '../openai_api';
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {
@@ -11,13 +13,37 @@ export type MessageSpec = Message & {
   parentHash: string;
 }
 
-export type MessageDB = MessageSpec & {
+type MessageDB = MessageSpec & {
   timestamp: number;
 }
 
-export type MaybePersistedMessage = Message | MessageDB;
+export type EmbellishedFunctionMessage = MessageDB & {
+  role: 'function',
+  results: Observable<FunctionResultDB[]>;
+  functionCall: FunctionCallMetadata;
+}
 
-export type ConversationMessages = [MessageDB, ...MessageDB[]];
+export function isEmbellishedFunctionMessage(message: Message): message is EmbellishedFunctionMessage {
+  return message.role === "function" && "functionCall" in message && "results" in message;
+}
+
+export type PersistedMessage = BasicPersistedMessage | EmbellishedFunctionMessage;
+
+export function isPersistedMessage(message: Message | PersistedMessage): message is PersistedMessage {
+  return (message as PersistedMessage).timestamp !== undefined;
+}
+
+export function isBasicPersistedMessage(message: MessageDB | PersistedMessage): message is BasicPersistedMessage {
+  return message.role === 'user' || message.role === 'assistant' || message.role === 'system';
+}
+
+export type BasicPersistedMessage = MessageDB & {
+  role: 'user' | 'assistant' | 'system';
+}
+
+export type MaybePersistedMessage = Message | PersistedMessage;
+
+export type ConversationMessages = [PersistedMessage, ...PersistedMessage[]];
 
 export interface EmbeddingSpec {
   hash: string;
@@ -39,7 +65,40 @@ export type PinDB = {
 
 export const rootMessageHash = 'root';
 
-export function isMessageDB(message: MaybePersistedMessage | MessageSpec): message is MessageDB {
+async function dbToPersistedMessage(db: ConversationDB, message: MessageDB): Promise<PersistedMessage> {
+  if (isBasicPersistedMessage(message)) return message;
+
+  const functionMessageContent = await deserializeFunctionMessageContent(message.content);
+  if (!functionMessageContent) {
+    console.error('Could not deserialize function message content.', message);
+
+    return {
+      ...message,
+      role: 'system',
+      content: "Error: Could not deserialize function message content.",
+    }
+  }
+
+  const functionResults = from(liveQuery(() => db.getFunctionResultsByUUID(functionMessageContent.uuid)));
+
+  const functionMessage: EmbellishedFunctionMessage = {
+    ...message,
+    role: 'function', // mostly just to appease the type system
+    results: functionResults,
+    functionCall: isFunctionMessageContentv1(functionMessageContent) ? {
+      name: functionMessageContent.name,
+      parameters: functionMessageContent.parameters,
+    } : {
+      name: functionMessageContent.name,
+      parameters: functionMessageContent.parameters,
+      id: functionMessageContent.toolId,
+    }
+  };
+
+  return functionMessage;
+}
+
+function isMessageDB(message: MaybePersistedMessage | MessageSpec): message is MessageDB {
   return (message as MessageDB).timestamp !== undefined;
 }
 
@@ -51,7 +110,7 @@ export type MetadataHandlers = {
 }
 
 export type LeafPath = {
-  message: MessageDB,
+  message: PersistedMessage,
   pathLength: number
 };
 
@@ -97,6 +156,10 @@ type FunctionResultWithCompletion = {
 
 export type FunctionResultDB = FunctionResultWithResult | FunctionResultWithCompletion;
 
+export function isFunctionResultWithResult(result: FunctionResultDB): result is FunctionResultWithResult {
+  return typeof result.result === 'string';
+}
+
 export type FunctionDependencyDB = {
   hash: string;
   timestamp: number;
@@ -106,6 +169,10 @@ export type FunctionDependencyDB = {
 // This type is exclusively used internally in the dexie class to sidestep type awkwardness around
 // not getting the auto-inc id until it's persisted, but not being able to persist without an id.
 type FunctionResultDBMaybeId = Partial<Pick<FunctionResultDB, 'id'>> & Omit<FunctionResultDB, 'id'>;
+
+function isFunctionResultDB(result: FunctionResultDBMaybeId): result is FunctionResultDB {
+  return typeof (result as FunctionResultDB).id === 'number';
+}
 
 type FunctionResultSpecWithResult = Omit<FunctionResultWithResult, 'timestamp' | 'id'>;
 type FunctionResultSpecWithCompletion = Omit<FunctionResultWithCompletion, 'timestamp' | 'id'>;
@@ -159,11 +226,11 @@ export class ConversationDB extends Dexie {
     this.functionDependencies2 = this.table('functionDependencies2');
   }
 
-  saveMessage(message: MessageDB | MessageSpec, metadataHandlers: MetadataHandlers): [Promise<MessageDB>, Promise<MetadataRecords>] {
-    let persistedMessagePromise: Promise<MessageDB>;
+  saveMessage(message: PersistedMessage | MessageSpec, metadataHandlers: MetadataHandlers): [Promise<PersistedMessage>, Promise<MetadataRecords>] {
+    let persistedMessagePromise: Promise<PersistedMessage>;
 
     if (isMessageDB(message)) {
-      persistedMessagePromise = Promise.resolve(message);
+      persistedMessagePromise = dbToPersistedMessage(this, message);
     } else {
       persistedMessagePromise = this.transaction('rw', this.messages, () => {
         return this.getMessageByHash(message.hash)
@@ -184,11 +251,11 @@ export class ConversationDB extends Dexie {
                   }
 
                   const newMessage: MessageDB = { ...message, timestamp: Date.now() };
-                  return this.messages.add(newMessage).then(() => newMessage);
+                  return this.messages.add(newMessage).then(() => dbToPersistedMessage(this, newMessage));
                 });
             } else {
               const newMessage: MessageDB = { ...message, timestamp: Date.now() };
-              return this.messages.add(newMessage).then(() => newMessage);
+              return this.messages.add(newMessage).then(() => dbToPersistedMessage(this, newMessage));
             }
           });
       });
@@ -299,8 +366,9 @@ export class ConversationDB extends Dexie {
     });
   }
 
-  getMessageByHash(hash: string): Promise<MessageDB | undefined> {
-    return this.messages.get(hash);
+  async getMessageByHash(hash: string): Promise<PersistedMessage | undefined> {
+    const message = await this.messages.get(hash);
+    return message && dbToPersistedMessage(this, message);
   }
 
   getEmbeddingByHash(hash: string): Promise<EmbeddingDB | undefined> {
@@ -311,8 +379,8 @@ export class ConversationDB extends Dexie {
     return this.summaryEmbeddings.get(hash);
   }
 
-  async getConversationFromLeaf(leafHash: string): Promise<MessageDB[]> {
-    const conversation: MessageDB[] = [];
+  async getConversationFromLeaf(leafHash: string): Promise<PersistedMessage[]> {
+    const conversation: PersistedMessage[] = [];
     let currentHash: string | null = leafHash;
 
     while (currentHash) {
@@ -326,7 +394,7 @@ export class ConversationDB extends Dexie {
     return conversation.reverse();
   }
 
-  async getConversationFromLeafMessage(leafMessage: MessageDB): Promise<ConversationMessages> {
+  async getConversationFromLeafMessage(leafMessage: PersistedMessage): Promise<ConversationMessages> {
     const conversation: ConversationMessages = [leafMessage];
     if (!hasParent(leafMessage)) return conversation;
 
@@ -340,7 +408,7 @@ export class ConversationDB extends Dexie {
   // queries to the database. However, this would mean that the database queries would be performed sequentially rather than in parallel.
   // Instead, we're using merge/mergeMap which means that the database queries will be performed in parallel and if we don't consume all
   // the events, we'll have wasted some queries. Because it's indexeddb, this doesn't matter, so we're going with the more aggressive option.
-  getMessagesFrom(message: MessageDB | null, pathLength: number = 0, callback: (message: MessageDB, children: MessageDB[]) => boolean = () => true, maxDepth?: number): Observable<LeafPath> {
+  private getMessagesFrom(message: PersistedMessage | null, pathLength: number = 0, callback: (message: PersistedMessage, children: PersistedMessage[]) => boolean = () => true, maxDepth?: number): Observable<LeafPath> {
     if (maxDepth !== undefined && pathLength > maxDepth) return EMPTY;
 
     return defer(() => this.getDirectChildren(message)).pipe(
@@ -354,20 +422,22 @@ export class ConversationDB extends Dexie {
     );
   }
 
-  getLeafMessagesFrom(message: MessageDB | null, pathLength: number = 0): Observable<LeafPath> {
+  getLeafMessagesFrom(message: PersistedMessage | null, pathLength: number = 0): Observable<LeafPath> {
     return this.getMessagesFrom(message, pathLength, (_message, children) => children.length === 0);
   }
 
-  getDirectChildren(message: MessageDB | null) {
-    return this.messages.where('parentHash').equals(message ? message.hash : rootMessageHash).reverse().sortBy('timestamp');
+  async getDirectChildren(message: PersistedMessage | null): Promise<PersistedMessage[]> {
+    const messages = await this.messages.where('parentHash').equals(message ? message.hash : rootMessageHash).reverse().sortBy('timestamp')
+    return Promise.all(messages.map (message => dbToPersistedMessage(this, message)));
   }
 
-  getDirectSiblings(message: MessageDB) {
-    return this.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
+  async getDirectSiblings(message: PersistedMessage): Promise<PersistedMessage[]> {
+    const messages = await this.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
+    return Promise.all(messages.map (message => dbToPersistedMessage(this, message)));
   }
 
   async searchEmbedding(embedding: number[], limit: number, table: 'embeddings' | 'summaryEmbeddings', rootMessageHash?: string, maxDepth?: number): Promise<string[]> {
-    let rootMessage: null | MessageDB = null;
+    let rootMessage: null | PersistedMessage = null;
 
     if (rootMessageHash) {
       rootMessage = await this.getMessageByHash(rootMessageHash) ?? null;
@@ -384,20 +454,23 @@ export class ConversationDB extends Dexie {
       filter(Boolean)
     );
 
+    // This is a slow but functional version of a priority queue. If performance becomes an issue then it can be upgraded as-needed.
     let closestEmbeddings: { hash: string, distance: number }[] = [];
 
     return new Promise<string[]>((resolve) => {
-      embeddingsObservable.subscribe(data => {
-        closestEmbeddings.push({
-          hash: data.leafPath.message.hash,
-          distance: this.cosineSimilarity(embedding, data.embedding.embedding),
-        });
-        closestEmbeddings = closestEmbeddings.sort((a, b) => b.distance - a.distance).slice(0, limit);
-      },
-      null,
-      () => {
-        const result = closestEmbeddings.map(embedding => embedding.hash);
-        resolve(result);
+      const self = this;
+      embeddingsObservable.subscribe({
+        next(data) {
+          closestEmbeddings.push({
+            hash: data.leafPath.message.hash,
+            distance: self.cosineSimilarity(embedding, data.embedding.embedding),
+          });
+          closestEmbeddings = closestEmbeddings.sort((a, b) => b.distance - a.distance).slice(0, limit);
+        },
+        complete() {
+          const result = closestEmbeddings.map(embedding => embedding.hash);
+          resolve(result);
+        }
       });
     });
   }
@@ -415,16 +488,21 @@ export class ConversationDB extends Dexie {
     return dotProduct / (embedding1Norm * embedding2Norm);
   }
 
-  async getLeafMessageFromAncestor(message: MessageDB): Promise<MessageDB> {
+  private async getLeafMessageFromAncestorHelper(message: MessageDB): Promise<MessageDB> {
     const children = await this.messages.where('parentHash').equals(message.hash).sortBy('timestamp');
     if (children.length === 0) {
         return message;  // No children, message is a leaf node
     }
     // Recurse with the oldest child
-    return this.getLeafMessageFromAncestor(children[0]);
+    return this.getLeafMessageFromAncestorHelper(children[0]);
   }
 
-  async addPin(message: MessageDB, remoteTimestamp: number): Promise<void> {
+  async getLeafMessageFromAncestor(message: PersistedMessage): Promise<PersistedMessage> {
+    const messageDB = await this.getLeafMessageFromAncestorHelper(message);
+    return dbToPersistedMessage(this, messageDB);
+  }
+
+  async addPin(message: PersistedMessage, remoteTimestamp: number): Promise<void> {
     this.transaction('rw', this.pins, async () => {
       if (await this.hasPin(message)) return;
 
@@ -438,21 +516,21 @@ export class ConversationDB extends Dexie {
     });
   }
 
-  async removePin(message: MessageDB): Promise<void> {
+  async removePin(message: PersistedMessage): Promise<void> {
     this.transaction('rw', this.pins, async () => {
       await this.pins.where('hash').equals(message.hash).delete();
     });
   }
 
-  async hasPin(message: MessageDB): Promise<boolean> {
+  async hasPin(message: PersistedMessage): Promise<boolean> {
     const pin = await this.pins.get(message.hash);
     return !!pin;
   }
 
-  async getPinnedMessages(): Promise<MessageDB[]> {
+  async getPinnedMessages(): Promise<PersistedMessage[]> {
     const pins = await this.pins.toArray();
     const pinnedMessages = await Promise.all(pins.map(pin => this.getMessageByHash(pin.hash)));
-    return pinnedMessages.filter((message): message is MessageDB => !!message).sort((a, b) => a.timestamp - b.timestamp);
+    return pinnedMessages.filter(isTruthy).sort((a, b) => a.timestamp - b.timestamp);
   }
 
   async saveFunctionResult(spec: FunctionResultSpec): Promise<FunctionResultDB> {
@@ -465,19 +543,18 @@ export class ConversationDB extends Dexie {
   }
 
   async getFunctionResultsByUUID(uuid: string): Promise<FunctionResultDB[]> {
-    const results = await this.functionResults.where('uuid').equals(uuid).sortBy('id');
-    return results as FunctionResultDB[];
+    return (await this.functionResults.where('uuid').equals(uuid).sortBy('id')).filter(isFunctionResultDB);
   }
 
-  async saveFunctionDependency(messageDB: MessageDB, dependencyName: string): Promise<FunctionDependencyDB> {
+  async saveFunctionDependency(message: PersistedMessage, dependencyName: string): Promise<FunctionDependencyDB> {
     return this.transaction('rw', [this.functionResults, this.functionDependencies], async () => {
       const dependencyDB: FunctionDependencyDB = {
-        hash: messageDB.hash,
+        hash: message.hash,
         timestamp: Date.now(),
         dependencyName,
       };
 
-      const functionResults = await getFunctionResultsFromMessage(this, messageDB);
+      const functionResults = await getFunctionResultsFromMessage(this, message);
 
       if (!functionResults) throw new Error('Cannot add dependency to a non-function message.');
       if (functionResults.some(result => result.completed)) throw new Error('Cannot add dependency to completed function result.');

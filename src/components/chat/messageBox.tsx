@@ -4,7 +4,7 @@ import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import PruneButton from './pruneButton';
 import EditButton from './editButton';
-import { ConversationDB, MaybePersistedMessage, MessageDB, isMessageDB } from '../../chat/conversationDb';
+import { ConversationDB, MaybePersistedMessage, PersistedMessage, isPersistedMessage } from '../../chat/conversationDb';
 import AssistantIcon from '@mui/icons-material/PrecisionManufacturing';
 import UserIcon from '@mui/icons-material/Person';
 import SystemIcon from '@mui/icons-material/Dns';
@@ -28,7 +28,7 @@ const db = new ConversationDB();
 
 const ContentRenderer: React.FC<{ message: MaybePersistedMessage; openOtherHash: (hash: string) => void }> = ({ message, openOtherHash }) => {
   const content = useLiveQuery(async () => {
-    if (!isMessageDB(message)) {
+    if (!isPersistedMessage(message)) {
       return message.content;
     }
     return possiblyEmbellishedMessageToMarkdown(db, message);
@@ -40,10 +40,10 @@ const ContentRenderer: React.FC<{ message: MaybePersistedMessage; openOtherHash:
 type MessageProps = {
   message: MaybePersistedMessage;
   conversation: Conversation;
-  onPrune: (message: MessageDB) => void;
-  onEdit: (message: MessageDB) => void;
+  onPrune: (message: PersistedMessage) => void;
+  onEdit: (message: PersistedMessage) => void;
   openOtherHash: (hash: string) => void;
-  openMessage: (message: MessageDB) => void;
+  openMessage: (message: PersistedMessage) => void;
   isTail: boolean;
   switchToConversation: (runningConversation: RunningConversation) => void;
 };
@@ -52,7 +52,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, conversation, onPrune, on
   const [openDetails, setOpenDetails] = useState(false);
 
   const siblings: MessageWithSummary[] = useLiveQuery(async () => {
-    if (!isMessageDB(message)) {
+    if (!isPersistedMessage(message)) {
       return [];
     }
 
@@ -68,7 +68,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, conversation, onPrune, on
   }, [message], []);
 
   const [incompletePersistence, summary]: [boolean | undefined, string | undefined] = useLiveQuery(async () => {
-    if (!isMessageDB(message)) {
+    if (!isPersistedMessage(message)) {
       return [undefined, undefined];
     }
 
@@ -81,11 +81,11 @@ const MessageBox: React.FC<MessageProps> = ({ message, conversation, onPrune, on
     return [!(summary && embedding && summaryEmbedding), summary?.summary ?? ""] as [boolean, string];
   }, [message], [undefined, undefined]);
 
-  const siblingPos = isMessageDB(message) ? siblings.findIndex((sibling) => sibling.message.hash === message.hash) + 1 : 0;
+  const siblingPos = isPersistedMessage(message) ? siblings.findIndex((sibling) => sibling.message.hash === message.hash) + 1 : 0;
 
   const [openSiblings, setOpenSiblings] = useState(false);
 
-  const siblingsTyping = isMessageDB(message) ? Object.values(useTypingWatcher(message, "siblings")).map(({runningConversation}) => runningConversation) : [];
+  const siblingsTyping = isPersistedMessage(message) ? Object.values(useTypingWatcher(message, "siblings")).map(({runningConversation}) => runningConversation) : [];
 
   // Define styles
   let backgroundColor: string;
@@ -114,7 +114,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, conversation, onPrune, on
       icon = <FunctionIcon />; // Replace with the actual icon component
       break;
     default:
-      throw new Error(`Unknown message role: ${message.role}`);
+      throw new Error(`Unknown message role: ${message}`);
   }
 
   return (
@@ -175,7 +175,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, conversation, onPrune, on
             gap: '2px',
           }}
         >
-          { isMessageDB(message) && (siblings.length > 1) &&
+          { isPersistedMessage(message) && (siblings.length > 1) &&
             <>
               <CornerButton
                 onClick={() => setOpenSiblings(true)}
@@ -196,17 +196,17 @@ const MessageBox: React.FC<MessageProps> = ({ message, conversation, onPrune, on
             gap: '2px',
           }}
         >
-          {isMessageDB(message) && <PruneButton onClick={() => onPrune(message)} />}
-          {isMessageDB(message) && <EditButton onClick={() => onEdit(message)} />}
+          {isPersistedMessage(message) && <PruneButton onClick={() => onPrune(message)} />}
+          {isPersistedMessage(message) && <EditButton onClick={() => onEdit(message)} />}
           {isAPIKeySet() &&
-            isMessageDB(message) && <PinButton message={message} />
+            isPersistedMessage(message) && <PinButton message={message} />
           }
           <CopyButton contentToCopy={message.content} />
-          {isMessageDB(message) && <CornerButton onClick={() => setOpenDetails(true)} icon={<InfoIcon fontSize="inherit" />} />}
-          {isMessageDB(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} activeLink={!isTail} />}
+          {isPersistedMessage(message) && <CornerButton onClick={() => setOpenDetails(true)} icon={<InfoIcon fontSize="inherit" />} />}
+          {isPersistedMessage(message) && <EmojiShaButton hash={message.hash} openConversation={() => openMessage(message)} activeLink={!isTail} />}
         </Box>
       </Box>
-      { isMessageDB(message) &&
+      { isPersistedMessage(message) &&
         <>
           { incompletePersistence !== undefined && summary !== undefined &&
             <MessageDetails open={openDetails} onClose={() => setOpenDetails(false)} message={message} conversation={conversation} openOtherHash={openOtherHash} incompletePersistence={incompletePersistence} summary={summary} />

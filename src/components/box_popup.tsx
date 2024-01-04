@@ -11,9 +11,9 @@ import {
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import MicIcon from '@mui/icons-material/Mic';
-import { getTranscription, getEdit } from "../openai_api";
+import { getTranscription } from "../openai_api";
 import FullScreenPopup from './full_screen_popup';
-import { MessageDB } from "../chat/conversationDb";
+import { PersistedMessage } from "../chat/conversationDb";
 import { ParticipantRole } from "../chat/participantSubjects";
 import AssistantIcon from '@mui/icons-material/PrecisionManufacturing';
 import UserIcon from '@mui/icons-material/Person';
@@ -27,7 +27,7 @@ interface BoxPopupProps {
   onSubmitText?: string;
   onSubmit?: (text: string, role: ParticipantRole) => void;
   description: string;
-  message: MessageDB;
+  message: PersistedMessage;
   fieldId: string;
   fieldName: string;
 }
@@ -65,17 +65,18 @@ export default function BoxPopup({
   }
 
   // Call this function when the user starts recording
-  async function startRecordingEdit() {
-    const { finishEdit } = await getEdit(textValue);
+  // TODO: replace getEdit with a custom edit conversation
+  // async function startRecordingEdit() {
+  //   const { finishEdit } = await getEdit(textValue);
 
-    setOnStopRecordingEdit(() => {
-      return async () => {
-        const transcript = await finishEdit();
-        setTextValue(transcript || "");
-        setOnStopRecordingEdit(null);
-      }
-    });
-  }
+  //   setOnStopRecordingEdit(() => {
+  //     return async () => {
+  //       const transcript = await finishEdit();
+  //       setTextValue(transcript || "");
+  //       setOnStopRecordingEdit(null);
+  //     }
+  //   });
+  // }
 
   const handleRoleChange = (
     event: React.MouseEvent<HTMLElement>,
@@ -123,9 +124,10 @@ export default function BoxPopup({
                 }
                 label={
                   <IconButton onClick={()=>{
-                    onStopRecordingEdit ? onStopRecordingEdit() : startRecordingEdit();
+                    // TODO: replace getEdit with a custom edit conversation
+                    //onStopRecordingEdit ? onStopRecordingEdit() : startRecordingEdit();
                   }}>
-                    <EditNoteIcon />
+                    <EditNoteIcon color="disabled"/>
                   </IconButton>
                 }
               />

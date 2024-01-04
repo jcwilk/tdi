@@ -8,7 +8,7 @@ export function defineConversationDBSchema(db: ConversationDB) {
     summaries: '&hash,timestamp,summary',
     summaryEmbeddings: '&hash,timestamp,embedding',
     pins: '&hash,timestamp,version,remoteTimestamp',
-    functionResults: '++id,*uuid,timestamp,functionName,result,completed',
+    functionResults: '++id,*uuid,timestamp,functionName,result,completed', // TODO: make uuid a normal index
     functionDependencies: '&hash,timestamp,dependencyName',
   });
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ConversationDB, MessageDB } from '../../chat/conversationDb';
+import { ConversationDB, PersistedMessage } from '../../chat/conversationDb';
 import { Message, getLastMessage, observeNewMessages } from '../../chat/conversation';
 import { reprocessMessagesStartingFrom } from '../../chat/messagePersistence';
 import { Box, Button, List, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
@@ -21,7 +21,7 @@ const StripedListItem = styled(ListItemButton)`
 
 export type RunningConversationOption = {
   runningConversation: RunningConversation;
-  message: MessageDB;
+  message: PersistedMessage;
 }
 
 const mainSystemMessage: Message = {
@@ -32,7 +32,7 @@ const mainSystemMessage: Message = {
 }
 
 const LeafMessages: React.FC<{
-  openMessage: (message: MessageDB) => void,
+  openMessage: (message: PersistedMessage) => void,
   switchToConversation: (runningConversation: RunningConversation) => void,
   db: ConversationDB
 }> = ({ openMessage, switchToConversation, db }) => {
@@ -40,7 +40,7 @@ const LeafMessages: React.FC<{
   const runningConversations = useConversationStore();
   const [runningLeafMessages, setRunningLeafMessages] = useState<RunningConversationOption[]>([]);
 
-  const pinnedMessages: MessageDB[] = useLiveQuery(() => {
+  const pinnedMessages: PersistedMessage[] = useLiveQuery(() => {
     return db.getPinnedMessages();
   }, [db], []);
 
@@ -68,7 +68,7 @@ const LeafMessages: React.FC<{
   }, [runningConversations]);
 
   const handleNewConversation = useCallback(async () => {
-    const newMessages = await reprocessMessagesStartingFrom("paused", [mainSystemMessage]);
+    const newMessages = await reprocessMessagesStartingFrom(db, "paused", [mainSystemMessage]);
     const newLeaf = newMessages[newMessages.length - 1].message;
     openMessage(newLeaf);
   }, [openMessage]);

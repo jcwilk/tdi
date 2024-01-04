@@ -1,5 +1,6 @@
 import { BehaviorSubject, Observable, Subject, concat, filter, map } from "rxjs";
-import { ChatMessage, FunctionCall, FunctionOption, getChatCompletion } from "../openai_api";
+import { FunctionCallMetadata, FunctionOption, getChatCompletion } from "../openai_api";
+import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
 export type chatCompletionStream = {
   typingStream: Subject<string>,
@@ -11,7 +12,7 @@ export type GPTTextUpdate = {
 }
 
 export type GPTFunctionCall = {
-  functionCall: FunctionCall
+  functionCall: FunctionCallMetadata
 }
 
 export type GPTSentMessage = {
@@ -47,7 +48,7 @@ function adjustModel(model: SupportedModels, functions: FunctionOption[]): Suppo
 }
 
 export function chatCompletionMetaStream(
-  messages: ChatMessage[],
+  messages: ChatCompletionMessageParam[],
   temperature: number,
   model: SupportedModels = "gpt-4",
   maxTokens: number,

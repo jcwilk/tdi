@@ -2,13 +2,12 @@ import React, { useEffect, useState, useRef, useCallback, ReactNode, useMemo } f
 import { Box, AppBar, Toolbar, IconButton, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
 import { Conversation, ConversationMode, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
-import { ConversationDB, ConversationMessages, MessageDB } from '../../chat/conversationDb';
+import { ConversationDB, ConversationMessages, PersistedMessage } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
 import { FunctionOption } from '../../openai_api';
 import BoxPopup from '../box_popup';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import { FunctionManagement } from './functionManagement';
-import { getAllFunctionOptions } from '../../chat/functionCalling';
 import MessageEntry from './messageEntry';
 import PauseIcon from '@mui/icons-material/Pause';
 import MinimizeIcon from '@mui/icons-material/Minimize';
@@ -28,10 +27,10 @@ type ConversationModalProps = {
   conversation: Conversation;
   onClose: () => void;
   minimize: () => void;
-  editMessage: (message: MessageDB, newContent: string, newRole: ParticipantRole) => void; // Callback for editing a message
-  pruneMessage: (message: MessageDB) => void; // Callback for pruning a message
+  editMessage: (message: PersistedMessage, newContent: string, newRole: ParticipantRole) => void; // Callback for editing a message
+  pruneMessage: (message: PersistedMessage) => void; // Callback for pruning a message
   openSha: (leafMessage: string) => void; // Callback for attempting to open a message by sha
-  openMessage: (message: MessageDB) => void; // Callback for opening a message in the editor
+  openMessage: (message: PersistedMessage) => void; // Callback for opening a message in the editor
   onNewModel: (model: ConversationMode) => void;
   onFunctionsChange: (updatedFunctions: FunctionOption[]) => void;
   switchToConversation: (runningConversation: RunningConversation) => void;
@@ -44,7 +43,7 @@ const noopF = () => { };
 const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, minimize, editMessage, pruneMessage, openSha, openMessage, onNewModel, onFunctionsChange, switchToConversation }) => {
   const [messages, setMessages] = useState<ConversationMessages>(getAllMessages(conversation));
   const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
-  const [editingMessage, setEditingMessage] = useState<MessageDB | null>();
+  const [editingMessage, setEditingMessage] = useState<PersistedMessage | null>();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
   const [openDescendants, setOpenDescendants] = useState<boolean>(false);
@@ -53,10 +52,10 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
     return messages[messages.length - 1];
   }, [messages]);
 
-  const availableChild: MessageDB | null | undefined = useLiveQuery(() => {
+  const availableChild: PersistedMessage | null | undefined = useLiveQuery(async () => {
     const message = messages[messages.length - 1];
 
-    return db.messages.where('parentHash').equals(message.hash).sortBy('timestamp').then(children => children[0] ?? null);
+    return (await db.getDirectChildren(message))[0] ?? null;
   }, [messages], undefined);
 
   const availableIndirectDescendent = useLiveQuery(async () => {
@@ -85,7 +84,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
       observeTypingUpdates(conversation, "assistant").subscribe(partial => {
         setAssistantTyping(partial);
       }),
-      observeNewMessages(conversation, false).subscribe((message: MessageDB) => {
+      observeNewMessages(conversation, false).subscribe((message: PersistedMessage) => {
         setMessages((previousMessages) => [...previousMessages, message]);
       })
     ];

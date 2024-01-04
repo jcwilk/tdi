@@ -2,12 +2,12 @@ import React, { useCallback, useMemo } from 'react';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import CornerButton from './cornerButton';
 import { getStores } from './useConversationStore';
-import { MessageDB } from '../../chat/conversationDb';
+import { PersistedMessage } from '../../chat/conversationDb';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { pinConversationByLeaf, unpinConversationByLeaf } from '../../chat/convoPinning';
 
 type PinButtonProps = {
-  message: MessageDB
+  message: PersistedMessage
 };
 
 const PinButton: React.FC<PinButtonProps> = ({ message }) => {

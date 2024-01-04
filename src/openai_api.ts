@@ -1,14 +1,14 @@
-import { Configuration, OpenAIApi } from 'openai';
+import { OpenAI } from 'openai';
 import { APIKeyFetcher } from './api_key_storage';
-import { deserializeFunctionMessageContent } from './chat/functionCalling';
 import JSON5 from 'json5'
+import { ChatCompletion, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { ChatCompletionStreamParams } from 'openai/resources/beta/chat/completions';
 
-const getClient = function(): OpenAIApi | null {
+const getClient = function(): OpenAI | null {
   const apiKey = APIKeyFetcher();
   if(!apiKey) return null;
 
-  const configuration = new Configuration({ apiKey, organization: "org-6d0xAcuSuOUHzq8s4TejB1TQ" });
-  return new OpenAIApi(configuration);
+  return new OpenAI({ apiKey, organization: "org-6d0xAcuSuOUHzq8s4TejB1TQ", dangerouslyAllowBrowser: true });
 }
 
 export type ChatMessage = {
@@ -53,21 +53,28 @@ export type FunctionOption = {
   },
 };
 
-type ChatCompletionPayload = {
-  messages: ChatMessage[],
-  model: string,
-  max_tokens: number,
-  temperature: number,
-  stream: boolean,
-  functions?: FunctionOption[],
-  function_call?: "none" | "auto"
+export type ToolOption = {
+  type: "function",
+  function: FunctionOption
 }
 
 export type FunctionParameters = { [key: string]: any }
 
-export type FunctionCall = {
+export type FunctionCallMetadata = LegacyFunctionCall | ToolFunctionCall
+
+export type LegacyFunctionCall = {
   name: string,
   parameters: FunctionParameters
+}
+
+export type ToolFunctionCall = {
+  name: string,
+  parameters: FunctionParameters,
+  id: string
+}
+
+export function isToolFunctionCall(functionCall: FunctionCallMetadata): functionCall is ToolFunctionCall {
+  return "id" in functionCall && typeof functionCall.id === "string";
 }
 
 export async function getEmbedding(
@@ -103,179 +110,64 @@ export async function getEmbedding(
 }
 
 export async function getChatCompletion(
-  messages: ChatMessage[],
+  messages: ChatCompletionMessageParam[],
   temperature: number,
   model = "gpt-4",
   maxTokens: number,
   functions: FunctionOption[] = [],
   onChunk: (chunk: string) => void = () => {},
-  onFunctionCall: (functionCall: FunctionCall) => void = () => {},
+  onFunctionCall: (functionCall: FunctionCallMetadata) => void = () => {},
   onSentMessage: (message: string) => void = () => {},
   onCutoff: (message: string) => void = () => {}
 ): Promise<void> {
-  const OPENAI_KEY = APIKeyFetcher();
-  if (!OPENAI_KEY) return;
+  const client = getClient();
+  if (!client) return;
 
-  const payload: ChatCompletionPayload = {
+  const payload: ChatCompletionStreamParams = {
     // TODO: Getting the function name here programmatically is a little bit tricky since we need the original contents of the message
     // which contains the name of the function call. The embellished contents of the message is (at time of writing) a human readable
     // markdown version of the message which would be too awkward to parse the name out of. There's some work to be done here to make
     // it less ambiguous about whether a message is a function call, whether it's been embellished, etc.
-    messages: messages.map((message: ChatMessage) => message.role === "function" ? { ...message, name: "TODO" } : message ),
+    messages,
     model,
     max_tokens: maxTokens,
     temperature,
     stream: true
   }
   if (functions.length > 0) {
-    payload.functions = functions;
-    payload.function_call = "auto";
+    payload.tools = functions.map(functionOption => ({ type: "function", function: functionOption }));
+    payload.tool_choice = "auto";
   }
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${APIKeyFetcher()}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload)
-  });
-  if(!response.body) return
 
-  const decoder = new TextDecoder('utf8');
-  const reader = response.body.getReader();
+  const stream = client.beta.chat.completions.stream(payload);
 
-  let functionName: string | null = null;
-  let aggregatedContents: string = '';
-  let aggregatedRawContents: string = '';
+  stream.on('content', (_chunk: string, snapshot: string) => {
+    onChunk(snapshot);
+  })
 
-  while(true) {
-    const { value, done } = await reader.read();
+  stream.on('chatCompletion', (completion: ChatCompletion) => {
+    const message = completion.choices[0].message;
+    const finishReason = completion.choices[0].finish_reason;
 
-    const rawDelta = decoder.decode(value)
-    //console.log("raw delta:", rawDelta)
-
-    // uncomment this to cause hell to the end of checking error handling
-    //JSON.parse("{")
-
-    aggregatedRawContents += rawDelta;
-    const lines = splitDataLines(rawDelta)
-
-    lines.forEach(line => {
-      aggregatedContents = processChunk(
-        line,
-        aggregatedContents,
-        functionName,
-        name => functionName = name,
-        onFunctionCall,
-        onSentMessage,
-        onCutoff
-      )
-      //console.log("aggregated contents:", aggregatedContents)
-
-      if (aggregatedContents !== "") {
-        // Just so that we're sending a last hypothetical chunk out prior to calling onFunctionCall
-        if (functionName) {
-          onChunk(`Function call: ${functionName}\n\nArguments: ` + aggregatedContents)
-        }
-        else {
-          onChunk(aggregatedContents)
-        }
+    if (message.content && message.content.length > 0) {
+      if (finishReason === "length") {
+        onCutoff(message.content);
       }
-    })
-
-    if (done) {
-      // console.log("full aggregate:", aggregatedContents)
-      // console.log("full raw contents", aggregatedRawContents)
-
-      return;
+      else {
+        onSentMessage(message.content);
+      }
     }
-  }
-}
 
-function splitDataLines(input: string): string[] {
-  // Split by the double newline
-  const rawLines = input.split('\n\n');
+    if (message.function_call) onFunctionCall({name: message.function_call.name, parameters: JSON5.parse(message.function_call.arguments) as FunctionParameters});
 
-  // Trim and filter out only lines starting with 'data: '
-  return rawLines.map(line => line.trim()).filter(line => line.startsWith('data: '));
-}
+    if (message.tool_calls) {
+      message.tool_calls.forEach(toolCall => {
+        onFunctionCall({name: toolCall.function.name, parameters: JSON5.parse(toolCall.function.arguments) as FunctionParameters, id: toolCall.id});
+      })
+    }
+  });
 
-// Designed to be called iteratively with `data` being one line starting with "data: ". The `data` chunks can form either (extra newline between items omitted for brevity, there are always two newlines between chunks):
-// Regular messages, which are passed to the onMessage callback, in this case as message="Hi"
-//
-// data: {"id":"chatcmpl-7vUN8047stwUYXPRiOgiRHpnk4Awi","object":"chat.completion.chunk","created":1693935802,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vUN8047stwUYXPRiOgiRHpnk4Awi","object":"chat.completion.chunk","created":1693935802,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vUN8047stwUYXPRiOgiRHpnk4Awi","object":"chat.completion.chunk","created":1693935802,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vUN8047stwUYXPRiOgiRHpnk4Awi","object":"chat.completion.chunk","created":1693935802,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
-// data: [DONE]
-//
-// Or function calls, which are passed to the onFunction callback, in this case as name="get_user_name" and parameters={"user_id": "123"}
-//
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"role":"assistant","content":null,"function_call":{"name":"get_user_name","arguments":""}},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"{\n"}},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":" "}},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":" \""}},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"user_"}},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"id\":"}},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":" "}},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"123"}},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{"function_call":{"arguments":"}"}},"finish_reason":null}]}
-// data: {"id":"chatcmpl-7vV0dlD4qvYJVjWm5t5JqgGlJZZt9","object":"chat.completion.chunk","created":1693938251,"model":"gpt-3.5-turbo-0613","choices":[{"index":0,"delta":{},"finish_reason":"function_call"}]}
-// data: [DONE]
-//
-// It will call `onFunctionName` if it finds a function name, with the expectation that the `functionName` will be passed in to subsequent calls.
-function processChunk(
-  data: string,
-  aggregatedContents: string,
-  functionName: string | null,
-  onFunctionName: (name: string) => void,
-  onFunction: (functionCall: FunctionCall) => void, // found a function call
-  onSendMessage: (message: string) => void, // found a complete sent message event
-  onCutoff: (message: string) => void // found a sent message event which was finished because it ran out of tokens
-): string {
-  // Check for the DONE signal
-  if (data.trim() === "data: [DONE]") {
-    return aggregatedContents;  // We will handle the done signal in individual finish_reason checks now
-  }
-
-  // Extract the JSON object from the chunk
-  const jsonData = JSON.parse(data.substring(6).trim()); // Removing "data: "
-
-  // Check for function call name
-  if (jsonData.choices[0].delta.function_call && jsonData.choices[0].delta.function_call.name) {
-    const name = jsonData.choices[0].delta.function_call.name;
-    onFunctionName(name);
-    return jsonData.choices[0].delta.function_call.arguments || "";  // Start collecting function parameters
-  }
-
-  // If the chunk contains function call arguments, aggregate them
-  if (jsonData.choices[0].delta.function_call && jsonData.choices[0].delta.function_call.arguments !== undefined) {
-    return aggregatedContents + jsonData.choices[0].delta.function_call.arguments;
-  }
-
-  // If it's a regular message, aggregate the contents
-  if (jsonData.choices[0].delta.content !== undefined) {
-    return aggregatedContents + jsonData.choices[0].delta.content;
-  }
-
-  // Check the finish_reason to decide the action
-  const finishReason = jsonData.choices[0].finish_reason;
-  if (finishReason === 'stop') {
-    onSendMessage(aggregatedContents);
-    return ""; // Reset aggregated contents after sending the message
-  } else if (finishReason === 'function_call') {
-    onFunction({
-      name: functionName!,
-      parameters: JSON5.parse(aggregatedContents) as FunctionParameters // JSON5.parse has more liberal support for squirrely JSON
-    });
-    return ""; // Reset aggregated contents after function call
-  } else if (finishReason === 'length') {
-    onCutoff(aggregatedContents);
-    return ""; // Reset aggregated contents after calling the onCutoff callback
-  }
-
-  console.error("Unknown chunk type:", jsonData)
-  return aggregatedContents;  // If no other conditions met, just return the previous aggregated contents
+  await stream.done();
 }
 
 async function saveAudioInput(): Promise<{ audioBlobPromise: Promise<Blob>, stopRecording: () => void }> {
@@ -348,27 +240,6 @@ export async function getTranscription(): Promise<{ getTranscript: () => Promise
   }
 
   return { getTranscript };
-}
-
-export async function getEdit(sourceText: string): Promise<{ finishEdit: () => Promise<string | null> }> {
-  const openai = getClient();
-  if (!openai) return { finishEdit: async () => ""};
-
-  const { getTranscript } = await getTranscription();
-
-  const finishEdit = async () => {
-    const transcript = await getTranscript();
-    if(!transcript) return null;
-
-    const response = await openai.createEdit({
-      model: "text-davinci-edit-001",
-      input: sourceText,
-      instruction: transcript
-    });
-    return response.data.choices[0].text || "";
-  }
-
-  return { finishEdit };
 }
 
 export type TrainingLineItem = {
