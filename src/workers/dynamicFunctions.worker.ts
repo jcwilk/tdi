@@ -1,7 +1,7 @@
 import { EMPTY, Observable, from, isObservable, of } from "rxjs";
 import * as RxJS from "rxjs";
-import { ConversationDB, FunctionDependencyDB } from "../chat/conversationDb";
-import { DynamicFunctionWorkerPayload, DynamicFunctionWorkerResponse, FunctionReturn, coerceAndOrderFunctionParameters, denylistedInvocableFunctionNames, deserializeFunctionMessageContent, functionSpecs, generateNestedFunctions, isDynamicFunctionMessageContent, isFunctionMessage } from "../chat/functionCalling";
+import { ConversationDB, FunctionDependencyDB, isEmbellishedFunctionMessage } from "../chat/conversationDb";
+import { DynamicFunctionWorkerPayload, DynamicFunctionWorkerResponse, FunctionReturn, coerceAndOrderFunctionParameters, denylistedInvocableFunctionNames, deserializeFunctionMessageContent, functionSpecs, generateNestedFunctions, isDynamicFunctionMessageContent } from "../chat/functionCalling";
 import { FunctionParameters } from "../openai_api";
 
 const db = new ConversationDB();
@@ -19,7 +19,7 @@ async function buildFunction(functionHash: string, staticFunctionNames: string[]
   const functionMessage = await db.getMessageByHash(functionHash);
 
   if (!functionMessage) throw new Error(`Function message with hash "${functionHash}" not found.`);
-  if (!isFunctionMessage(functionMessage)) throw new Error(`Message with hash "${functionHash}" is not a function message.`);
+  if (!isEmbellishedFunctionMessage(functionMessage)) throw new Error(`Message with hash "${functionHash}" is not a function message.`);
 
   const functionMessageContent = deserializeFunctionMessageContent(functionMessage.content);
   if (!functionMessageContent) throw new Error("Invalid function message content");
