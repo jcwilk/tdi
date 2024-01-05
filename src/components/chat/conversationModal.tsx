@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, ReactNode, useMemo } f
 import { Box, AppBar, Toolbar, IconButton, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
 import { Conversation, ConversationMode, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
-import { ConversationDB, ConversationMessages, PersistedMessage } from '../../chat/conversationDb';
+import { ConversationDB, ConversationMessages, PersistedMessage, PreloadedConversationMessages, PreloadedMessage } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
 import { FunctionOption } from '../../openai_api';
 import BoxPopup from '../box_popup';
@@ -17,14 +17,15 @@ import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrow
 import { ParticipantRole } from '../../chat/participantSubjects';
 import { RunningConversation } from './useConversationStore';
 import { LeafDescendantsDialog } from './messageBoxDialogs';
-import { defaultIfEmpty, filter, firstValueFrom, map } from 'rxjs';
+import { concatMap, defaultIfEmpty, filter, firstValueFrom, map } from 'rxjs';
 import ShareGptButton from './shareGptButton';
 import { JsonEditorButton } from './jsonEditorButton';
 import { isAPIKeySet } from '../../api_key_storage';
 import { ApiKeyEntryButton } from './apiKeyEntryButton';
 
 type ConversationModalProps = {
-  conversation: Conversation;
+  db: ConversationDB;
+  runningConversation: RunningConversation;
   onClose: () => void;
   minimize: () => void;
   editMessage: (message: PersistedMessage, newContent: string, newRole: ParticipantRole) => void; // Callback for editing a message
@@ -36,12 +37,12 @@ type ConversationModalProps = {
   switchToConversation: (runningConversation: RunningConversation) => void;
 };
 
-const db = new ConversationDB();
-
 const noopF = () => { };
 
-const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onClose, minimize, editMessage, pruneMessage, openSha, openMessage, onNewModel, onFunctionsChange, switchToConversation }) => {
-  const [messages, setMessages] = useState<ConversationMessages>(getAllMessages(conversation));
+const ConversationModal: React.FC<ConversationModalProps> = ({ db, runningConversation, onClose, minimize, editMessage, pruneMessage, openSha, openMessage, onNewModel, onFunctionsChange, switchToConversation }) => {
+  const { conversation, initialPreloadedMessages } = runningConversation;
+
+  const [messages, setMessages] = useState<PreloadedConversationMessages>(initialPreloadedMessages);
   const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
   const [editingMessage, setEditingMessage] = useState<PersistedMessage | null>();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -78,13 +79,13 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
   }, [messages, assistantTyping, messagesEndRef.current, autoScroll]);
 
   useEffect(() => {
-    setMessages(getAllMessages(conversation));
-
     const subscriptions = [
       observeTypingUpdates(conversation, "assistant").subscribe(partial => {
         setAssistantTyping(partial);
       }),
-      observeNewMessages(conversation, false).subscribe((message: PersistedMessage) => {
+      observeNewMessages(conversation, false).pipe(
+        concatMap(message => db.preloadMessage(message))
+      ).subscribe((message: PreloadedMessage) => {
         setMessages((previousMessages) => [...previousMessages, message]);
       })
     ];
@@ -199,6 +200,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
         {messages.map((message, index) => (
           <MessageBox
             key={message.hash}
+            db={db}
             message={message}
             conversation={conversation}
             onPrune={pruneMessage}
@@ -212,6 +214,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ conversation, onC
         {assistantTyping && (
           <MessageBox
             key="assistant-typing"
+            db={db}
             message={{ role: 'assistant', content: assistantTyping }}
             conversation={conversation}
             onPrune={noopF}

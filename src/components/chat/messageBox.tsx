@@ -4,7 +4,7 @@ import MarkdownRenderer from './markdownRenderer';
 import CopyButton from './copyButton';
 import PruneButton from './pruneButton';
 import EditButton from './editButton';
-import { ConversationDB, MaybePersistedMessage, PersistedMessage, isPersistedMessage } from '../../chat/conversationDb';
+import { ConversationDB, MaybePersistedMessage, PersistedMessage, PreloadedMessage, isPersistedMessage, isPreloadedMessage } from '../../chat/conversationDb';
 import AssistantIcon from '@mui/icons-material/PrecisionManufacturing';
 import UserIcon from '@mui/icons-material/Person';
 import SystemIcon from '@mui/icons-material/Dns';
@@ -22,23 +22,17 @@ import { MessageWithSummary, SiblingsDialog } from './messageBoxDialogs';
 import PinButton from './pinButton';
 import { possiblyEmbellishedMessageToMarkdown } from '../../chat/functionCalling';
 import { isAPIKeySet } from '../../api_key_storage';
-import { Conversation } from '../../chat/conversation';
+import { Conversation, Message } from '../../chat/conversation';
 
-const db = new ConversationDB();
-
-const ContentRenderer: React.FC<{ message: MaybePersistedMessage; openOtherHash: (hash: string) => void }> = ({ message, openOtherHash }) => {
-  const content = useLiveQuery(async () => {
-    if (!isPersistedMessage(message)) {
-      return message.content;
-    }
-    return possiblyEmbellishedMessageToMarkdown(db, message);
-  }, [message], message.content);
+const ContentRenderer: React.FC<{ db: ConversationDB, message: Message | PreloadedMessage; openOtherHash: (hash: string) => void }> = ({ db, message, openOtherHash }) => {
+  const content = isPreloadedMessage(message) ? possiblyEmbellishedMessageToMarkdown(db, message) : message.content;
 
   return <MarkdownRenderer content={content} openOtherHash={openOtherHash ?? (() => {})} />;
 };
 
 type MessageProps = {
-  message: MaybePersistedMessage;
+  db: ConversationDB;
+  message: Message | PreloadedMessage;
   conversation: Conversation;
   onPrune: (message: PersistedMessage) => void;
   onEdit: (message: PersistedMessage) => void;
@@ -48,15 +42,23 @@ type MessageProps = {
   switchToConversation: (runningConversation: RunningConversation) => void;
 };
 
-const MessageBox: React.FC<MessageProps> = ({ message, conversation, onPrune, onEdit, openOtherHash, openMessage, isTail, switchToConversation }) => {
+const MessageBox: React.FC<MessageProps> = ({ db, message, conversation, onPrune, onEdit, openOtherHash, openMessage, isTail, switchToConversation }) => {
   const [openDetails, setOpenDetails] = useState(false);
+  const [livePreloadedMessage, setLivePreloadedMessage] = useState<PreloadedMessage | Message>(message);
+
+  useLiveQuery(async () => {
+    if (isPreloadedMessage(message)) {
+      const preloadedMessage = await db.preloadMessage(message);
+      setLivePreloadedMessage(preloadedMessage);
+    }
+  }, [message], undefined);
 
   const siblings: MessageWithSummary[] = useLiveQuery(async () => {
     if (!isPersistedMessage(message)) {
       return [];
     }
 
-    const messages = await db.messages.where('parentHash').equals(message.parentHash ?? "").sortBy('timestamp');
+    const messages = await db.getDirectSiblings(message);
     const pairPromises = messages.map(async message => {
       const summary = await db.summaries.get(message.hash);
       return {
@@ -155,7 +157,7 @@ const MessageBox: React.FC<MessageProps> = ({ message, conversation, onPrune, on
             whiteSpace: 'pre-wrap',
           }}
         >
-          <ContentRenderer message={message} openOtherHash={openOtherHash} />
+          <ContentRenderer db={db} message={livePreloadedMessage} openOtherHash={openOtherHash} />
         </Box>
       </Box>
       <Box

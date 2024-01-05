@@ -37,7 +37,8 @@ const Client: React.FC = () => {
           runningConversation &&
           <ConversationModal
             key={runningConversation.id}
-            conversation={runningConversation.conversation}
+            db={db}
+            runningConversation={runningConversation}
             onClose={closeConvo}
             minimize={minimize}
             editMessage={editMessage}

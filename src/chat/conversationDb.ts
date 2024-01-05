@@ -3,9 +3,8 @@ import { Message } from './conversation';
 import { EMPTY, Observable, defer, filter, from, merge, mergeMap, of } from 'rxjs';
 import { getFunctionResultsFromMessage, deserializeFunctionMessageContent, isFunctionMessageContentv1 } from './functionCalling';
 import { defineConversationDBSchema } from './conversationDbMigrations';
-
 import { isTruthy } from '../tsUtils';
-import { FunctionCallMetadata, isToolFunctionCall } from '../openai_api';
+import { FunctionCallMetadata } from '../openai_api';
 
 // A special type for when it's between messagePersistence and being saved
 export type MessageSpec = Message & {
@@ -19,12 +18,11 @@ type MessageDB = MessageSpec & {
 
 export type EmbellishedFunctionMessage = MessageDB & {
   role: 'function',
-  results: Observable<FunctionResultDB[]>;
   functionCall: FunctionCallMetadata;
 }
 
 export function isEmbellishedFunctionMessage(message: Message): message is EmbellishedFunctionMessage {
-  return message.role === "function" && "functionCall" in message && "results" in message;
+  return message.role === "function" && "functionCall" in message;
 }
 
 export type PersistedMessage = BasicPersistedMessage | EmbellishedFunctionMessage;
@@ -33,8 +31,8 @@ export function isPersistedMessage(message: Message | PersistedMessage): message
   return (message as PersistedMessage).timestamp !== undefined;
 }
 
-export function isBasicPersistedMessage(message: MessageDB | PersistedMessage): message is BasicPersistedMessage {
-  return message.role === 'user' || message.role === 'assistant' || message.role === 'system';
+export function isBasicPersistedMessage(message: Message | MessageDB | PersistedMessage): message is BasicPersistedMessage {
+  return isPersistedMessage(message) && (message.role === 'user' || message.role === 'assistant' || message.role === 'system');
 }
 
 export type BasicPersistedMessage = MessageDB & {
@@ -44,6 +42,18 @@ export type BasicPersistedMessage = MessageDB & {
 export type MaybePersistedMessage = Message | PersistedMessage;
 
 export type ConversationMessages = [PersistedMessage, ...PersistedMessage[]];
+
+export type PreloadedConversationMessages = [PreloadedMessage, ...PreloadedMessage[]];
+
+export type PreloadedFunctionMessage = EmbellishedFunctionMessage & {
+  results: FunctionResultDB[],
+}
+
+export type PreloadedMessage = BasicPersistedMessage | PreloadedFunctionMessage;
+
+export function isPreloadedMessage(message: PersistedMessage | PreloadedMessage | Message): message is PreloadedMessage {
+  return isBasicPersistedMessage(message) || (isEmbellishedFunctionMessage(message) && (message as PreloadedFunctionMessage).results !== undefined);
+}
 
 export interface EmbeddingSpec {
   hash: string;
@@ -79,19 +89,18 @@ async function dbToPersistedMessage(db: ConversationDB, message: MessageDB): Pro
     }
   }
 
-  const functionResults = from(liveQuery(() => db.getFunctionResultsByUUID(functionMessageContent.uuid)));
-
   const functionMessage: EmbellishedFunctionMessage = {
     ...message,
     role: 'function', // mostly just to appease the type system
-    results: functionResults,
     functionCall: isFunctionMessageContentv1(functionMessageContent) ? {
       name: functionMessageContent.name,
       parameters: functionMessageContent.parameters,
+      uuid: functionMessageContent.uuid,
     } : {
       name: functionMessageContent.name,
       parameters: functionMessageContent.parameters,
       id: functionMessageContent.toolId,
+      uuid: functionMessageContent.uuid,
     }
   };
 
@@ -544,6 +553,16 @@ export class ConversationDB extends Dexie {
 
   async getFunctionResultsByUUID(uuid: string): Promise<FunctionResultDB[]> {
     return (await this.functionResults.where('uuid').equals(uuid).sortBy('id')).filter(isFunctionResultDB);
+  }
+
+  async preloadMessage(message: PersistedMessage | PreloadedMessage): Promise<PreloadedMessage> {
+    if (isBasicPersistedMessage(message)) return message;
+
+    const functionResults = await this.getFunctionResultsByUUID(message.functionCall.uuid);
+    return {
+      ...message,
+      results: functionResults,
+    };
   }
 
   async saveFunctionDependency(message: PersistedMessage, dependencyName: string): Promise<FunctionDependencyDB> {

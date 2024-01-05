@@ -1,6 +1,6 @@
 import React, { ReactNode, useCallback, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, List, ListItem, ListItemAvatar, ListItemButton, ListItemProps, ListItemText, ListItemTextProps, Stack, SxProps, ToggleButton, ToggleButtonGroup, Toolbar, Typography } from '@mui/material';
-import { MessageDB } from '../../chat/conversationDb';
+import { PersistedMessage } from '../../chat/conversationDb';
 import { RunningConversation, SummarizedLeafPath, useLeafMessageTracker, useTypingWatcher } from './useConversationStore';
 import { emojiSha } from '../../chat/emojiSha';
 import ShortTextIcon from '@mui/icons-material/ShortText';
@@ -162,17 +162,17 @@ function DescendantListItem(props: { path: SummarizedLeafPath, expand: boolean, 
 }
 
 export function LeafDescendantsDialog(props: {
-  onSelectMessage: (message: MessageDB) => void,
+  onSelectMessage: (message: PersistedMessage) => void,
   onClose: () => void,
   open: boolean,
-  ancestor: MessageDB
+  ancestor: PersistedMessage
 }) {
   const { onClose, open, ancestor, onSelectMessage } = props;
 
   const [expand, setExpand] = useState(false);
   const [displayContent, setDisplayContent] = useState<PrimaryOrSecondary>("both");
 
-  const handleListItemClick = useCallback((message: MessageDB) => {
+  const handleListItemClick = useCallback((message: PersistedMessage) => {
     onSelectMessage(message);
     onClose();
   }, [onClose, onSelectMessage]);
@@ -200,12 +200,12 @@ export function LeafDescendantsDialog(props: {
 }
 
 export type MessageWithSummary = {
-  message: MessageDB,
+  message: PersistedMessage,
   summary: string | null
 }
 
 export function SiblingsDialog(props: {
-  onSelectMessage: (message: MessageDB) => void,
+  onSelectMessage: (message: PersistedMessage) => void,
   switchToConversation: (RunningConversation: RunningConversation) => void,
   onClose: () => void,
   open: boolean,
@@ -217,7 +217,7 @@ export function SiblingsDialog(props: {
   const [expand, setExpand] = useState(false);
   const [displayContent, setDisplayContent] = useState<PrimaryOrSecondary>("both");
 
-  const handleListItemClick = (message: MessageDB) => {
+  const handleListItemClick = (message: PersistedMessage) => {
     onSelectMessage(message);
     onClose();
   };

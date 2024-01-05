@@ -19,7 +19,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import FormControl from '@mui/material/FormControl';
 import FormLabel from '@mui/material/FormLabel';
 import { possiblyEmbellishedMessageToMarkdown } from '../../chat/functionCalling';
-import { ConversationDB, MessageDB } from '../../chat/conversationDb';
+import { ConversationDB, PersistedMessage, PreloadedConversationMessages, PreloadedMessage } from '../../chat/conversationDb';
 
 type ShareGptMessage = {
   from: 'gpt' | 'human';
@@ -62,8 +62,8 @@ function capitalizeFirstLetter(word: string): string {
 // TODO: will come back to oranizing db access better when there's time
 const db = new ConversationDB();
 
-async function convertMessage(message: MessageDB, conversionType: string): Promise<ShareGptMessage> {
-  let content = await possiblyEmbellishedMessageToMarkdown(db, message);
+async function convertMessage(message: PreloadedMessage, conversionType: string): Promise<ShareGptMessage> {
+  let content = possiblyEmbellishedMessageToMarkdown(db, message);
 
   if (conversionType === "markdown") {
     content = await markdownToHtmlString(content);
@@ -78,7 +78,7 @@ async function convertMessage(message: MessageDB, conversionType: string): Promi
   };
 }
 
-const ShareGptButton: React.FC<{ messages: [MessageDB, ...MessageDB[]] }> = ({ messages }) => {
+const ShareGptButton: React.FC<{ messages: PreloadedConversationMessages }> = ({ messages }) => {
   const [open, setOpen] = useState(false);
   const [conversionType, setConversionType] = useState('markdown');
 

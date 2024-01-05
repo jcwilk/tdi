@@ -17,3 +17,11 @@ export function swapNonemptyTypeOrder<T>(array: [...T[], T]): [T, ...T[]] {
 export function isTruthy<T>(value: T): value is NonNullable<T> {
   return Boolean(value);
 }
+
+// TODO: integrate into the above functions
+export type NonEmptyArray<T> = [T, ...T[]];
+
+export function mapNonEmpty<T, U>(arr: NonEmptyArray<T>, func: (arg: T) => U): NonEmptyArray<U> {
+  // map the array normally, then assert the non-empty type
+  return arr.map(func) as NonEmptyArray<U>;
+}

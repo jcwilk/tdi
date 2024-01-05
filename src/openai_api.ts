@@ -3,6 +3,7 @@ import { APIKeyFetcher } from './api_key_storage';
 import JSON5 from 'json5'
 import { ChatCompletion, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { ChatCompletionStreamParams } from 'openai/resources/beta/chat/completions';
+import { v4 as uuidv4 } from 'uuid';
 
 const getClient = function(): OpenAI | null {
   const apiKey = APIKeyFetcher();
@@ -64,13 +65,15 @@ export type FunctionCallMetadata = LegacyFunctionCall | ToolFunctionCall
 
 export type LegacyFunctionCall = {
   name: string,
-  parameters: FunctionParameters
+  parameters: FunctionParameters,
+  uuid: string,
 }
 
 export type ToolFunctionCall = {
   name: string,
   parameters: FunctionParameters,
-  id: string
+  id: string,
+  uuid: string, // TODO: it may make sense to merge this with id eventually
 }
 
 export function isToolFunctionCall(functionCall: FunctionCallMetadata): functionCall is ToolFunctionCall {
@@ -158,11 +161,11 @@ export async function getChatCompletion(
       }
     }
 
-    if (message.function_call) onFunctionCall({name: message.function_call.name, parameters: JSON5.parse(message.function_call.arguments) as FunctionParameters});
+    if (message.function_call) onFunctionCall({name: message.function_call.name, parameters: JSON5.parse(message.function_call.arguments) as FunctionParameters, uuid: uuidv4()});
 
     if (message.tool_calls) {
       message.tool_calls.forEach(toolCall => {
-        onFunctionCall({name: toolCall.function.name, parameters: JSON5.parse(toolCall.function.arguments) as FunctionParameters, id: toolCall.id});
+        onFunctionCall({name: toolCall.function.name, parameters: JSON5.parse(toolCall.function.arguments) as FunctionParameters, id: toolCall.id, uuid: uuidv4()});
       })
     }
   });
@@ -364,3 +367,4 @@ export async function deleteFile(file: FileRecord): Promise<DeleteFileResponse> 
   const responseData: DeleteFileResponse = await response.json();
   return responseData;
 }
+

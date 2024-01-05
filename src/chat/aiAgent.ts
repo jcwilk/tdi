@@ -23,11 +23,11 @@ function hotShare<T>(): UnaryFunction<Observable<T>, Observable<T>> {
   });
 }
 
-async function messagesToConversationMessages(messages: ConversationMessages): Promise<ChatCompletionMessageParam[]> {
+async function messagesToConversationMessages(db: ConversationDB, messages: ConversationMessages): Promise<ChatCompletionMessageParam[]> {
   const convertedMessagesPromises = messages.map(async message => {
     if (isBasicPersistedMessage(message)) return {role: message.role, content: message.content};
 
-    const resultsWithCompletion = await firstValueFrom(message.results);
+    const resultsWithCompletion = await db.getFunctionResultsByUUID(message.functionCall.uuid);
     const resultsOnly = resultsWithCompletion.filter(isFunctionResultWithResult);
     const results = {
       results: resultsOnly.map(result => result.result),
@@ -89,7 +89,7 @@ export function addAssistant(
     map(([messages, _typing]) => messages)
   );
 
-  const typingAndSending = switchedOutputStreamsFromRespondableMessages(newRespondableMessages, conversation.model, conversation.functions)
+  const typingAndSending = switchedOutputStreamsFromRespondableMessages(db, newRespondableMessages, conversation.model, conversation.functions)
     .pipe(
       catchError(err => {
         console.error("Error from before handleGptMessages!", err);
@@ -123,6 +123,7 @@ function filterByIsUninterruptingUserMessage(messagesAndTyping: Observable<[Conv
 }
 
 function switchedOutputStreamsFromRespondableMessages(
+  db: ConversationDB,
   newRespondableMessages: Observable<ConversationMessages>,
   model?: SupportedModels,
   functions?: FunctionOption[],
@@ -130,7 +131,7 @@ function switchedOutputStreamsFromRespondableMessages(
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
     switchMap(messages => {
-      const convertedMessagesPromise = messagesToConversationMessages(messages);
+      const convertedMessagesPromise = messagesToConversationMessages(db, messages);
       return from(convertedMessagesPromise).pipe(
         concatMap(convertedMessages => chatCompletionMetaStream(convertedMessages, 0.1, model, 1000, functions))
       )

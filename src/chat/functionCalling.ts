@@ -1,6 +1,6 @@
 import { FunctionCallMetadata, FunctionOption, FunctionParameters, getEmbedding, isToolFunctionCall } from "../openai_api";
 import { Conversation, Message, createConversation, getAllMessages, observeNewMessages, sendError, sendFunctionCall, teardownConversation } from "./conversation";
-import { ConversationDB, EmbellishedFunctionMessage, FunctionResultDB, MaybePersistedMessage, PersistedMessage, isEmbellishedFunctionMessage } from "./conversationDb";
+import { ConversationDB, EmbellishedFunctionMessage, FunctionResultDB, MaybePersistedMessage, PersistedMessage, PreloadedMessage, isEmbellishedFunctionMessage } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
 import { Observable, concatMap, filter, firstValueFrom, from, isObservable, mergeMap, toArray } from "rxjs";
@@ -793,17 +793,16 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
     const code = generateCodeForFunctionCall(functionCall);
     //console.log("eval!", code);
 
-    const uuid = uuidv4();
     const functionMessageContent: FunctionMessageContent = isToolFunctionCall(functionCall) ? {
       parameters: functionCall.parameters,
       name: functionCall.name,
       toolId: functionCall.id,
-      uuid,
+      uuid: functionCall.uuid,
       v: 2,
     } : {
       parameters: functionCall.parameters,
       name: functionCall.name,
-      uuid,
+      uuid: functionCall.uuid,
       v: 1,
     };
     const initialContent = serializeFunctionMessageContent(functionMessageContent);
@@ -818,7 +817,7 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
     const saveFunctionResult = async (resultString: string, completed: boolean) => {
       if (completed) {
         return db.saveFunctionResult({
-          uuid,
+          uuid: functionCall.uuid,
           functionName: functionCall.name,
           completed: true
         })
@@ -827,7 +826,7 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
       if (resultString === "") return;
 
       return db.saveFunctionResult({
-        uuid,
+        uuid: functionCall.uuid,
         functionName: functionCall.name,
         result: resultString,
         completed: false
@@ -991,7 +990,7 @@ function createCodeBlock(text: string): string {
   }
 }
 
-export async function possiblyEmbellishedMessageToMarkdown(db: ConversationDB, message: PersistedMessage): Promise<string> {
+export function possiblyEmbellishedMessageToMarkdown(db: ConversationDB, message: PreloadedMessage): string {
   if (!isEmbellishedFunctionMessage(message)) {
     return message.content;
   }
@@ -1000,7 +999,7 @@ export async function possiblyEmbellishedMessageToMarkdown(db: ConversationDB, m
     return message.content;
   }
 
-  const results = await db.getFunctionResultsByUUID(invocation.uuid);
+  const results = message.results;
 
   const completed = results.findIndex(({completed}) => completed) !== -1;
   const nonCompletionResults = results.filter(({completed}) => !completed);

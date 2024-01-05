@@ -1,15 +1,17 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Conversation, ConversationMode, createConversation, getLastMessage, observeNewMessages, observeTypingUpdates, teardownConversation } from "../../chat/conversation";
-import { ConversationDB, ConversationMessages, LeafPath, MessageDB } from '../../chat/conversationDb';
-import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, debounceTime, distinct, filter, finalize, from, lastValueFrom, map, merge, mergeMap, of, reduce, scan, switchMap, takeUntil, tap, withLatestFrom } from 'rxjs';
+import { Conversation, ConversationMode, createConversation, getAllMessages, getLastMessage, observeNewMessages, observeTypingUpdates, teardownConversation } from "../../chat/conversation";
+import { ConversationDB, ConversationMessages, LeafPath, PersistedMessage, PreloadedConversationMessages, PreloadedMessage } from '../../chat/conversationDb';
+import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, concatMap, debounceTime, distinct, filter, finalize, from, lastValueFrom, map, merge, mergeMap, of, reduce, scan, switchMap, takeUntil, tap, withLatestFrom } from 'rxjs';
 import { FunctionOption } from '../../openai_api';
 import { addAssistant } from '../../chat/aiAgent';
 import { v4 as uuidv4 } from 'uuid';
 import { observeNew } from '../../chat/rxjsUtilities';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { isTruthy, mapNonEmpty } from '../../tsUtils';
 
 export type RunningConversation = {
   conversation: Conversation,
+  initialPreloadedMessages: PreloadedConversationMessages,
   id: string
 }
 
@@ -27,12 +29,12 @@ type ConversationSlot = {
 export type ConversationSpec = {
   model?: ConversationMode,
   functions?: FunctionOption[],
-  tail: MessageDB
+  tail: PersistedMessage
 }
 
 export const MessageStoreContext = createContext<ConversationDB | undefined>(undefined);
 
-// Provider for MessageDB
+// Provider for PersistedMessage
 const MessageStoreProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const messageDB = new ConversationDB();
 
@@ -70,6 +72,11 @@ export async function buildParticipatedConversation(db: ConversationDB, messages
   return addAssistant(conversation, db);
 }
 
+async function conversationToRunningConversation(db: ConversationDB, conversation: Conversation, id: string = uuidv4()): Promise<RunningConversation> {
+  const initialPreloadedMessages = await Promise.all(mapNonEmpty(getAllMessages(conversation), message => db.preloadMessage(message)));
+  return { conversation, initialPreloadedMessages, id };
+}
+
 function createConversationSlot(id: string, messagesStore: ConversationDB): ConversationSlot {
   const currentConversation = new BehaviorSubject<RunningConversation | undefined>(undefined);
   const asyncSwitchedInput = new Subject<Observable<Conversation>>();
@@ -103,7 +110,7 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
 
     /* /// end teardown management clusterfuck /// */
 
-    map(conversation => ({id, conversation} as RunningConversation)),
+    concatMap(conversation => conversationToRunningConversation(messagesStore, conversation, id)),
   ).subscribe(currentConversation);
 
   return {
@@ -167,7 +174,7 @@ export function getStores() {
 
 // This is for monitoring and interacting with a single conversation slot
 // Using it will induce a new conversation slot if one does not exist for the given key
-export function useConversationSlot(key: string) {
+export function useConversationSlot(db: ConversationDB, key: string) {
   const {conversationStore, messagesStore} = getStores();
   const [runningConversation, setRunningConversation] = useState<RunningConversation | undefined>(undefined);
   const conversationSlot = getOrCreateSlot(conversationStore, key, messagesStore);
@@ -182,7 +189,7 @@ export function useConversationSlot(key: string) {
     }
   }, [conversationSlot]);
 
-  const setConversation = useCallback(async (conversationSpec: ConversationSpec | Promise<ConversationSpec>, key?: string, overwrite: boolean = false) => {
+  const setConversation = useCallback(async (conversationSpec: ConversationSpec | Promise<ConversationSpec>, key?: string, overwrite: boolean = false): Promise<RunningConversation> => {
     if (key === undefined) {
       key = conversationSlot.id;
       overwrite = true;
@@ -191,7 +198,7 @@ export function useConversationSlot(key: string) {
     const thisSlot = getOrCreateSlot(conversationStore, key, messagesStore);
     const conversation = await thisSlot.dispatchNewConvo(conversationSpec, overwrite);
 
-    return { id: key, conversation } as RunningConversation;
+    return conversationToRunningConversation(db, conversation, key);
   }, [conversationSlot, conversationStore]);
 
   const closeConversation = useCallback(() => {
@@ -199,11 +206,12 @@ export function useConversationSlot(key: string) {
     conversationSlot.teardown();
   }, [conversationSlot, conversationStore]);
 
-  const getNewSlot = useCallback(async (spec: ConversationSpec | Promise<ConversationSpec>) => {
+  const getNewSlot = useCallback(async (spec: ConversationSpec | Promise<ConversationSpec>): Promise<RunningConversation> => {
     const key = uuidv4();
     const newSlot = getOrCreateSlot(conversationStore, key, messagesStore);
     const conversation = await newSlot.dispatchNewConvo(spec);
-    return { id: key, conversation } as RunningConversation;
+
+    return conversationToRunningConversation(db, conversation, key);
   }, [conversationStore])
 
   return {
@@ -218,7 +226,7 @@ function conversationStoreToRunningConversations(conversationStore: Conversation
   return Object.values(conversationStore)
     .filter((conversationSlot): conversationSlot is ConversationSlot => conversationSlot !== undefined)
     .map(conversationSlot => conversationSlot.currentConversation.value)
-    .filter((maybeRunningConversation): maybeRunningConversation is RunningConversation => maybeRunningConversation !== undefined);
+    .filter(isTruthy);
 }
 
 // This is for monitoring all conversation slots in the form of RunningConversations
@@ -256,7 +264,7 @@ export function useConversationStore() {
   return runningConversations;
 }
 
-function observeTypingReplies(conversationStore: BehaviorSubject<ConversationStore>, filterFunction: (messageToUpdate: MessageDB) => boolean) {
+function observeTypingReplies(conversationStore: BehaviorSubject<ConversationStore>, filterFunction: (messageToUpdate: PersistedMessage) => boolean) {
   return conversationStore.pipe(
     mergeMap(conversationStore => conversationStoreToRunningConversations(conversationStore)),
     distinct(({conversation}) => conversation),
@@ -288,14 +296,14 @@ function observeTypingReplies(conversationStore: BehaviorSubject<ConversationSto
   )
 }
 
-export function useTypingWatcher(referenceMessage: MessageDB, relationship: "children" | "siblings") {
+export function useTypingWatcher(referenceMessage: PersistedMessage, relationship: "children" | "siblings") {
   const {conversationStore} = getStores();
 
   const [mapping, setMapping] = useState<Record<string, {typing: string, runningConversation: RunningConversation}>>({});
 
   const filterFunction = relationship === "children"
-    ? (messageToUpdate: MessageDB) => messageToUpdate.hash === referenceMessage.hash
-    : (messageToUpdate: MessageDB) => messageToUpdate.hash === referenceMessage.parentHash;
+    ? (messageToUpdate: PersistedMessage) => messageToUpdate.hash === referenceMessage.hash
+    : (messageToUpdate: PersistedMessage) => messageToUpdate.hash === referenceMessage.parentHash;
 
   useEffect(() => {
     const subscription = observeTypingReplies(conversationStore, filterFunction).pipe(
@@ -321,12 +329,12 @@ function insertSortedByTimestamp(paths: SummarizedLeafPath[], path: SummarizedLe
 }
 
 export type SummarizedLeafPath = {
-  message: MessageDB,
+  message: PersistedMessage,
   summary: string | null,
   pathLength: number
 }
 
-export function useLeafMessageTracker(root: MessageDB | null): SummarizedLeafPath[] {
+export function useLeafMessageTracker(root: PersistedMessage | null): SummarizedLeafPath[] {
   const [leafPaths, setLeafPaths] = useState<SummarizedLeafPath[]>([]);
   const { messagesStore } = getStores();
   const runningNewQuery = new Subject<void>;

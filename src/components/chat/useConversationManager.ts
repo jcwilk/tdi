@@ -109,7 +109,7 @@ export function useConversationsManager(db: ConversationDB) {
 
   const [activeConversationId, setActiveConversationId] = useState<string>(routerStateToSlotId(routerStream.value));
 
-  const { runningConversation, setConversation, closeConversation, getNewSlot } = useConversationSlot(activeConversationId);
+  const { runningConversation, setConversation, closeConversation, getNewSlot } = useConversationSlot(db, activeConversationId);
 
   const [leafMessage, setLeafMessage] = useState<PersistedMessage | undefined>(undefined);
 

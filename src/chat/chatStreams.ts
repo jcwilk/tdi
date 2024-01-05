@@ -1,6 +1,7 @@
 import { BehaviorSubject, Observable, Subject, concat, filter, map } from "rxjs";
 import { FunctionCallMetadata, FunctionOption, getChatCompletion } from "../openai_api";
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { isTruthy } from "../tsUtils";
 
 export type chatCompletionStream = {
   typingStream: Subject<string>,
@@ -85,10 +86,11 @@ export function chatCompletionMetaStream(
       map(text => ({ text } as GPTTextUpdate))
     ),
     functionCallStream.pipe(
-      filter((message): message is GPTFunctionCall => message !== null)
+      filter(isTruthy)
     ),
     sentMessageStream.pipe(
-      filter((message): message is GPTSentMessage => message !== null)
+      filter(isTruthy)
     )
   );
 }
+
