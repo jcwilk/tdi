@@ -73,11 +73,12 @@ export function chatCompletionMetaStream(
     text => sentMessageStream.next({ text, stopReason: "length" })
   ).then(() => {
     typingStream.complete();
-    functionCallStream.complete();
     sentMessageStream.complete();
+    functionCallStream.complete();
   }).catch((err) => {
     console.error('Error during chat completion:', err);
     typingStream.error(err);
+    sentMessageStream.complete();
     functionCallStream.complete();
   });
 
@@ -85,12 +86,12 @@ export function chatCompletionMetaStream(
     typingStream.pipe(
       map(text => ({ text } as GPTTextUpdate))
     ),
+    sentMessageStream.pipe(
+      filter(isTruthy)
+    ),
     functionCallStream.pipe(
       filter(isTruthy)
     ),
-    sentMessageStream.pipe(
-      filter(isTruthy)
-    )
   );
 }
 
