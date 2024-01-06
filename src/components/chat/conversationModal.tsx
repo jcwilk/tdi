@@ -40,9 +40,9 @@ type ConversationModalProps = {
 const noopF = () => { };
 
 const ConversationModal: React.FC<ConversationModalProps> = ({ db, runningConversation, onClose, minimize, editMessage, pruneMessage, openSha, openMessage, onNewModel, onFunctionsChange, switchToConversation }) => {
-  const { conversation, initialPreloadedMessages } = runningConversation;
+  const { conversation } = runningConversation;
 
-  const [messages, setMessages] = useState<PreloadedConversationMessages>(initialPreloadedMessages);
+  const [messages, setMessages] = useState<PreloadedConversationMessages>(getAllMessages(conversation));
   const [assistantTyping, setAssistantTyping] = useState(getTypingStatus(conversation, "assistant"));
   const [editingMessage, setEditingMessage] = useState<PersistedMessage | null>();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);

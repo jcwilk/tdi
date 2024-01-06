@@ -1,17 +1,16 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Conversation, ConversationMode, createConversation, getAllMessages, getLastMessage, observeNewMessages, observeTypingUpdates, teardownConversation } from "../../chat/conversation";
-import { ConversationDB, ConversationMessages, LeafPath, PersistedMessage, PreloadedConversationMessages, PreloadedMessage } from '../../chat/conversationDb';
-import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, concatMap, debounceTime, distinct, filter, finalize, from, lastValueFrom, map, merge, mergeMap, of, reduce, scan, switchMap, takeUntil, tap, withLatestFrom } from 'rxjs';
+import { Conversation, ConversationMode, createConversation, getLastMessage, observeNewMessages, observeTypingUpdates, teardownConversation } from "../../chat/conversation";
+import { ConversationDB, ConversationMessages, LeafPath, PersistedMessage } from '../../chat/conversationDb';
+import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, concatMap, debounceTime, distinct, filter, finalize, from, lastValueFrom, map, merge, mergeMap, of, reduce, scan, takeUntil, tap, withLatestFrom } from 'rxjs';
 import { FunctionOption } from '../../openai_api';
 import { addAssistant } from '../../chat/aiAgent';
 import { v4 as uuidv4 } from 'uuid';
 import { observeNew } from '../../chat/rxjsUtilities';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { isTruthy, mapNonEmpty } from '../../tsUtils';
+import { isTruthy } from '../../tsUtils';
 
 export type RunningConversation = {
   conversation: Conversation,
-  initialPreloadedMessages: PreloadedConversationMessages,
   id: string
 }
 
@@ -73,8 +72,7 @@ export async function buildParticipatedConversation(db: ConversationDB, messages
 }
 
 async function conversationToRunningConversation(db: ConversationDB, conversation: Conversation, id: string = uuidv4()): Promise<RunningConversation> {
-  const initialPreloadedMessages = await Promise.all(mapNonEmpty(getAllMessages(conversation), message => db.preloadMessage(message)));
-  return { conversation, initialPreloadedMessages, id };
+  return { conversation, id };
 }
 
 function createConversationSlot(id: string, messagesStore: ConversationDB): ConversationSlot {

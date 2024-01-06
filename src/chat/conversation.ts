@@ -1,11 +1,11 @@
 import { BehaviorSubject, Observable, Subject, catchError, concatMap, distinctUntilChanged, filter, from, map, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
-import { ConversationDB, ConversationMessages, MaybePersistedMessage, PersistedMessage } from './conversationDb';
+import { ConversationDB, ConversationMessages, MaybePersistedMessage, PersistedMessage, PreloadedConversationMessages } from './conversationDb';
 import { MaybeProcessedMessageResult, processMessagesWithHashing, reprocessMessagesStartingFrom } from './messagePersistence';
 import { FunctionOption } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
 import { SupportedModels } from './chatStreams';
-import { isAtLeastOne } from '../tsUtils';
+import { mapNonEmpty } from '../tsUtils';
 import { isAPIKeySet } from '../api_key_storage';
 
 export type Message = {
@@ -71,7 +71,7 @@ function isNewMessageEvent(event: ConversationEvent): event is NewMessageEvent {
 }
 
 export type ConversationState = {
-  messages: ConversationMessages;
+  messages: PreloadedConversationMessages;
   typingStatus: Map<TyperRole, string>;
 };
 
@@ -100,9 +100,7 @@ export async function createConversation(db: ConversationDB, loadedMessages: [Ma
 
   const processedResults = await reprocessMessagesStartingFrom(db, model, loadedMessages);
 
-  const processedMessages = processedResults.map(result => result.message);
-  if (!isAtLeastOne(processedMessages)) throw new Error("No messages in conversation"); // just compilershutup
-  processedMessages;
+  const processedMessages: PreloadedConversationMessages = await Promise.all(mapNonEmpty(processedResults, result => db.preloadMessage(result.message)));
 
   const conversation: Conversation = {
     newMessagesInput: new Subject<ConversationEvent>(),
@@ -131,10 +129,10 @@ export async function createConversation(db: ConversationDB, loadedMessages: [Ma
     }, { lastResult: processedResults[processedResults.length - 1], event: null }),
     map((state) => state.event),
     filter(Boolean),
-    scan(
-      (state: ConversationState, event: ConversationEvent) => {
+    scanAsync(
+      async (state: ConversationState, event: ConversationEvent) => {
         if (event.type === 'processedMessage') {
-          const newMessages: ConversationMessages = [...state.messages, event.payload];
+          const newMessages: PreloadedConversationMessages = [...state.messages, await db.preloadMessage(event.payload)];
           const role = event.payload.role;
           if (isTyperRole(role) && state.typingStatus.get(role)) {
             return { ...state, messages: newMessages, typingStatus: new Map(state.typingStatus).set(role, '') };
@@ -194,7 +192,7 @@ export function getLastMessage(conversation: Conversation): PersistedMessage {
   return messages[messages.length - 1];
 }
 
-export function getAllMessages(conversation: Conversation): ConversationMessages {
+export function getAllMessages(conversation: Conversation): PreloadedConversationMessages {
   return conversation.outgoingMessageStream.value.messages;
 }
 
