@@ -1,5 +1,5 @@
 import { FunctionCallMetadata, FunctionOption, FunctionParameters, getEmbedding, isToolFunctionCall } from "../openai_api";
-import { Conversation, Message, createConversation, getAllMessages, observeNewMessages, sendError, sendFunctionCall, teardownConversation } from "./conversation";
+import { Conversation, Message, createConversation, getAllMessages, observeNewMessages, observeNewMessagesWithLatestTypingMap, observeTypingUpdates, sendError, sendFunctionCall, teardownConversation } from "./conversation";
 import { ConversationDB, EmbellishedFunctionMessage, FunctionResultDB, MaybePersistedMessage, PersistedMessage, PreloadedMessage, isEmbellishedFunctionMessage } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
@@ -8,6 +8,7 @@ import { buildParticipatedConversation } from "../components/chat/useConversatio
 import { isAtLeastOne, isTruthy, priorsAndLast, swapNonemptyTypeOrder } from "../tsUtils";
 import { APIKeyFetcher } from "../api_key_storage";
 import { addAssistant } from "./aiAgent";
+import { sendMessage, typeMessage } from "./participantSubjects";
 
 export const denylistedInvocableFunctionNames = [
   "generate_dynamic_function",
@@ -678,15 +679,21 @@ export const functionSpecs: FunctionSpec[] = [
         [...priorMessages, ragMissing, triggerMessage];
       const ragConvoFunctions = utils.conversation.functions.filter((f) => f.name !== "rag"); // so the result doesn't simply call rag again
       const ragConvo = await createConversation(utils.db, swapNonemptyTypeOrder(ragConvoMessages), "gpt-4", ragConvoFunctions);
-      ragConvo.newMessagesInput.subscribe(utils.conversation.newMessagesInput);
+      const typingSubscription = observeTypingUpdates(ragConvo, "assistant").subscribe((partialContent) => {
+        if (!partialContent) return;
+        typeMessage(utils.conversation, 'assistant', partialContent);
+      });
 
       return new Promise<string>(resolve => {
         observeNewMessages(ragConvo, false).subscribe({
-          next: (reply) => {
+          next: (message) => {
+            typingSubscription.unsubscribe();
+            sendMessage(utils.conversation, message.role, message.content);
             teardownConversation(ragConvo);
-            resolve(reply.hash);
+            resolve(message.hash);
           },
           error: (err) => {
+            typingSubscription.unsubscribe();
             teardownConversation(ragConvo);
             throw err;
           }

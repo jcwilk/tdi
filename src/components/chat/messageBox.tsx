@@ -51,6 +51,9 @@ const MessageBox: React.FC<MessageProps> = ({ db, message, conversation, onPrune
       const preloadedMessage = await db.preloadMessage(message);
       setLivePreloadedMessage(preloadedMessage);
     }
+    else {
+      setLivePreloadedMessage(message);
+    }
   }, [message], undefined);
 
   const siblings: MessageWithSummary[] = useLiveQuery(async () => {
