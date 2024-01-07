@@ -42,8 +42,15 @@ function conversationToSearchParams(conversation: Conversation): URLSearchParams
   const params = new URLSearchParams();
 
   params.append("ln", lastMessage.hash);
-  params.append("model", conversation.model);
-  params.append("functions", JSON.stringify(conversation.functions.map(f => f.name)));
+  if (conversation.model !== "paused") {
+    params.append("model", conversation.model);
+  }
+  if (conversation.functions.length > 0) {
+    params.append("functions", JSON.stringify(conversation.functions.map(f => f.name)));
+  }
+  if (conversation.lockedFunction) {
+    params.append("locked", conversation.lockedFunction.name);
+  }
 
   return params;
 }
@@ -65,7 +72,8 @@ async function loadDefaultGreetingConversationSpec(): Promise<ConversationSpec> 
   return {
     tail: leafMessage,
     model: "gpt-4",
-    functions: []
+    functions: [],
+    lockedFunction: null,
   }
 }
 
@@ -82,17 +90,21 @@ async function routerStateToConversationSpec(db: ConversationDB, routerState: Ro
   const model: ConversationMode = isConversationMode(rawModel) ? rawModel : 'gpt-4';
   const functionNames = JSON.parse(eventParams.get('functions') ?? '[]');
   const functions = getAllFunctionOptions().filter(f => functionNames.includes(f.name));
+  const lockedFunctionName = eventParams.get('locked');
+  const lockedFunction = functions.find(f => f.name === lockedFunctionName) ?? null;
 
   return {
     tail: message,
     model,
     functions,
+    lockedFunction: lockedFunction,
   };
 }
 
 const defaultSpecSettings = {
   model: "gpt-4" as ConversationMode,
   functions: [] as FunctionOption[],
+  lockedFunction: null,
 };
 
 export function useConversationsManager(db: ConversationDB) {
@@ -195,10 +207,10 @@ export function useConversationsManager(db: ConversationDB) {
     navIndex(navigate);
   }, [navigate]);
 
-  const remix = useCallback(async (changedParams: {model?: ConversationMode, functions?: FunctionOption[], tail?: PersistedMessage}) => {
+  const remix = useCallback(async (changedParams: {model?: ConversationMode, functions?: FunctionOption[], tail?: PersistedMessage, lockedFunction?: FunctionOption | null}) => {
     if (!currentConversationSpec) return;
 
-    const newSpec = { ...currentConversationSpec, ...changedParams };
+    const newSpec: ConversationSpec = { ...currentConversationSpec, ...changedParams };
     if (currentConversationSpec.model === 'paused') {
       const newRunningConversation = await setConversation(newSpec);
       navConversation(navigate, newRunningConversation, true);
@@ -229,8 +241,9 @@ export function useConversationsManager(db: ConversationDB) {
     remix({model});
   }, [remix]);
 
-  const changeFunctions = useCallback((functions: FunctionOption[]) => {
-    remix({functions});
+  const changeFunctions = useCallback((functions: FunctionOption[], lockedFunction: FunctionOption | null) => {
+    console.log("changing functions!", functions, lockedFunction)
+    remix({functions, lockedFunction});
   }, [remix]);
 
   const editMessage = useCallback(async (messageToEdit: PersistedMessage, newContent: string, newRole: ParticipantRole) => {

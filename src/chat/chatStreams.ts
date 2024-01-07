@@ -53,7 +53,8 @@ export function chatCompletionMetaStream(
   temperature: number,
   model: SupportedModels = "gpt-4",
   maxTokens: number,
-  functions: FunctionOption[] = []
+  functions: FunctionOption[] = [],
+  lockedFunction: FunctionOption | null = null
 ): Observable<GPTMessage> {
   model = adjustModel(model, functions);
 
@@ -67,6 +68,7 @@ export function chatCompletionMetaStream(
     model,
     maxTokens,
     functions,
+    lockedFunction,
     partialText => typingStream.next(partialText),
     functionCall => functionCallStream.next({ functionCall }),
     text => sentMessageStream.next({ text, stopReason: "stop" }),

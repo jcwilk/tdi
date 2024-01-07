@@ -88,6 +88,7 @@ export type Conversation = {
   outgoingMessageStream: BehaviorSubject<ConversationState>;
   functions: FunctionOption[];
   model: ConversationMode;
+  lockedFunction: FunctionOption | null;
 };
 
 interface ScanState {
@@ -95,7 +96,7 @@ interface ScanState {
   event: TypingUpdateEvent | ProcessedMessageEvent | null;
 }
 
-export async function createConversation(db: ConversationDB, loadedMessages: [MaybePersistedMessage, ...MaybePersistedMessage[]], model: ConversationMode = 'gpt-4', functions: FunctionOption[] = []): Promise<Conversation> {
+export async function createConversation(db: ConversationDB, loadedMessages: [MaybePersistedMessage, ...MaybePersistedMessage[]], model: ConversationMode = 'gpt-4', functions: FunctionOption[] = [], lockedFunction: FunctionOption | null = null): Promise<Conversation> {
   if(!isAPIKeySet()) model = "paused";
 
   const processedResults = await reprocessMessagesStartingFrom(db, model, loadedMessages);
@@ -106,7 +107,8 @@ export async function createConversation(db: ConversationDB, loadedMessages: [Ma
     newMessagesInput: new Subject<ConversationEvent>(),
     outgoingMessageStream: new BehaviorSubject({ messages: processedMessages, typingStatus: new Map() }),
     functions,
-    model
+    model,
+    lockedFunction
   }
 
   const aggregatedOutput = conversation.newMessagesInput.pipe(

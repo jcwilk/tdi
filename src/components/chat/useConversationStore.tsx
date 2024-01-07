@@ -28,6 +28,7 @@ type ConversationSlot = {
 export type ConversationSpec = {
   model?: ConversationMode,
   functions?: FunctionOption[],
+  lockedFunction: FunctionOption | null,
   tail: PersistedMessage
 }
 
@@ -66,8 +67,8 @@ export const MessageAndConversationProvider: React.FC<React.PropsWithChildren> =
   );
 }
 
-export async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-4", functionOptions: FunctionOption[] = []): Promise<Conversation> {
-  const conversation = await createConversation(db, messages, model, functionOptions);
+export async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-4", functionOptions: FunctionOption[] = [], lockedFunction: FunctionOption | null = null): Promise<Conversation> {
+  const conversation = await createConversation(db, messages, model, functionOptions, lockedFunction);
   return addAssistant(conversation, db);
 }
 
@@ -117,26 +118,23 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
     dispatchNewConvo: (conversationSpec: ConversationSpec | Promise<ConversationSpec>, overwrite: boolean = false) => {
       //console.log("dispatch", conversationSpec)
       let promise = ((conversationSpec instanceof Promise) ? conversationSpec : Promise.resolve(conversationSpec)).then(resolvedSpec => {
-          //console.log("resolvedSpec", resolvedSpec)
-          return messagesStore.getConversationFromLeafMessage(resolvedSpec.tail).then(conversation => [conversation, resolvedSpec] as [ConversationMessages, ConversationSpec]);
-        }).then(([messages, resolvedSpec]) => {
-          // TODO: somewhere around here might be a good place to do message reprocessing, if we want messages to not be immutable
-          //console.log("messages", messages)
-          if (!overwrite && currentConversation.value) {
-            return currentConversation.value.conversation;
-          }
+        //console.log("resolvedSpec", resolvedSpec)
+        return messagesStore.getConversationFromLeafMessage(resolvedSpec.tail).then(conversation => [conversation, resolvedSpec] as [ConversationMessages, ConversationSpec]);
+      }).then(([messages, resolvedSpec]) => {
+        // TODO: somewhere around here might be a good place to do message reprocessing, if we want messages to not be immutable
+        //console.log("messages", messages)
+        if (!overwrite && currentConversation.value) {
+          return currentConversation.value.conversation;
+        }
 
-          return buildParticipatedConversation(messagesStore, messages, resolvedSpec.model, resolvedSpec.functions);
-        });
-
-      console.log("dispatchNewConvo", id, conversationSpec, promise);
+        return buildParticipatedConversation(messagesStore, messages, resolvedSpec.model, resolvedSpec.functions, resolvedSpec.lockedFunction);
+      });
 
       asyncSwitchedInput.next(from(promise));
 
       return promise;
     },
     teardown: () => {
-      console.log("teardown slot", id)
       currentConversation.complete();
       asyncSwitchedInput.complete();
     }
@@ -149,6 +147,7 @@ export function conversationToSpec(conversation: Conversation): ConversationSpec
   return {
     model: conversation.model,
     functions: conversation.functions,
+    lockedFunction: conversation.lockedFunction,
     tail: lastMessage
   };
 }
@@ -182,7 +181,6 @@ export function useConversationSlot(db: ConversationDB, key: string) {
 
   useEffect(() => {
     const subscription = conversationSlot.currentConversation.pipe(
-      tap(() => console.log("setRunningConversation", conversationSlot.currentConversation.value)),
       tap(setRunningConversation),
     ).subscribe();
 

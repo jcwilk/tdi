@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, Button, DialogActions, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Checkbox, IconButton, Switch } from '@mui/material';
 import FunctionsIcon from '@mui/icons-material/Functions';
+import LockIcon from '@mui/icons-material/Lock';
 import { ManualFunctionCallButton } from './manualFunctionCall';
 import { FunctionOption } from '../../openai_api';
 import { Conversation } from '../../chat/conversation';
@@ -8,18 +9,19 @@ import { getAllFunctionOptions } from '../../chat/functionCalling';
 
 interface FunctionManagementProps {
   conversation: Conversation;
-  onUpdate: (updatedFunctions: FunctionOption[]) => void;
+  onUpdate: (updatedFunctions: FunctionOption[], lockedFunction: FunctionOption | null) => void;
 }
 
 interface FunctionManagementDialogProps {
   conversation: Conversation;
-  onUpdate: (updatedFunctions: FunctionOption[]) => void;
+  onUpdate: (updatedFunctions: FunctionOption[], lockedFunction: FunctionOption | null) => void;
   onRun: () => void;
   onClose: () => void;
 }
 
 const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ conversation, onUpdate, onRun, onClose }) => {
   const [selectedFunctions, setSelectedFunctions] = useState<FunctionOption[]>(conversation.functions);
+  const [lockedFunction, setLockedFunction] = useState<FunctionOption | null>(conversation.lockedFunction);
 
   const availableFunctions = useMemo(() => getAllFunctionOptions(), []);
 
@@ -35,6 +37,13 @@ const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ con
         newSelected.push(matching);
       }
       else {
+        setLockedFunction(prevLocked => {
+          if (prevLocked && prevLocked.name === functionName) {
+            return null;
+          }
+
+          return prevLocked;
+        });
         newSelected.splice(prevIndex, 1);
       }
 
@@ -42,8 +51,24 @@ const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ con
     });
   };
 
+  const handleLockToggle = (functionOption: FunctionOption) => {
+    setLockedFunction(prevLocked => {
+      if (prevLocked && prevLocked.name === functionOption.name) {
+        return null;
+      }
+
+      setSelectedFunctions(prevSelected => {
+        if (prevSelected.find(func => func.name === functionOption.name)) {
+          return prevSelected;
+        }
+        return [...prevSelected, functionOption];
+      });
+      return functionOption;
+    });
+  };
+
   const handleSave = () => {
-    onUpdate(selectedFunctions);
+    onUpdate(selectedFunctions, lockedFunction);
     onClose();
   };
 
@@ -62,6 +87,13 @@ const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ con
                   <ManualFunctionCallButton functionOption={func} conversation={conversation} onRun={onRun} />
                 </ListItemIcon>
                 <ListItemText id={labelId} primary={func.name} />
+                <IconButton
+                  onClick={() => handleLockToggle(func)}
+                  edge="end"
+                  aria-label={`lock-${func.name}`}
+                >
+                  <LockIcon color={lockedFunction && lockedFunction.name === func.name ? 'primary' : 'disabled'} />
+                </IconButton>
                 <Switch
                   edge="end"
                   onChange={() => handleToggle(func.name)}

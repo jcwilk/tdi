@@ -33,7 +33,7 @@ type ConversationModalProps = {
   openSha: (leafMessage: string) => void; // Callback for attempting to open a message by sha
   openMessage: (message: PersistedMessage) => void; // Callback for opening a message in the editor
   onNewModel: (model: ConversationMode) => void;
-  onFunctionsChange: (updatedFunctions: FunctionOption[]) => void;
+  onFunctionsChange: (updatedFunctions: FunctionOption[], lockedFunction: FunctionOption | null) => void;
   switchToConversation: (runningConversation: RunningConversation) => void;
 };
 

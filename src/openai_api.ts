@@ -118,6 +118,7 @@ export async function getChatCompletion(
   model = "gpt-4",
   maxTokens: number,
   functions: FunctionOption[] = [],
+  lockedFunction: FunctionOption | null = null,
   onChunk: (chunk: string) => void = () => {},
   onFunctionCall: (functionCall: FunctionCallMetadata) => void = () => {},
   onSentMessage: (message: string) => void = () => {},
@@ -139,7 +140,13 @@ export async function getChatCompletion(
   }
   if (functions.length > 0) {
     payload.tools = functions.map(functionOption => ({ type: "function", function: functionOption }));
-    payload.tool_choice = "auto";
+
+    if (lockedFunction && functions.findIndex(functionOption => functionOption.name === lockedFunction.name) !== -1) {
+      payload.tool_choice = { type: "function", function: { name: lockedFunction.name }};
+    }
+    else {
+      payload.tool_choice = "auto";
+    }
   }
 
   const stream = client.beta.chat.completions.stream(payload);

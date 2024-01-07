@@ -276,9 +276,11 @@ export const functionSpecs: FunctionSpec[] = [
   {
     name: "conversation_completion",
     description: "Uses GPT to get the next message in a conversation at the specified leaf message.",
-    implementation: async (utils: {db: ConversationDB}, sha: string, enabledFunctions?: string): Promise<string> => {
+    implementation: async (utils: {db: ConversationDB}, sha: string, enabledFunctions?: string, lockedFunctionName?: string): Promise<string> => {
       const splitEnabledFunctions = (enabledFunctions || "").split(",").map((s) => s.trim());
       const functionOptions = getAllFunctionOptions().filter((option) => splitEnabledFunctions.includes(option.name));
+
+      const lockedFunction = (lockedFunctionName && functionOptions.find((option) => option.name === lockedFunctionName)) || null;
 
       const leafMessage = await utils.db.getMessageByHash(sha);
       if (!leafMessage) throw new Error(`Message with SHA ${sha} not found.`);
@@ -286,7 +288,7 @@ export const functionSpecs: FunctionSpec[] = [
       if (!["system", "user"].includes(leafMessage.role)) return "";
 
       const messages = await utils.db.getConversationFromLeafMessage(leafMessage);
-      const conversation = await buildParticipatedConversation(utils.db, messages, "gpt-4", functionOptions);
+      const conversation = await buildParticipatedConversation(utils.db, messages, "gpt-4", functionOptions, lockedFunction);
 
       const observeReplies = observeNewMessages(conversation, false)
       return await firstValueFrom(observeReplies).then((firstValue) => {
@@ -304,7 +306,13 @@ export const functionSpecs: FunctionSpec[] = [
       {
         name: "enabledFunctions",
         type: "string",
-        description: "A comma separated list of function names to enable for this completion. Defaults to no functions.",
+        description: "A comma separated list of function names to enable to optionally be called by GPT for this completion. Defaults to no functions.",
+        required: false
+      },
+      {
+        name: "lockedFunctionName",
+        type: "string",
+        description: "The name of the function to lock for this completion, forcing GPT to call that function. Defaults to no locked function.",
         required: false
       }
     ]
