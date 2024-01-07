@@ -108,7 +108,7 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
 
     /* /// end teardown management clusterfuck /// */
 
-    concatMap(conversation => conversationToRunningConversation(messagesStore, conversation, id)),
+    concatMap(conversation => conversationToRunningConversation(messagesStore, conversation)),
   ).subscribe(currentConversation);
 
   return {
@@ -129,11 +129,14 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
           return buildParticipatedConversation(messagesStore, messages, resolvedSpec.model, resolvedSpec.functions);
         });
 
+      console.log("dispatchNewConvo", id, conversationSpec, promise);
+
       asyncSwitchedInput.next(from(promise));
 
       return promise;
     },
     teardown: () => {
+      console.log("teardown slot", id)
       currentConversation.complete();
       asyncSwitchedInput.complete();
     }
@@ -179,6 +182,7 @@ export function useConversationSlot(db: ConversationDB, key: string) {
 
   useEffect(() => {
     const subscription = conversationSlot.currentConversation.pipe(
+      tap(() => console.log("setRunningConversation", conversationSlot.currentConversation.value)),
       tap(setRunningConversation),
     ).subscribe();
 
