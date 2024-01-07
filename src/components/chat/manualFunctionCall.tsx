@@ -5,6 +5,7 @@ import { FunctionParameter, callFunction, functionSpecs } from '../../chat/funct
 import { Conversation } from '../../chat/conversation';
 import { FunctionOption } from '../../openai_api';
 import { ConversationDB } from '../../chat/conversationDb';
+import { v4 as uuidv4 } from 'uuid';
 
 interface ManualFunctionCallDialogProps {
   defaultParameters?: { [key: string]: string };
@@ -42,7 +43,7 @@ const ManualFunctionCallDialog: React.FC<ManualFunctionCallDialogProps> = ({ def
 
   const handleSubmit = async () => {
     try {
-      await callFunction(conversation, { name: functionOption.name, parameters }, new ConversationDB());
+      await callFunction(conversation, { name: functionOption.name, parameters, uuid: uuidv4() }, new ConversationDB());
       onRun();
     } catch (error: unknown) {
       setError('Error executing function: ' + String(error));
