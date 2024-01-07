@@ -42,7 +42,7 @@ function conversationToSearchParams(conversation: Conversation): URLSearchParams
   const params = new URLSearchParams();
 
   params.append("ln", lastMessage.hash);
-  if (conversation.model !== "paused") {
+  if (conversation.model === "paused") {
     params.append("model", conversation.model);
   }
   if (conversation.functions.length > 0) {
