@@ -208,6 +208,7 @@ export function useConversationsManager(db: ConversationDB) {
     const { tail, ...changedSettings } = changedParams;
 
     const newSettings: ConversationSettings = { ...currentConversationSpec.settings, ...changedSettings };
+    newSettings.generateMetadata = newSettings.model !== "paused";
     const newSpec: ConversationSpec = { tail: tail ?? currentConversationSpec.tail, settings: newSettings };
 
     if (currentConversationSpec.settings.model === 'paused') {
