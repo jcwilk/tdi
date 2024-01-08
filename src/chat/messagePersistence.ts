@@ -1,5 +1,5 @@
 import { ConversationDB, MaybePersistedMessage, MessageSpec, MessageSummaryDB, MetadataHandlers, MetadataRecords, PersistedMessage, isPersistedMessage, rootMessageHash } from './conversationDb';
-import { ConversationMode, ConversationSettings, Message, defaultActiveConversationSettings } from './conversation';
+import { ConversationSettings, Message, defaultActiveConversationSettings } from './conversation';
 import { getEmbedding } from '../openai_api';
 import { isAtLeastOne } from '../tsUtils';
 import { chatCompletionMetaStream, isGPTSentMessage } from './chatStreams';
@@ -102,7 +102,7 @@ export async function processMessagesWithHashing(
   message: MaybePersistedMessage,
   priorResult: MaybeProcessedMessageResult
 ): Promise<ProcessedMessageResult> {
-  const conversationMode = isAPIKeySet() ? settings.model : 'paused';
+  const generateMetadata = isAPIKeySet() && settings.generateMetadata;
 
   const parentHash = priorResult.message ? priorResult.message.hash : rootMessageHash;
   const hash = await hashFunction(message, [parentHash]);
@@ -123,17 +123,14 @@ export async function processMessagesWithHashing(
     messageToSave = newMessage;
   }
 
-  const unconditionalHandlers = {
+  const metadataHandlers: MetadataHandlers = {
     messageEmbedding: async () => {
       const embedding = await getEmbedding(message.content);
       return {
         hash: messageToSave.hash,
         embedding: embedding,
       };
-    }
-  }
-
-  const unpausedHandlers = {
+    },
     messageSummary: async () => {
       const summary = await recursivelySummarize(message, priorResult);
       return {
@@ -148,11 +145,9 @@ export async function processMessagesWithHashing(
         embedding: embedding,
       };
     },
-
   }
-  const metadataHandlers: MetadataHandlers = conversationMode === 'paused' ? unconditionalHandlers : { ...unconditionalHandlers, ...unpausedHandlers };
 
-  const [persistedMessagePromise, metadataRecordsPromise] = db.saveMessage(messageToSave, metadataHandlers);
+  const [persistedMessagePromise, metadataRecordsPromise] = db.saveMessage(messageToSave, generateMetadata ? metadataHandlers : {});
   return { message: await persistedMessagePromise, metadataRecordsPromise };
 };
 

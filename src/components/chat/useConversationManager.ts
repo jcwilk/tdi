@@ -97,6 +97,7 @@ async function routerStateToConversationSpec(db: ConversationDB, routerState: Ro
       model,
       functions,
       lockedFunction,
+      generateMetadata: model !== "paused",
     },
   };
 }

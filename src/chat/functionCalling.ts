@@ -686,7 +686,7 @@ export const functionSpecs: FunctionSpec[] = [
         :
         [...priorMessages, ragMissing, triggerMessage];
       const ragConvoFunctions = utils.conversation.settings.functions.filter((f) => f.name !== "rag"); // so the result doesn't simply call rag again
-      const ragConvo = await createConversation(utils.db, swapNonemptyTypeOrder(ragConvoMessages), { ...defaultActiveConversationSettings, functions: ragConvoFunctions});
+      const ragConvo = await createConversation(utils.db, swapNonemptyTypeOrder(ragConvoMessages), { ...defaultActiveConversationSettings, functions: ragConvoFunctions, generateMetadata: false});
       const typingSubscription = observeTypingUpdates(ragConvo, "assistant").subscribe((partialContent) => {
         if (!partialContent) return;
         typeMessage(utils.conversation, 'assistant', partialContent);

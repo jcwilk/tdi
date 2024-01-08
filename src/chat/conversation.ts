@@ -87,18 +87,21 @@ export type ConversationSettings = {
   model: ConversationMode;
   functions: FunctionOption[];
   lockedFunction: FunctionOption | null;
+  generateMetadata: boolean;
 }
 
 export const defaultActiveConversationSettings: ConversationSettings = Object.freeze({
   model: "gpt-4",
   functions: [],
   lockedFunction: null,
+  generateMetadata: true,
 })
 
 export const defaultPausedConversationSettings: ConversationSettings = Object.freeze({
   model: "paused",
   functions: [],
   lockedFunction: null,
+  generateMetadata: false
 })
 
 export type Conversation = {
