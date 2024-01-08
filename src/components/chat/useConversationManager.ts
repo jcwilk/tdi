@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { BehaviorSubject, concatMap, debounceTime, filter, from, tap } from 'rxjs';
 import { ConversationDB, PersistedMessage } from '../../chat/conversationDb';
-import { Conversation, ConversationMode, Message, defaultActiveConversationSettings, getLastMessage, isConversationMode, observeNewMessages } from '../../chat/conversation';
+import { Conversation, ConversationMode, ConversationSettings, Message, defaultActiveConversationSettings, getLastMessage, isConversationMode, observeNewMessages } from '../../chat/conversation';
 import { useNavigate, NavigateFunction, useLocation } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
 import { RouterState } from '@remix-run/router';
@@ -205,7 +205,11 @@ export function useConversationsManager(db: ConversationDB) {
   const remix = useCallback(async (changedParams: {model?: ConversationMode, functions?: FunctionOption[], tail?: PersistedMessage, lockedFunction?: FunctionOption | null}) => {
     if (!currentConversationSpec) return;
 
-    const newSpec: ConversationSpec = { ...currentConversationSpec, ...changedParams };
+    const { tail, ...changedSettings } = changedParams;
+
+    const newSettings: ConversationSettings = { ...currentConversationSpec.settings, ...changedSettings };
+    const newSpec: ConversationSpec = { tail: tail ?? currentConversationSpec.tail, settings: newSettings };
+
     if (currentConversationSpec.settings.model === 'paused') {
       const newRunningConversation = await setConversation(newSpec);
       navConversation(navigate, newRunningConversation, true);
@@ -237,7 +241,6 @@ export function useConversationsManager(db: ConversationDB) {
   }, [remix]);
 
   const changeFunctions = useCallback((functions: FunctionOption[], lockedFunction: FunctionOption | null) => {
-    console.log("changing functions!", functions, lockedFunction)
     remix({functions, lockedFunction});
   }, [remix]);
 
