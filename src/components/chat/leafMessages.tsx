@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ConversationDB, PersistedMessage } from '../../chat/conversationDb';
-import { Message, getLastMessage, observeNewMessages } from '../../chat/conversation';
+import { Message, defaultPausedConversationSettings, getLastMessage, observeNewMessages } from '../../chat/conversation';
 import { reprocessMessagesStartingFrom } from '../../chat/messagePersistence';
 import { Box, Button, List, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
 import { styled } from '@mui/material/styles';
@@ -68,7 +68,7 @@ const LeafMessages: React.FC<{
   }, [runningConversations]);
 
   const handleNewConversation = useCallback(async () => {
-    const newMessages = await reprocessMessagesStartingFrom(db, "paused", [mainSystemMessage]);
+    const newMessages = await reprocessMessagesStartingFrom(db, defaultPausedConversationSettings, [mainSystemMessage]);
     const newLeaf = newMessages[newMessages.length - 1].message;
     openMessage(newLeaf);
   }, [openMessage]);

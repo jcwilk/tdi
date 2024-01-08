@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Dialog, AppBar, Toolbar, Typography, IconButton, TextField, Box, Button, Alert } from '@mui/material';
 import CodeIcon from '@mui/icons-material/Code';
 import CloseIcon from '@mui/icons-material/Close';
-import { Message } from '../../chat/conversation';
+import { Message, defaultPausedConversationSettings } from '../../chat/conversation';
 import { reprocessMessagesStartingFrom } from '../../chat/messagePersistence';
 import { ConversationDB, PersistedMessage } from '../../chat/conversationDb';
 
@@ -50,7 +50,7 @@ const JsonEditorDialog: React.FC<JsonEditorDialogProps> = ({ messages, open, onC
   const handleSave = async () => {
     try {
       const updatedMessages = stringToMessages(currentText);
-      const newMessages = await reprocessMessagesStartingFrom(new ConversationDB, "paused", updatedMessages);
+      const newMessages = await reprocessMessagesStartingFrom(new ConversationDB, defaultPausedConversationSettings, updatedMessages);
       const newLeaf = newMessages[newMessages.length - 1].message;
       await onNewLeaf(newLeaf);
       onClose();

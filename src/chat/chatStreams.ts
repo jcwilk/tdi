@@ -2,6 +2,7 @@ import { BehaviorSubject, Observable, Subject, concat, filter, map } from "rxjs"
 import { FunctionCallMetadata, FunctionOption, getChatCompletion } from "../openai_api";
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { isTruthy } from "../tsUtils";
+import { ConversationSettings } from "./conversation";
 
 export type chatCompletionStream = {
   typingStream: Subject<string>,
@@ -37,27 +38,12 @@ export function isGPTSentMessage(message: GPTMessage): message is GPTSentMessage
 
 export type GPTMessage = GPTTextUpdate | GPTFunctionCall | GPTSentMessage;
 
-// Adjust the model based on the functions array length
-function adjustModel(model: SupportedModels, functions: FunctionOption[]): SupportedModels {
-  if (model === "gpt-4") return "gpt-4-1106-preview"; // gpt-4-turbo
-
-  if (functions.length > 0) {
-    //if (model === "gpt-4") return "gpt-4-0613";
-    if (model === "gpt-3.5-turbo") return "gpt-3.5-turbo-0613";
-  }
-  return model;
-}
-
 export function chatCompletionMetaStream(
   messages: ChatCompletionMessageParam[],
   temperature: number,
-  model: SupportedModels = "gpt-4",
   maxTokens: number,
-  functions: FunctionOption[] = [],
-  lockedFunction: FunctionOption | null = null
+  settings: ConversationSettings,
 ): Observable<GPTMessage> {
-  model = adjustModel(model, functions);
-
   const typingStream = new Subject<string>();
   const functionCallStream = new BehaviorSubject<GPTFunctionCall | null>(null);
   const sentMessageStream = new BehaviorSubject<GPTSentMessage | null>(null);
@@ -65,10 +51,8 @@ export function chatCompletionMetaStream(
   getChatCompletion(
     messages,
     temperature,
-    model,
     maxTokens,
-    functions,
-    lockedFunction,
+    settings,
     partialText => typingStream.next(partialText),
     functionCall => functionCallStream.next({ functionCall }),
     text => sentMessageStream.next({ text, stopReason: "stop" }),

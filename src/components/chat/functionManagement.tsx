@@ -20,8 +20,8 @@ interface FunctionManagementDialogProps {
 }
 
 const FunctionManagementDialog: React.FC<FunctionManagementDialogProps> = ({ conversation, onUpdate, onRun, onClose }) => {
-  const [selectedFunctions, setSelectedFunctions] = useState<FunctionOption[]>(conversation.functions);
-  const [lockedFunction, setLockedFunction] = useState<FunctionOption | null>(conversation.lockedFunction);
+  const [selectedFunctions, setSelectedFunctions] = useState<FunctionOption[]>(conversation.settings.functions);
+  const [lockedFunction, setLockedFunction] = useState<FunctionOption | null>(conversation.settings.lockedFunction);
 
   const availableFunctions = useMemo(() => getAllFunctionOptions(), []);
 

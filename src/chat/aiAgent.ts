@@ -1,5 +1,5 @@
 import { EMPTY, Observable, Subject, UnaryFunction, catchError, concatMap, distinctUntilChanged, filter, from, map, merge, share, switchMap, throwError } from "rxjs";
-import { Conversation, ConversationState, TypingUpdate, sendError } from "./conversation";
+import { Conversation, ConversationSettings, ConversationState, TypingUpdate, sendError } from "./conversation";
 import { sendMessage, typeMessage } from "./participantSubjects";
 import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, isGPTTextUpdate, isGPTSentMessage, SupportedModels } from "./chatStreams";
 import { FunctionOption, isToolFunctionCall } from "../openai_api";
@@ -75,7 +75,7 @@ export function addAssistant(
   conversation: Conversation,
   db: ConversationDB
 ): Conversation {
-  if (conversation.model === "paused") return conversation;
+  if (conversation.settings.model === "paused") return conversation;
 
   const messagesAndTyping = conversation.outgoingMessageStream.pipe(
     map<ConversationState,[ConversationMessages,TypingUpdate]>(({messages, typingStatus}) => [messages, {role: "assistant", content: typingStatus.get("assistant") ?? ""}]),
@@ -89,7 +89,7 @@ export function addAssistant(
     map(([messages, _typing]) => messages)
   );
 
-  const typingAndSending = switchedOutputStreamsFromRespondableMessages(db, newRespondableMessages, conversation.model, conversation.functions, conversation.lockedFunction)
+  const typingAndSending = switchedOutputStreamsFromRespondableMessages(db, newRespondableMessages, conversation.settings)
     .pipe(
       catchError(err => {
         console.error("Error from before handleGptMessages!", err);
@@ -125,16 +125,14 @@ function filterByIsUninterruptingUserMessage(messagesAndTyping: Observable<[Conv
 function switchedOutputStreamsFromRespondableMessages(
   db: ConversationDB,
   newRespondableMessages: Observable<ConversationMessages>,
-  model: SupportedModels,
-  functions: FunctionOption[],
-  lockedFunction: FunctionOption | null
+  settings: ConversationSettings,
 ) {
   return newRespondableMessages.pipe(
     rateLimiter(5, 5000),
     switchMap(messages => {
       const convertedMessagesPromise = messagesToConversationMessages(db, messages);
       return from(convertedMessagesPromise).pipe(
-        concatMap(convertedMessages => chatCompletionMetaStream(convertedMessages, 0.1, model, 1000, functions, lockedFunction))
+        concatMap(convertedMessages => chatCompletionMetaStream(convertedMessages, 0.1, 1000, settings))
       )
     }),
     hotShare() // NB: necessary to avoid inducing a separate stream for each subscriber

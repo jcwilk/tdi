@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { BehaviorSubject, concatMap, debounceTime, filter, from, tap } from 'rxjs';
 import { ConversationDB, PersistedMessage } from '../../chat/conversationDb';
-import { Conversation, ConversationMode, Message, getLastMessage, isConversationMode, observeNewMessages } from '../../chat/conversation';
+import { Conversation, ConversationMode, Message, defaultActiveConversationSettings, getLastMessage, isConversationMode, observeNewMessages } from '../../chat/conversation';
 import { useNavigate, NavigateFunction, useLocation } from 'react-router-dom';
 import { FunctionOption } from '../../openai_api';
 import { RouterState } from '@remix-run/router';
@@ -42,14 +42,14 @@ function conversationToSearchParams(conversation: Conversation): URLSearchParams
   const params = new URLSearchParams();
 
   params.append("ln", lastMessage.hash);
-  if (conversation.model === "paused") {
-    params.append("model", conversation.model);
+  if (conversation.settings.model === "paused") {
+    params.append("model", conversation.settings.model);
   }
-  if (conversation.functions.length > 0) {
-    params.append("functions", JSON.stringify(conversation.functions.map(f => f.name)));
+  if (conversation.settings.functions.length > 0) {
+    params.append("functions", JSON.stringify(conversation.settings.functions.map(f => f.name)));
   }
-  if (conversation.lockedFunction) {
-    params.append("locked", conversation.lockedFunction.name);
+  if (conversation.settings.lockedFunction) {
+    params.append("locked", conversation.settings.lockedFunction.name);
   }
 
   return params;
@@ -67,13 +67,11 @@ function routerStateToSlotId(routerState: RouterState): string {
 }
 
 async function loadDefaultGreetingConversationSpec(): Promise<ConversationSpec> {
-  const results = await reprocessMessagesStartingFrom(new ConversationDB, "gpt-4", defaultGreetingMessages);
+  const results = await reprocessMessagesStartingFrom(new ConversationDB, defaultActiveConversationSettings, defaultGreetingMessages);
   const leafMessage = results[results.length - 1].message;
   return {
     tail: leafMessage,
-    model: "gpt-4",
-    functions: [],
-    lockedFunction: null,
+    settings: defaultActiveConversationSettings,
   }
 }
 
@@ -95,17 +93,13 @@ async function routerStateToConversationSpec(db: ConversationDB, routerState: Ro
 
   return {
     tail: message,
-    model,
-    functions,
-    lockedFunction: lockedFunction,
+    settings: {
+      model,
+      functions,
+      lockedFunction,
+    },
   };
 }
-
-const defaultSpecSettings = {
-  model: "gpt-4" as ConversationMode,
-  functions: [] as FunctionOption[],
-  lockedFunction: null,
-};
 
 export function useConversationsManager(db: ConversationDB) {
   const navigate = useNavigate();
@@ -211,7 +205,7 @@ export function useConversationsManager(db: ConversationDB) {
     if (!currentConversationSpec) return;
 
     const newSpec: ConversationSpec = { ...currentConversationSpec, ...changedParams };
-    if (currentConversationSpec.model === 'paused') {
+    if (currentConversationSpec.settings.model === 'paused') {
       const newRunningConversation = await setConversation(newSpec);
       navConversation(navigate, newRunningConversation, true);
     }
@@ -223,14 +217,14 @@ export function useConversationsManager(db: ConversationDB) {
 
   const openMessage = useCallback(async (message: PersistedMessage) => {
     if (!currentConversationSpec) {
-      const newRunningConversation = await getNewSlot({ tail: message, ...defaultSpecSettings });
+      const newRunningConversation = await getNewSlot({ tail: message, settings: defaultActiveConversationSettings });
       //console.log("navigating!")
       navConversation(navigate, newRunningConversation);
       return;
     }
 
     remix({tail: message});
-  }, [navigate, remix, currentConversationSpec, getNewSlot, defaultSpecSettings]);
+  }, [navigate, remix, currentConversationSpec, getNewSlot]);
 
   const switchToConversation = useCallback((runningConversation: RunningConversation) => {
     navConversation(navigate, runningConversation);
@@ -251,7 +245,7 @@ export function useConversationsManager(db: ConversationDB) {
 
     const lastMessage = getLastMessage(runningConversation.conversation);
 
-    const newLeafMessage = await editConversation(runningConversation.conversation.model, lastMessage, messageToEdit, {role: newRole, content: newContent});
+    const newLeafMessage = await editConversation(runningConversation.conversation.settings, lastMessage, messageToEdit, {role: newRole, content: newContent});
     if(newLeafMessage.hash === lastMessage.hash) return;
 
     await openMessage(newLeafMessage);
@@ -262,7 +256,7 @@ export function useConversationsManager(db: ConversationDB) {
 
     const lastMessage = getLastMessage(runningConversation.conversation);
 
-    const newLeafMessage = await pruneConversation(runningConversation.conversation.model, lastMessage, message);
+    const newLeafMessage = await pruneConversation(runningConversation.conversation.settings, lastMessage, message);
     if(newLeafMessage.hash == lastMessage.hash) return;
 
     openMessage(newLeafMessage);

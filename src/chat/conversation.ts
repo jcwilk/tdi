@@ -83,12 +83,28 @@ export function isConversationMode(mode: string): mode is ConversationMode {
   return ["gpt-3.5-turbo", "gpt-4", "paused"].includes(mode);
 }
 
+export type ConversationSettings = {
+  model: ConversationMode;
+  functions: FunctionOption[];
+  lockedFunction: FunctionOption | null;
+}
+
+export const defaultActiveConversationSettings: ConversationSettings = Object.freeze({
+  model: "gpt-4",
+  functions: [],
+  lockedFunction: null,
+})
+
+export const defaultPausedConversationSettings: ConversationSettings = Object.freeze({
+  model: "paused",
+  functions: [],
+  lockedFunction: null,
+})
+
 export type Conversation = {
   newMessagesInput: Subject<ConversationEvent>;
   outgoingMessageStream: BehaviorSubject<ConversationState>;
-  functions: FunctionOption[];
-  model: ConversationMode;
-  lockedFunction: FunctionOption | null;
+  settings: ConversationSettings;
 };
 
 interface ScanState {
@@ -96,19 +112,17 @@ interface ScanState {
   event: TypingUpdateEvent | ProcessedMessageEvent | null;
 }
 
-export async function createConversation(db: ConversationDB, loadedMessages: [MaybePersistedMessage, ...MaybePersistedMessage[]], model: ConversationMode = 'gpt-4', functions: FunctionOption[] = [], lockedFunction: FunctionOption | null = null): Promise<Conversation> {
-  if(!isAPIKeySet()) model = "paused";
+export async function createConversation(db: ConversationDB, loadedMessages: [MaybePersistedMessage, ...MaybePersistedMessage[]], settings: ConversationSettings): Promise<Conversation> {
+  if(!isAPIKeySet()) settings = {...settings, model: "paused" };
 
-  const processedResults = await reprocessMessagesStartingFrom(db, model, loadedMessages);
+  const processedResults = await reprocessMessagesStartingFrom(db, settings, loadedMessages);
 
   const processedMessages: PreloadedConversationMessages = await Promise.all(mapNonEmpty(processedResults, result => db.preloadMessage(result.message)));
 
   const conversation: Conversation = {
     newMessagesInput: new Subject<ConversationEvent>(),
     outgoingMessageStream: new BehaviorSubject({ messages: processedMessages, typingStatus: new Map() }),
-    functions,
-    model,
-    lockedFunction
+    settings
   }
 
   const aggregatedOutput = conversation.newMessagesInput.pipe(
@@ -118,7 +132,7 @@ export async function createConversation(db: ConversationDB, loadedMessages: [Ma
     }),
     scanAsync<ConversationEvent, ScanState>(async (acc: ScanState, event: ConversationEvent) => {
       if (isNewMessageEvent(event) || isErrorMessageEvent(event)) {
-        const result = await processMessagesWithHashing(db, model, event.payload, acc.lastResult);
+        const result = await processMessagesWithHashing(db, settings, event.payload, acc.lastResult);
 
         return {
           lastResult: result,

@@ -1,5 +1,5 @@
 import { FunctionCallMetadata, FunctionOption, FunctionParameters, getEmbedding, isToolFunctionCall } from "../openai_api";
-import { Conversation, Message, createConversation, getAllMessages, observeNewMessages, observeNewMessagesWithLatestTypingMap, observeTypingUpdates, sendError, sendFunctionCall, teardownConversation } from "./conversation";
+import { Conversation, Message, createConversation, defaultActiveConversationSettings, defaultPausedConversationSettings, getAllMessages, observeNewMessages, observeNewMessagesWithLatestTypingMap, observeTypingUpdates, sendError, sendFunctionCall, teardownConversation } from "./conversation";
 import { ConversationDB, EmbellishedFunctionMessage, FunctionResultDB, MaybePersistedMessage, PersistedMessage, PreloadedMessage, isEmbellishedFunctionMessage } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
@@ -247,7 +247,7 @@ export const functionSpecs: FunctionSpec[] = [
       const newMessages = [...messages, newMessage];
       if (!isAtLeastOne(newMessages)) throw new Error("Unexpected codepoint reached - empty messages array in append_user_reply"); // compilershutup for typing
 
-      const processedMessages = await reprocessMessagesStartingFrom(utils.db, "paused", newMessages);
+      const processedMessages = await reprocessMessagesStartingFrom(utils.db, defaultPausedConversationSettings, newMessages);
       const newLeafMessage = processedMessages[processedMessages.length - 1].message;
 
       return newLeafMessage.hash;
@@ -288,7 +288,7 @@ export const functionSpecs: FunctionSpec[] = [
       if (!["system", "user"].includes(leafMessage.role)) return "";
 
       const messages = await utils.db.getConversationFromLeafMessage(leafMessage);
-      const conversation = await buildParticipatedConversation(utils.db, messages, "gpt-4", functionOptions, lockedFunction);
+      const conversation = await buildParticipatedConversation(utils.db, messages, { ...defaultActiveConversationSettings, functions: functionOptions, lockedFunction });
 
       const observeReplies = observeNewMessages(conversation, false)
       return await firstValueFrom(observeReplies).then((firstValue) => {
@@ -555,7 +555,7 @@ export const functionSpecs: FunctionSpec[] = [
       if (!message) throw new Error(`Message with SHA ${sha} not found.`);
 
       const messages = await utils.db.getConversationFromLeafMessage(message);
-      const processedMessageResults = await reprocessMessagesStartingFrom(utils.db, "gpt-4", messages);
+      const processedMessageResults = await reprocessMessagesStartingFrom(utils.db, defaultActiveConversationSettings, messages);
       await Promise.all(processedMessageResults.map(({metadataRecordsPromise}) => metadataRecordsPromise));
 
       return "";
@@ -685,8 +685,8 @@ export const functionSpecs: FunctionSpec[] = [
         [...priorMessages, ragPrefix, ...ragMessages, ragPostfix, triggerMessage]
         :
         [...priorMessages, ragMissing, triggerMessage];
-      const ragConvoFunctions = utils.conversation.functions.filter((f) => f.name !== "rag"); // so the result doesn't simply call rag again
-      const ragConvo = await createConversation(utils.db, swapNonemptyTypeOrder(ragConvoMessages), "gpt-4", ragConvoFunctions);
+      const ragConvoFunctions = utils.conversation.settings.functions.filter((f) => f.name !== "rag"); // so the result doesn't simply call rag again
+      const ragConvo = await createConversation(utils.db, swapNonemptyTypeOrder(ragConvoMessages), { ...defaultActiveConversationSettings, functions: ragConvoFunctions});
       const typingSubscription = observeTypingUpdates(ragConvo, "assistant").subscribe((partialContent) => {
         if (!partialContent) return;
         typeMessage(utils.conversation, 'assistant', partialContent);
@@ -791,7 +791,7 @@ export function getAllFunctionOptions(): FunctionOption[] {
 }
 
 export function isActiveFunction(conversation: Conversation, functionCall: FunctionCallMetadata) {
-    return conversation.functions.some((f) => f.name === functionCall.name);
+    return conversation.settings.functions.some((f) => f.name === functionCall.name);
 }
 
 async function getFunctionMessageDBPromise(conversation: Conversation, functionMessageContent: FunctionMessageContent): Promise<EmbellishedFunctionMessage> {
@@ -827,7 +827,7 @@ export async function callFunction(conversation: Conversation, functionCall: Fun
 
     // functionMessagePromise - only used by generate_dynamic_function and compose_dynamic_functions
     // functionOptions - only used by generate_dynamic_function
-    const result = code({db, functionMessagePromise, functionOptions: conversation.functions, conversation: conversation});
+    const result = code({db, functionMessagePromise, functionOptions: conversation.settings.functions, conversation: conversation});
 
     const saveFunctionResult = async (resultString: string, completed: boolean) => {
       if (completed) {

@@ -176,7 +176,7 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ db, runningConver
             { isAPIKeySet() &&
               <ToggleButtonGroup
                 color="primary"
-                value={conversation.model}
+                value={conversation.settings.model}
                 exclusive
                 onChange={handleModelChange} // Assuming you have handleModelChange method
                 aria-label="Platform"

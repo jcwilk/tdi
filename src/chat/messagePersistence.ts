@@ -1,5 +1,5 @@
 import { ConversationDB, MaybePersistedMessage, MessageSpec, MessageSummaryDB, MetadataHandlers, MetadataRecords, PersistedMessage, isPersistedMessage, rootMessageHash } from './conversationDb';
-import { ConversationMode, Message } from './conversation';
+import { ConversationMode, ConversationSettings, Message, defaultActiveConversationSettings } from './conversation';
 import { getEmbedding } from '../openai_api';
 import { isAtLeastOne } from '../tsUtils';
 import { chatCompletionMetaStream, isGPTSentMessage } from './chatStreams';
@@ -87,8 +87,8 @@ async function recursivelySummarize(newMessage: Message, priorResult: MaybeProce
       }
     ],
     0.1,
-    "gpt-4",
     100, // change size of summary here
+    defaultActiveConversationSettings,
   )
   return firstValueFrom(observer.pipe(
     filter(isGPTSentMessage),
@@ -98,11 +98,11 @@ async function recursivelySummarize(newMessage: Message, priorResult: MaybeProce
 
 export async function processMessagesWithHashing(
   db: ConversationDB,
-  conversationMode: ConversationMode,
+  settings: ConversationSettings,
   message: MaybePersistedMessage,
   priorResult: MaybeProcessedMessageResult
 ): Promise<ProcessedMessageResult> {
-  if (!isAPIKeySet()) conversationMode = 'paused';
+  const conversationMode = isAPIKeySet() ? settings.model : 'paused';
 
   const parentHash = priorResult.message ? priorResult.message.hash : rootMessageHash;
   const hash = await hashFunction(message, [parentHash]);
@@ -163,8 +163,8 @@ const identifyMessagesForReprocessing = (conversation: PersistedMessage[], start
   }));
 };
 
-export async function reprocessMessagesStartingFrom(db: ConversationDB, conversationMode: ConversationMode, messagesForReprocessing: [MaybePersistedMessage, ...MaybePersistedMessage[]]): Promise<[ProcessedMessageResult, ...ProcessedMessageResult[]]> {
-  let accResult = await processMessagesWithHashing(db, conversationMode, messagesForReprocessing[0], NULL_OBJECT_PROCESSED_MESSAGE_RESULT);
+export async function reprocessMessagesStartingFrom(db: ConversationDB, settings: ConversationSettings, messagesForReprocessing: [MaybePersistedMessage, ...MaybePersistedMessage[]]): Promise<[ProcessedMessageResult, ...ProcessedMessageResult[]]> {
+  let accResult = await processMessagesWithHashing(db, settings, messagesForReprocessing[0], NULL_OBJECT_PROCESSED_MESSAGE_RESULT);
   const results: [ProcessedMessageResult, ...ProcessedMessageResult[]] = [accResult];
 
   const remainingMessages = messagesForReprocessing.slice(1);
@@ -172,7 +172,7 @@ export async function reprocessMessagesStartingFrom(db: ConversationDB, conversa
   if(!isAtLeastOne(remainingMessages)) return results;
 
   for (const message of remainingMessages) {
-    accResult = await processMessagesWithHashing(db, conversationMode, message, accResult);
+    accResult = await processMessagesWithHashing(db, settings, message, accResult);
     results.push(accResult);
   }
 
@@ -180,7 +180,7 @@ export async function reprocessMessagesStartingFrom(db: ConversationDB, conversa
 }
 
 export async function editConversation(
-  conversationMode: ConversationMode,
+  settings: ConversationSettings,
   leafMessage: PersistedMessage,
   originalMessage: PersistedMessage,
   newMessage: Message
@@ -211,12 +211,12 @@ export async function editConversation(
   }
 
   // Replace the message at the given index with the new message
-  const newMessages = await reprocessMessagesStartingFrom(conversationDB, conversationMode, fullMessagesForReprocessing);
+  const newMessages = await reprocessMessagesStartingFrom(conversationDB, settings, fullMessagesForReprocessing);
   return newMessages[newMessages.length - 1].message;
 };
 
 export async function pruneConversation(
-  conversationMode: ConversationMode,
+  settings: ConversationSettings,
   leafMessage: PersistedMessage,
   excludedMessage: PersistedMessage
 ): Promise<PersistedMessage> {
@@ -250,6 +250,6 @@ export async function pruneConversation(
     return precedingMessages[precedingMessages.length - 1];
   }
 
-  const newMessages = await reprocessMessagesStartingFrom(conversationDB, conversationMode, fullMessagesForReprocessing);
+  const newMessages = await reprocessMessagesStartingFrom(conversationDB, settings, fullMessagesForReprocessing);
   return newMessages[newMessages.length - 1].message;
 };

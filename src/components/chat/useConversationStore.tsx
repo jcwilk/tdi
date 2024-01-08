@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Conversation, ConversationMode, createConversation, getLastMessage, observeNewMessages, observeTypingUpdates, teardownConversation } from "../../chat/conversation";
+import { Conversation, ConversationMode, ConversationSettings, createConversation, getLastMessage, observeNewMessages, observeTypingUpdates, teardownConversation } from "../../chat/conversation";
 import { ConversationDB, ConversationMessages, LeafPath, PersistedMessage } from '../../chat/conversationDb';
 import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, catchError, concat, concatMap, debounceTime, distinct, filter, finalize, from, lastValueFrom, map, merge, mergeMap, of, reduce, scan, takeUntil, tap, withLatestFrom } from 'rxjs';
 import { FunctionOption } from '../../openai_api';
@@ -26,9 +26,7 @@ type ConversationSlot = {
 }
 
 export type ConversationSpec = {
-  model?: ConversationMode,
-  functions?: FunctionOption[],
-  lockedFunction: FunctionOption | null,
+  settings: ConversationSettings,
   tail: PersistedMessage
 }
 
@@ -67,8 +65,8 @@ export const MessageAndConversationProvider: React.FC<React.PropsWithChildren> =
   );
 }
 
-export async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, model: ConversationMode = "gpt-4", functionOptions: FunctionOption[] = [], lockedFunction: FunctionOption | null = null): Promise<Conversation> {
-  const conversation = await createConversation(db, messages, model, functionOptions, lockedFunction);
+export async function buildParticipatedConversation(db: ConversationDB, messages: ConversationMessages, settings: ConversationSettings): Promise<Conversation> {
+  const conversation = await createConversation(db, messages, settings);
   return addAssistant(conversation, db);
 }
 
@@ -119,7 +117,7 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
       //console.log("dispatch", conversationSpec)
       let promise = ((conversationSpec instanceof Promise) ? conversationSpec : Promise.resolve(conversationSpec)).then(resolvedSpec => {
         //console.log("resolvedSpec", resolvedSpec)
-        return messagesStore.getConversationFromLeafMessage(resolvedSpec.tail).then(conversation => [conversation, resolvedSpec] as [ConversationMessages, ConversationSpec]);
+        return messagesStore.getConversationFromLeafMessage(resolvedSpec.tail).then((conversation): [ConversationMessages, ConversationSpec] => [conversation, resolvedSpec]);
       }).then(([messages, resolvedSpec]) => {
         // TODO: somewhere around here might be a good place to do message reprocessing, if we want messages to not be immutable
         //console.log("messages", messages)
@@ -127,7 +125,7 @@ function createConversationSlot(id: string, messagesStore: ConversationDB): Conv
           return currentConversation.value.conversation;
         }
 
-        return buildParticipatedConversation(messagesStore, messages, resolvedSpec.model, resolvedSpec.functions, resolvedSpec.lockedFunction);
+        return buildParticipatedConversation(messagesStore, messages, resolvedSpec.settings);
       });
 
       asyncSwitchedInput.next(from(promise));
@@ -145,9 +143,7 @@ export function conversationToSpec(conversation: Conversation): ConversationSpec
   const lastMessage = getLastMessage(conversation);
 
   return {
-    model: conversation.model,
-    functions: conversation.functions,
-    lockedFunction: conversation.lockedFunction,
+    settings: conversation.settings,
     tail: lastMessage
   };
 }

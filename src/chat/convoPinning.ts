@@ -1,7 +1,7 @@
 import { isAPIKeySet } from "../api_key_storage";
 import { FileRecord, TrainingLineItem, deleteFile, fetchFileContent, fetchFiles, uploadFile } from "../openai_api";
 import { isAtLeastOne } from "../tsUtils";
-import { Message } from "./conversation";
+import { Message, defaultPausedConversationSettings } from "./conversation";
 import { ConversationDB, PersistedMessage } from "./conversationDb";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
 import { isParticipantRole } from "./participantSubjects";
@@ -86,7 +86,7 @@ export async function mirrorPinsToDB(db: ConversationDB): Promise<void> {
   )).filter(Boolean) as [[Message, ...Message[]], FileRecord][];
 
   for (const [messages, file] of conversationsToImportWithFiles) {
-    const processedMessages = await reprocessMessagesStartingFrom(db, "paused", messages);
+    const processedMessages = await reprocessMessagesStartingFrom(db, defaultPausedConversationSettings, messages);
     const newLeafMessage = processedMessages[processedMessages.length - 1].message;
     await db.addPin(newLeafMessage, file.created_at);
   }

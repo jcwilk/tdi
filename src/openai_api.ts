@@ -4,6 +4,7 @@ import JSON5 from 'json5'
 import { ChatCompletion, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { ChatCompletionStreamParams } from 'openai/resources/beta/chat/completions';
 import { v4 as uuidv4 } from 'uuid';
+import { ConversationSettings } from './chat/conversation';
 
 const getClient = function(): OpenAI | null {
   const apiKey = APIKeyFetcher();
@@ -115,10 +116,8 @@ export async function getEmbedding(
 export async function getChatCompletion(
   messages: ChatCompletionMessageParam[],
   temperature: number,
-  model = "gpt-4",
   maxTokens: number,
-  functions: FunctionOption[] = [],
-  lockedFunction: FunctionOption | null = null,
+  settings: ConversationSettings,
   onChunk: (chunk: string) => void = () => {},
   onFunctionCall: (functionCall: FunctionCallMetadata) => void = () => {},
   onSentMessage: (message: string) => void = () => {},
@@ -126,6 +125,9 @@ export async function getChatCompletion(
 ): Promise<void> {
   const client = getClient();
   if (!client) return;
+
+  const { functions, lockedFunction } = settings;
+  const model = "gpt-4-1106-preview" // this is the only model we want for now, so no need to draw it out of settings
 
   const payload: ChatCompletionStreamParams = {
     // TODO: Getting the function name here programmatically is a little bit tricky since we need the original contents of the message
