@@ -3,7 +3,7 @@ import { Conversation, Message, createConversation, defaultActiveConversationSet
 import { ConversationDB, EmbellishedFunctionMessage, FunctionResultDB, MaybePersistedMessage, PersistedMessage, PreloadedMessage, isEmbellishedFunctionMessage } from "./conversationDb";
 import { v4 as uuidv4 } from "uuid";
 import { reprocessMessagesStartingFrom } from "./messagePersistence";
-import { Observable, concatMap, filter, firstValueFrom, from, isObservable, mergeMap, toArray } from "rxjs";
+import { Observable, concatMap, filter, firstValueFrom, from, isObservable, map, mergeMap, toArray } from "rxjs";
 import { buildParticipatedConversation } from "../components/chat/useConversationStore";
 import { isAtLeastOne, isTruthy, priorsAndLast, swapNonemptyTypeOrder } from "../tsUtils";
 import { APIKeyFetcher } from "../api_key_storage";
@@ -660,9 +660,10 @@ export const functionSpecs: FunctionSpec[] = [
       }
       const [priorMessages, triggerMessage] = priorsAndLast(messagesWithoutFunctionMessage);
 
-      const ragMessages: PersistedMessage[] = await firstValueFrom(invokeDynamicFunctionImplementation({}, functionHash, triggerMessage.hash).pipe(
+      const ragMessages: Message[] = await firstValueFrom(invokeDynamicFunctionImplementation({}, functionHash, triggerMessage.hash).pipe(
         mergeMap(async (sha) => utils.db.getMessageByHash(sha)),
         filter(Boolean),
+        map((message): Message => ({content: message.content, role: "system"})),
         toArray()
       ));
 
