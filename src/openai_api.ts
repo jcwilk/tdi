@@ -211,11 +211,18 @@ async function saveAudioInput(): Promise<{ audioBlobPromise: Promise<Blob>, stop
   return { audioBlobPromise, stopRecording };
 }
 
-class CustomFormData extends FormData {
-  getHeaders() {
-    return {
-      'Content-Type': 'multipart/form-data',
-    };
+async function getTranscript(client: OpenAI, audioBlobPromise: Promise<Blob>, stopRecording: () => void): Promise<string> {
+  try {
+    stopRecording();
+    const audioBlob = await audioBlobPromise;
+    const audioFile = new File([audioBlob], "audio.wav", { type: "audio/wav" });
+    const transcription = await client.audio.transcriptions.create({file: audioFile, model: "whisper-1"});
+    const transcript = transcription.text;
+    console.log("Transcript:", transcript);
+    return transcript;
+  } catch (error) {
+    console.error("Error during transcription:", error);
+    throw error;
   }
 }
 
@@ -225,33 +232,7 @@ export async function getTranscription(): Promise<{ getTranscript: () => Promise
 
   const { audioBlobPromise, stopRecording } = await saveAudioInput();
 
-  // Override the FormData class used by the createTranscription function
-  // @ts-ignore
-  const originalFormDataCtor = openai.configuration.formDataCtor;
-  // @ts-ignore
-  openai.configuration.formDataCtor = CustomFormData;
-
-  async function getTranscript(): Promise<string> {
-    try {
-      stopRecording();
-      const audioBlob = await audioBlobPromise;
-      const audioFile = new File([audioBlob], "audio.wav", { type: "audio/wav" });
-      // @ts-ignore
-      const transcription = await openai.createTranscription(audioFile, "whisper-1");
-      const transcript = transcription.data.text;
-      console.log("Transcript:", transcript);
-      return transcript;
-    } catch (error) {
-      console.error("Error during transcription:", error);
-      throw error;
-    } finally {
-      // Restore the original FormData class after the transcription is complete
-      // @ts-ignore
-      openai.configuration.formDataCtor = originalFormDataCtor;
-    }
-  }
-
-  return { getTranscript };
+  return { getTranscript: () => getTranscript(openai, audioBlobPromise, stopRecording) };
 }
 
 export type TrainingLineItem = {

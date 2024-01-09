@@ -62,6 +62,7 @@ const MessageEntry: React.FC<MessageEntryProps> = ({ conversation, autoScroll, o
       setIsRecording(false);
       setIsTranscribing(false);
       setStopRecording(null);
+      console.error(error);
       sendError(conversation, error);
     }
   };
