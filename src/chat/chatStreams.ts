@@ -1,5 +1,5 @@
 import { BehaviorSubject, Observable, Subject, concat, filter, map } from "rxjs";
-import { FunctionCallMetadata, FunctionOption, getChatCompletion } from "../openai_api";
+import { FunctionCallMetadata, getChatCompletion } from "../openai_api";
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { isTruthy } from "../tsUtils";
 import { ConversationSettings } from "./conversation";
@@ -21,8 +21,6 @@ export type GPTSentMessage = {
   text: string,
   stopReason: "stop" | "length"
 }
-
-export type SupportedModels = "gpt-3.5-turbo" | "gpt-4" | "gpt-3.5-turbo-0613" | "gpt-4-0613" | "gpt-4-1106-preview";
 
 export function isGPTFunctionCall(message: GPTMessage): message is GPTFunctionCall {
   return "functionCall" in message;

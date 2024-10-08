@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback, ReactNode, useMemo } from 'react';
 import { Box, AppBar, Toolbar, IconButton, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
-import { Conversation, ConversationMode, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates } from '../../chat/conversation';
+import { Conversation, ConversationMode, getAllMessages, getTypingStatus, observeNewMessages, observeTypingUpdates, pausedMode } from '../../chat/conversation';
 import MessageBox from './messageBox'; // Assuming you've also extracted the MessageBox into its own file.
 import { ConversationDB, ConversationMessages, PersistedMessage, PreloadedConversationMessages, PreloadedMessage } from '../../chat/conversationDb';
 import CloseIcon from '@mui/icons-material/Close';
-import { FunctionOption } from '../../openai_api';
+import { FunctionOption, SupportedFastModel } from '../../openai_api';
 import BoxPopup from '../box_popup';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import { FunctionManagement } from './functionManagement';
@@ -181,8 +181,8 @@ const ConversationModal: React.FC<ConversationModalProps> = ({ db, runningConver
                 onChange={handleModelChange} // Assuming you have handleModelChange method
                 aria-label="Platform"
               >
-                <ToggleButton value="paused"><PauseIcon /></ToggleButton>
-                <ToggleButton value="gpt-4"><DirectionsRunIcon /></ToggleButton>
+                <ToggleButton value={pausedMode}><PauseIcon /></ToggleButton>
+                <ToggleButton value={SupportedFastModel}><DirectionsRunIcon /></ToggleButton>
               </ToggleButtonGroup>
             }
           </Box>

@@ -1,8 +1,8 @@
 import { EMPTY, Observable, Subject, UnaryFunction, catchError, concatMap, distinctUntilChanged, filter, from, map, merge, share, switchMap, throwError } from "rxjs";
-import { Conversation, ConversationSettings, ConversationState, TypingUpdate, sendError } from "./conversation";
+import { Conversation, ConversationSettings, ConversationState, TypingUpdate, isPausedConversation, sendError } from "./conversation";
 import { sendMessage, typeMessage } from "./participantSubjects";
-import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, isGPTTextUpdate, isGPTSentMessage, SupportedModels } from "./chatStreams";
-import { FunctionOption, isToolFunctionCall } from "../openai_api";
+import { GPTMessage, chatCompletionMetaStream, isGPTFunctionCall, isGPTTextUpdate, isGPTSentMessage } from "./chatStreams";
+import { isToolFunctionCall } from "../openai_api";
 import { callFunction, isActiveFunction } from "./functionCalling";
 import { ConversationDB, ConversationMessages, isBasicPersistedMessage, isFunctionResultWithResult } from "./conversationDb";
 import { ChatCompletionAssistantMessageParam, ChatCompletionFunctionMessageParam, ChatCompletionMessageParam, ChatCompletionMessageToolCall, ChatCompletionToolMessageParam } from "openai/resources/chat/completions";
@@ -75,7 +75,7 @@ export function addAssistant(
   conversation: Conversation,
   db: ConversationDB
 ): Conversation {
-  if (conversation.settings.model === "paused") return conversation;
+  if (isPausedConversation(conversation)) return conversation;
 
   const messagesAndTyping = conversation.outgoingMessageStream.pipe(
     map<ConversationState,[ConversationMessages,TypingUpdate]>(({messages, typingStatus}) => [messages, {role: "assistant", content: typingStatus.get("assistant") ?? ""}]),

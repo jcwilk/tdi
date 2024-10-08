@@ -1,9 +1,9 @@
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { BehaviorSubject, concatMap, debounceTime, filter, from, tap } from 'rxjs';
 import { ConversationDB, PersistedMessage } from '../../chat/conversationDb';
-import { Conversation, ConversationMode, ConversationSettings, Message, defaultActiveConversationSettings, getLastMessage, isConversationMode, observeNewMessages } from '../../chat/conversation';
+import { Conversation, ConversationMode, ConversationSettings, Message, defaultActiveConversationSettings, getLastMessage, isConversationMode, isPausedConversation, isPausedSettings, observeNewMessages, pausedMode } from '../../chat/conversation';
 import { useNavigate, NavigateFunction, useLocation } from 'react-router-dom';
-import { FunctionOption } from '../../openai_api';
+import { FunctionOption, SupportedFastModel } from '../../openai_api';
 import { RouterState } from '@remix-run/router';
 import { getAllFunctionOptions } from '../../chat/functionCalling';
 import { editConversation, pruneConversation, reprocessMessagesStartingFrom } from '../../chat/messagePersistence';
@@ -42,7 +42,7 @@ function conversationToSearchParams(conversation: Conversation): URLSearchParams
   const params = new URLSearchParams();
 
   params.append("ln", lastMessage.hash);
-  if (conversation.settings.model === "paused") {
+  if (isPausedConversation(conversation)) {
     params.append("model", conversation.settings.model);
   }
   if (conversation.settings.functions.length > 0) {
@@ -85,7 +85,7 @@ async function routerStateToConversationSpec(db: ConversationDB, routerState: Ro
   if (!message) return loadDefaultGreetingConversationSpec();
 
   const rawModel: string = eventParams.get('model') ?? "";
-  const model: ConversationMode = isConversationMode(rawModel) ? rawModel : 'gpt-4';
+  const model: ConversationMode = isConversationMode(rawModel) ? rawModel : SupportedFastModel;
   const functionNames = JSON.parse(eventParams.get('functions') ?? '[]');
   const functions = getAllFunctionOptions().filter(f => functionNames.includes(f.name));
   const lockedFunctionName = eventParams.get('locked');
@@ -97,7 +97,7 @@ async function routerStateToConversationSpec(db: ConversationDB, routerState: Ro
       model,
       functions,
       lockedFunction,
-      generateMetadata: model !== "paused",
+      generateMetadata: model !== pausedMode,
     },
   };
 }
@@ -208,10 +208,10 @@ export function useConversationsManager(db: ConversationDB) {
     const { tail, ...changedSettings } = changedParams;
 
     const newSettings: ConversationSettings = { ...currentConversationSpec.settings, ...changedSettings };
-    newSettings.generateMetadata = newSettings.model !== "paused";
+    newSettings.generateMetadata = !isPausedSettings(newSettings);
     const newSpec: ConversationSpec = { tail: tail ?? currentConversationSpec.tail, settings: newSettings };
 
-    if (currentConversationSpec.settings.model === 'paused') {
+    if (isPausedSettings(currentConversationSpec.settings)) {
       const newRunningConversation = await setConversation(newSpec);
       navConversation(navigate, newRunningConversation, true);
     }

@@ -13,6 +13,17 @@ const getClient = function(): OpenAI | null {
   return new OpenAI({ apiKey, organization: "org-6d0xAcuSuOUHzq8s4TejB1TQ", dangerouslyAllowBrowser: true });
 }
 
+export const SupportedFastModel = "gpt-4o-mini" as const;
+export const SupportedSlowModel = "gpt-4o" as const; // at time of writing this isn't in use, but leaving the slow/fast paradigm as is for now
+
+const supportedModels = [SupportedFastModel, SupportedSlowModel] as const;
+
+export type SupportedModels = typeof supportedModels[number];
+
+export function isSupportedModel(model: any): model is SupportedModels {
+  return supportedModels.includes(model);
+}
+
 export type ChatMessage = {
   role: string,
   content: string
@@ -83,7 +94,7 @@ export function isToolFunctionCall(functionCall: FunctionCallMetadata): function
 
 export async function getEmbedding(
   inputText: string,
-  model: string = "text-embedding-ada-002"
+  model: string = "text-embedding-ada-002" // probably don't change this until necessary as it will require regenerating/clearing all of them
 ): Promise<number[]> {
   const OPENAI_KEY = APIKeyFetcher();
   if (!OPENAI_KEY) throw new Error("API Key not found");
@@ -126,8 +137,7 @@ export async function getChatCompletion(
   const client = getClient();
   if (!client) return;
 
-  const { functions, lockedFunction } = settings;
-  const model = "gpt-4-1106-preview" // this is the only model we want for now, so no need to draw it out of settings
+  const { functions, lockedFunction, model } = settings;
 
   const payload: ChatCompletionStreamParams = {
     // TODO: Getting the function name here programmatically is a little bit tricky since we need the original contents of the message

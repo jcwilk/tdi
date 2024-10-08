@@ -1,10 +1,9 @@
 import { BehaviorSubject, Observable, Subject, catchError, concatMap, distinctUntilChanged, filter, from, map, scan } from 'rxjs';
 import { ParticipantRole, TyperRole, isTyperRole, sendMessage } from './participantSubjects';
-import { ConversationDB, ConversationMessages, MaybePersistedMessage, PersistedMessage, PreloadedConversationMessages } from './conversationDb';
+import { ConversationDB, MaybePersistedMessage, PersistedMessage, PreloadedConversationMessages } from './conversationDb';
 import { MaybeProcessedMessageResult, processMessagesWithHashing, reprocessMessagesStartingFrom } from './messagePersistence';
-import { FunctionOption } from '../openai_api';
+import { FunctionOption, SupportedFastModel, SupportedModels, SupportedSlowModel, isSupportedModel } from '../openai_api';
 import { scanAsync, subscribeUntilFinalized } from './rxjsUtilities';
-import { SupportedModels } from './chatStreams';
 import { mapNonEmpty } from '../tsUtils';
 import { isAPIKeySet } from '../api_key_storage';
 
@@ -75,12 +74,22 @@ export type ConversationState = {
   typingStatus: Map<TyperRole, string>;
 };
 
-export type ConversationModel = SupportedModels & ("gpt-3.5-turbo" | "gpt-4")
+export type ConversationModel = SupportedModels;
 
-export type ConversationMode = ConversationModel | "paused";
+export const pausedMode = "paused" as const;
+
+export type ConversationMode = ConversationModel | typeof pausedMode;
+
+export function isPausedSettings(settings: ConversationSettings): boolean {
+  return settings.model === pausedMode;
+}
+
+export function isPausedConversation(conversation: Conversation): boolean {
+  return isPausedSettings(conversation.settings);
+}
 
 export function isConversationMode(mode: string): mode is ConversationMode {
-  return ["gpt-3.5-turbo", "gpt-4", "paused"].includes(mode);
+  return isSupportedModel(mode) || mode === pausedMode;
 }
 
 export type ConversationSettings = {
@@ -91,14 +100,14 @@ export type ConversationSettings = {
 }
 
 export const defaultActiveConversationSettings: ConversationSettings = Object.freeze({
-  model: "gpt-4",
+  model: SupportedFastModel,
   functions: [],
   lockedFunction: null,
   generateMetadata: true,
 })
 
 export const defaultPausedConversationSettings: ConversationSettings = Object.freeze({
-  model: "paused",
+  model: pausedMode,
   functions: [],
   lockedFunction: null,
   generateMetadata: false
@@ -116,7 +125,7 @@ interface ScanState {
 }
 
 export async function createConversation(db: ConversationDB, loadedMessages: [MaybePersistedMessage, ...MaybePersistedMessage[]], settings: ConversationSettings): Promise<Conversation> {
-  if(!isAPIKeySet()) settings = {...settings, model: "paused" };
+  if(!isAPIKeySet()) settings = {...settings, model: pausedMode };
 
   const processedResults = await reprocessMessagesStartingFrom(db, settings, loadedMessages);
 
