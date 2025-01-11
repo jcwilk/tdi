@@ -192,7 +192,9 @@ export async function getChatCompletion(
   await stream.done();
 }
 
-async function saveAudioInput(): Promise<{ audioBlobPromise: Promise<Blob>, stopRecording: () => void }> {
+// The signature is a little confusing, but basically call this function to start recording audio input - when the return resolves,
+// it will yield a function that you can call to stop recording and get the audio blob as a promise.
+async function saveAudioInput(): Promise<() => Promise<Blob>> {
   //console.log("Please say something...");
 
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -210,21 +212,22 @@ async function saveAudioInput(): Promise<{ audioBlobPromise: Promise<Blob>, stop
     });
   });
 
-  const stopRecording = () => {
+  const stopRecording = () => { // TODO: Why not have this return the audioBlobPromise?
     if (mediaRecorder.state !== "inactive") {
       mediaRecorder.stop();
     }
+
+    return audioBlobPromise;
   };
 
   mediaRecorder.start();
 
-  return { audioBlobPromise, stopRecording };
+  return stopRecording;
 }
 
-async function getTranscript(client: OpenAI, audioBlobPromise: Promise<Blob>, stopRecording: () => void): Promise<string> {
+async function getTranscript(client: OpenAI, stopRecording: () => Promise<Blob>): Promise<string> {
   try {
-    stopRecording();
-    const audioBlob = await audioBlobPromise;
+    const audioBlob = await stopRecording();
     const audioFile = new File([audioBlob], "audio.wav", { type: "audio/wav" });
     const transcription = await client.audio.transcriptions.create({file: audioFile, model: "whisper-1"});
     const transcript = transcription.text;
@@ -240,9 +243,9 @@ export async function getTranscription(): Promise<{ getTranscript: () => Promise
   const openai = getClient();
   if (!openai) return { getTranscript: async () => ""};
 
-  const { audioBlobPromise, stopRecording } = await saveAudioInput();
+  const stopRecording = await saveAudioInput();
 
-  return { getTranscript: () => getTranscript(openai, audioBlobPromise, stopRecording) };
+  return { getTranscript: () => getTranscript(openai, stopRecording) };
 }
 
 export type TrainingLineItem = {
